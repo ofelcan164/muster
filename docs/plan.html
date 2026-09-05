@@ -1,0 +1,727 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Muster — a herdr plugin</title>
+<style>
+:root{
+  --bg:#1d2021;--bg1:#282828;--bg2:#32302f;--bg3:#3c3836;--bg4:#504945;--bg5:#665c54;
+  --fg:#ebdbb2;--fg2:#d5c4a1;--fg3:#bdae93;--gray:#928374;
+  --red:#fb4934;--green:#b8bb26;--yellow:#fabd2f;--blue:#83a598;
+  --purple:#d3869b;--aqua:#8ec07c;--orange:#fe8019;
+  --mono:ui-monospace,"JetBrains Mono","Fira Code",SFMono-Regular,Menlo,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--mono);font-size:14px;line-height:1.65}
+.wrap{max-width:1080px;margin:0 auto;padding:0 26px 120px}
+a{color:var(--blue)}
+h1{font-size:27px;color:var(--yellow);margin:0 0 6px;letter-spacing:-.5px}
+h2{font-size:17px;color:var(--blue);margin:56px 0 6px;padding-bottom:9px;border-bottom:1px solid var(--bg3)}
+h3{font-size:14px;color:var(--aqua);margin:30px 0 8px;text-transform:uppercase;letter-spacing:1.3px}
+h4{font-size:13.5px;color:var(--fg);margin:20px 0 6px}
+p{max-width:86ch;color:var(--fg2);margin:0 0 14px}
+ul,ol{max-width:86ch;color:var(--fg2);padding-left:22px;margin:0 0 14px}
+li{margin:0 0 7px}
+code{background:var(--bg3);padding:1px 5px;border-radius:3px;font-size:12.5px;color:var(--orange)}
+strong{color:var(--fg)}
+header{padding:52px 0 26px;border-bottom:1px solid var(--bg3);margin-bottom:14px}
+.tag{display:inline-block;font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--bg);background:var(--yellow);padding:2px 9px;border-radius:3px;margin-bottom:14px}
+.lede{font-size:15px;color:var(--fg);max-width:80ch}
+
+.note{border-left:3px solid var(--purple);background:var(--bg1);padding:14px 18px;margin:20px 0;border-radius:0 5px 5px 0}
+.note.warn{border-left-color:var(--orange)}
+.note.good{border-left-color:var(--green)}
+.note p{margin:0 0 8px}.note p:last-child{margin:0}
+.note b.k{display:block;font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--purple);margin-bottom:6px}
+.note.warn b.k{color:var(--orange)}.note.good b.k{color:var(--green)}
+
+table{border-collapse:collapse;width:100%;margin:16px 0;font-size:13px}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--bg3);vertical-align:top}
+th{color:var(--gray);font-weight:600;font-size:11.5px;letter-spacing:1.1px;text-transform:uppercase;border-bottom-color:var(--bg4)}
+td{color:var(--fg2)}
+td:first-child{color:var(--fg);white-space:nowrap}
+
+pre{background:var(--bg1);border:1px solid var(--bg3);border-radius:5px;padding:14px 16px;overflow-x:auto;font-size:12.5px;line-height:1.6;color:var(--fg2);margin:14px 0}
+pre .c{color:var(--gray)}
+pre .s{color:var(--green)}
+pre .k{color:var(--red)}
+pre .n{color:var(--purple)}
+
+/* terminal mock */
+.term{background:#1b1c1c;border:1px solid var(--bg4);border-radius:6px;padding:0;margin:18px 0;font-size:12px;line-height:1.55;overflow:hidden;box-shadow:0 10px 34px rgba(0,0,0,.45)}
+.term .bar{background:var(--bg2);border-bottom:1px solid var(--bg4);padding:6px 12px;display:flex;gap:14px;align-items:center;color:var(--gray);font-size:11.5px}
+.term .bar .nm{color:var(--yellow);font-weight:700;letter-spacing:1.5px}
+.term .bar .sp{flex:1}
+.term .body{padding:12px 14px}
+.sect{color:var(--gray);font-size:10.5px;letter-spacing:1.6px;text-transform:uppercase;margin:0 0 7px;display:flex;align-items:center;gap:8px}
+.sect:after{content:"";flex:1;height:1px;background:var(--bg3)}
+.sect.sp{margin-top:16px}
+
+.qrow{display:grid;grid-template-columns:16px 88px 1fr 92px 1fr;gap:10px;padding:3px 6px;border-radius:3px;align-items:baseline}
+.qrow.hot{background:#3a2a26}
+.qrow .idx{color:var(--bg5)}
+.qrow .st{font-weight:700}
+.qrow .msg{color:var(--fg3)}
+.qrow .ago{color:var(--gray)}
+
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:4px}
+.card{border:1px solid var(--bg4);border-radius:4px;padding:0;overflow:hidden;background:#202121}
+.card .hd{padding:4px 9px;font-weight:700;letter-spacing:.6px;display:flex;gap:7px;align-items:center;font-size:11.5px}
+.card .hd .br{margin-left:auto;font-weight:400;font-size:10.5px;color:var(--gray)}
+.card .in{padding:7px 9px}
+.card .ag{margin-bottom:6px}
+.card .ag:last-child{margin-bottom:0}
+.card .ag .l1{display:flex;gap:6px;align-items:baseline}
+.card .ag .l1 .nm{color:var(--fg)}
+.card .ag .l1 .ago{margin-left:auto;color:var(--gray);font-size:10.5px}
+.card .ag .l2{color:var(--fg3);font-size:11px;padding-left:14px;line-height:1.45}
+.card .ft{border-top:1px dashed var(--bg4);padding:5px 9px;color:var(--gray);font-size:10.5px}
+.card.dim{opacity:.55}
+.card.att{box-shadow:inset 0 0 0 1px var(--red)}
+
+.orch{margin-top:14px;border-top:1px solid var(--bg3);padding-top:9px}
+.orch .l{display:flex;gap:9px;align-items:baseline}
+.orch .say{color:var(--fg3);padding:5px 0 5px 16px;font-size:11.5px;border-left:2px solid var(--bg4);margin:6px 0 6px 3px}
+.orch .inp{color:var(--bg5)}
+
+.i-blocked{color:var(--red)}.i-done{color:var(--green)}.i-work{color:var(--yellow)}
+.i-stale{color:var(--orange)}.i-idle{color:var(--gray)}
+.c-api{color:var(--blue)}.c-web{color:var(--green)}.c-contracts{color:var(--purple)}
+.c-mobile{color:var(--orange)}.c-infra{color:var(--aqua)}
+.b-api{border-color:var(--blue)}.b-web{border-color:var(--green)}.b-contracts{border-color:var(--purple)}
+.b-mobile{border-color:var(--orange)}.b-infra{border-color:var(--aqua)}
+
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:16px 0}
+@media(max-width:820px){.cols,.grid{grid-template-columns:1fr}}
+.cap{color:var(--gray);font-size:12px;margin:-6px 0 20px}
+.cap b{color:var(--fg3)}
+
+.ann{counter-reset:a;margin:14px 0 0}
+.ann li{list-style:none;position:relative;padding-left:30px;margin-bottom:9px;color:var(--fg2)}
+.ann li:before{counter-increment:a;content:counter(a);position:absolute;left:0;top:1px;width:20px;height:20px;border-radius:50%;background:var(--bg3);color:var(--yellow);font-size:11px;display:grid;place-items:center}
+
+.sw{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
+.sw div{border:1px solid;border-radius:4px;padding:7px 12px;font-size:12px;background:#202121}
+
+.phase{border-left:2px solid var(--bg4);padding:0 0 0 18px;margin:0 0 26px;position:relative}
+.phase:before{content:"";position:absolute;left:-5px;top:7px;width:8px;height:8px;border-radius:50%;background:var(--yellow)}
+.phase h4{margin-top:0;color:var(--yellow)}
+.phase.later:before{background:var(--bg5)}
+.phase.later h4{color:var(--fg3)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="tag">herdr 0.8.2 plugin · design</div>
+  <h1>Muster</h1>
+  <p class="lede">One key opens a screen showing every agent across every repo, ranked by what needs you, styled so you know which is which before you read a word. Enter jumps you there. The same key brings you back.</p>
+</header>
+
+<p class="cap"><b>Name.</b> To muster is to gather a herd, and also to assemble for inspection. Both are what this screen does, and it works as a verb: you muster the agents, then you go back to work.</p>
+
+<h2>What I heard, and the two places your answers fight each other</h2>
+
+<p>The short version. You want an overlay on one key, not a workspace. It closes when you jump and reopens on the same key. Attention ranking is the single most valuable thing on it. Telling agents apart is a worse pain than seeing them all. The orchestrator writes the context, enforced by a skill the plugin installs. Identity is anchored to the repo, colored by hash with an override. History barely matters because herdr already tracks unseen work. You visit this every 30 seconds.</p>
+
+<p>That last one is a hard constraint, not a preference. A screen you open 100 times a day has to appear in under 30 milliseconds or you stop opening it. It rules out node and python, and it rules out doing any work at open time. Everything must be precomputed.</p>
+
+<div class="note warn">
+  <b class="k">Contradiction 1: ranking reorders, identity requires it not to</b>
+  <p>You want the queue ordered by urgency (Q2, Q28) and you want each repo pinned to a fixed spot so you point instead of read (Q23). Those cannot be the same widget. Anything that reorders destroys the spatial memory you're trying to build.</p>
+  <p><b>Resolution:</b> two zones. A short ranked ribbon at the top that reorders freely and never holds more than four rows. A fixed repo grid below it where a repo occupies the same cell forever, and urgency shows as a red inset border rather than a position change. Your eye uses the ribbon when you're triaging and the grid when you're orienting.</p>
+</div>
+
+<div class="note warn">
+  <b class="k">Contradiction 2: type-to-filter eats every letter key</b>
+  <p>You picked type-to-filter plus arrows and vim keys (Q16). If bare letters filter, then <code>j</code> and <code>k</code> filter too, and no letter is free for actions.</p>
+  <p><b>Resolution:</b> the list is navigable with arrows immediately, and typing any letter enters filter mode where <code>hjkl</code> is literal text. Escape leaves filter mode and gives you vim keys back. Vim keys work only when the filter is empty. Everything else is a modifier chord. It's the mode model fzf and lazygit use and your hands already know it.</p>
+</div>
+
+<h2>The thing your story told me that your answers didn't</h2>
+
+<p>Q37 is not a display problem. Four repos in a chain, contracts must merge before api, api usually before web and mobile, sometimes those two go parallel. What broke was <strong>propagation</strong>. An agent finished, the orchestrator never learned, and three downstream agents sat idle waiting on a gate that had already opened. You went looking for a screen because you had no way to see that the chain had stalled.</p>
+
+<p>So the highest-value thing Muster can show is not agent status. It's <strong>a gate that is open with nobody moving through it</strong>. Herdr can detect that: an agent went <code>done</code>, the orchestrator has been <code>idle</code> since before that moment, and a downstream agent is <code>idle</code> and has been for longer. That's three facts Muster already has, and the conclusion is "the orchestrator doesn't know yet."</p>
+
+<div class="note good">
+  <b class="k">The feature I'd build first</b>
+  <p>A row in the attention ribbon that reads <code>api/migrations finished 6m ago · orchestrator not told · web + mobile idle</code>, with one key that sends the orchestrator a message telling it. Not a dashboard. A repair button for the exact failure you described.</p>
+</div>
+
+<p>You also flagged that each workspace has non-agent tabs, dev servers and shells, adding noise. Muster ignores them for triage but shows a one-line footer per repo so you know your dev server is up without opening the workspace. Free information, herdr already has the pane list.</p>
+
+<h2>The screen</h2>
+
+<div class="term">
+  <div class="bar"><span class="nm">MUSTER</span><span>5 repos · 7 agents</span><span class="i-blocked">2 need you</span><span class="sp"></span><span>prefix+m closes</span></div>
+  <div class="body">
+
+    <div class="sect">needs you</div>
+    <div class="qrow hot"><span class="idx">1</span><span class="c-api">◆ api</span><span><span class="i-blocked">▲</span> migrations</span><span class="st i-blocked">BLOCKED 4m</span><span class="msg">"Allow edit to db/schema.sql?"</span></div>
+    <div class="qrow hot"><span class="idx">2</span><span class="c-api">◆ api</span><span><span class="i-done">●</span> tests</span><span class="st i-done">DONE 6m</span><span class="msg">orchestrator not told · web + mobile idle</span></div>
+    <div class="qrow"><span class="idx">3</span><span class="c-contracts">✦ contracts</span><span><span class="i-stale">◌</span> bump-v3</span><span class="st i-stale">STALE 22m</span><span class="msg">idle, never marked done</span></div>
+
+    <div class="sect sp">chain</div>
+    <div class="qrow" style="grid-template-columns:1fr">
+      <span><span class="c-contracts">✦ contracts</span> <span class="i-done">merged ✓</span> <span class="i-idle">──▶</span> <span class="c-api">◆ api</span> <span class="i-work">PR open ◐</span> <span class="i-idle">──▶</span> <span class="c-web">▣ web</span> <span class="i-idle">waiting</span> <span class="i-idle">·</span> <span class="c-mobile">⬢ mobile</span> <span class="i-idle">waiting</span> <span class="i-idle">　　</span> <span class="c-infra">⬡ infra</span> <span class="i-idle">independent</span></span>
+    </div>
+
+    <div class="sect sp">repos</div>
+    <div class="grid">
+
+      <div class="card b-contracts">
+        <div class="hd c-contracts">✦ CONTRACTS <span class="br">main</span></div>
+        <div class="in">
+          <div class="ag"><div class="l1"><span class="i-stale">◌</span><span class="nm">bump-v3</span><span class="ago">22m</span></div>
+            <div class="l2">cut v3 types after #412 merged</div></div>
+        </div>
+        <div class="ft">2 panes · shell · <span class="i-done">watch ✓</span></div>
+      </div>
+
+      <div class="card b-api att">
+        <div class="hd c-api">◆ API <span class="br">feat/billing-migrations</span></div>
+        <div class="in">
+          <div class="ag"><div class="l1"><span class="i-blocked">▲</span><span class="nm">migrations</span><span class="ago">4m</span></div>
+            <div class="l2">add billing schema migration + backfill</div></div>
+          <div class="ag"><div class="l1"><span class="i-done">●</span><span class="nm">tests</span><span class="ago">6m</span></div>
+            <div class="l2">integration suite against new schema</div></div>
+        </div>
+        <div class="ft">4 panes · <span class="i-done">dev ✓</span> · logs · shell</div>
+      </div>
+
+      <div class="card b-web">
+        <div class="hd c-web">▣ WEB <span class="br">feat/checkout-ui</span></div>
+        <div class="in">
+          <div class="ag"><div class="l1"><span class="i-idle">○</span><span class="nm">checkout-ui</span><span class="ago">18m</span></div>
+            <div class="l2">parked until api PR lands</div></div>
+        </div>
+        <div class="ft">3 panes · <span class="i-done">dev ✓</span> · shell</div>
+      </div>
+
+      <div class="card b-mobile">
+        <div class="hd c-mobile">⬢ MOBILE <span class="br">feat/checkout</span></div>
+        <div class="in">
+          <div class="ag"><div class="l1"><span class="i-idle">○</span><span class="nm">checkout</span><span class="ago">18m</span></div>
+            <div class="l2">parked until api PR lands</div></div>
+        </div>
+        <div class="ft">2 panes · <span class="i-blocked">metro ✗</span> · shell</div>
+      </div>
+
+      <div class="card b-infra">
+        <div class="hd c-infra">⬡ INFRA <span class="br">main</span></div>
+        <div class="in">
+          <div class="ag"><div class="l1"><span class="i-work">◐</span><span class="nm">tf-billing</span><span class="ago">1m</span></div>
+            <div class="l2">provision billing queue + dead letter</div></div>
+        </div>
+        <div class="ft">2 panes · shell · tail</div>
+      </div>
+
+      <div class="card dim" style="border-style:dashed">
+        <div class="hd i-idle">＋ &nbsp;empty slot</div>
+        <div class="in"><div class="l2" style="padding-left:0;color:var(--bg5)">reserved · new repos land here</div></div>
+      </div>
+
+    </div>
+
+    <div class="orch">
+      <div class="l"><span class="i-idle">⌂</span><span style="color:var(--yellow)">ORCHESTRATOR</span><span class="i-idle">claude · idle 3m</span><span style="flex:1"></span><span class="i-idle">prefix+shift+m to jump</span></div>
+      <div class="say">"contracts#412 is merged. api/migrations is picking up the schema change. web and mobile are parked until api's PR lands."</div>
+      <div class="l"><span class="orch">›</span><span class="inp">press i to tell it something</span></div>
+    </div>
+
+  </div>
+</div>
+
+<p class="cap"><b>Repo names in every mockup are invented.</b> Muster hardcodes nothing. It discovers repos, colors and sigils them by hash, and works the same on a single repo or fifteen. See discovery, below.</p>
+
+<ol class="ann">
+  <li>The ranked ribbon. Never more than four rows, reorders freely, disappears entirely when nothing needs you. Row 2 is the propagation repair from your Q37 story.</li>
+  <li>The chain strip. One line, always the same line, showing where the dependency train actually is. This is the part I'm least sure how to source and I've laid out three options below.</li>
+  <li>The repo grid. Fixed cells. Api is always position 2 whether it has five agents or none. Empty slots stay visible so nothing shifts when a repo goes quiet.</li>
+  <li>Attention shows as the red inset border on api, not as a position change.</li>
+  <li>The footer line is non-agent panes. Your dev servers and shells, present but silent, with a check or cross if Muster can tell whether the process is alive.</li>
+  <li>The orchestrator strip. Read-only last message, click or <code>prefix+shift+m</code> jumps to its pane, <code>i</code> opens an input that sends through <code>agent prompt</code>.</li>
+</ol>
+
+<h2>The scratchpad, both ways</h2>
+
+<p>You said mock both and you suspect you wouldn't use it. I agree with your suspicion, so here's the version I'd actually ship and the version you asked to see.</p>
+
+<div class="cols">
+  <div>
+    <h4 style="color:var(--green)">A. No scratchpad, richer auto context</h4>
+    <div class="term"><div class="body">
+      <div class="card b-api">
+        <div class="hd c-api">◆ API <span class="br">feat/billing-migrations</span></div>
+        <div class="in">
+          <div class="ag"><div class="l1"><span class="i-blocked">▲</span><span class="nm">migrations</span><span class="ago">4m</span></div>
+            <div class="l2">add billing schema migration + backfill</div>
+            <div class="l2" style="color:var(--gray)">from orchestrator · 41m ago</div></div>
+        </div>
+        <div class="ft">blocked on: <span class="c-contracts">contracts#412</span> <span class="i-done">merged ✓</span></div>
+      </div>
+    </div></div>
+    <p class="cap">The second line is provenance, so you know whether the task line is fresh or stale. Nothing to maintain.</p>
+  </div>
+  <div>
+    <h4 style="color:var(--fg3)">B. With a note you write</h4>
+    <div class="term"><div class="body">
+      <div class="card b-api">
+        <div class="hd c-api">◆ API <span class="br">feat/billing-migrations</span></div>
+        <div class="in">
+          <div class="ag"><div class="l1"><span class="i-blocked">▲</span><span class="nm">migrations</span><span class="ago">4m</span></div>
+            <div class="l2">add billing schema migration + backfill</div>
+            <div class="l2" style="color:var(--yellow)">✎ don't let it touch the seed data</div></div>
+        </div>
+        <div class="ft">blocked on: <span class="c-contracts">contracts#412</span> <span class="i-done">merged ✓</span></div>
+      </div>
+    </div></div>
+    <p class="cap">One keystroke, <code>n</code>, on the selected agent. Stored as a metadata token with a 24 hour TTL so abandoned notes expire on their own.</p>
+  </div>
+</div>
+
+<div class="note">
+  <b class="k">My call</b>
+  <p>Build B, because it is roughly forty lines of code once tokens exist, and let the TTL do the janitorial work. If a note ages out unread twice, that's your answer about whether you use it. Ship A's provenance line either way, it's the more useful of the two.</p>
+</div>
+
+<h2>Filtering</h2>
+
+<div class="term">
+  <div class="bar"><span class="nm">MUSTER</span><span>filter</span><span style="color:var(--yellow)">mig</span><span class="sp"></span><span>esc clears</span></div>
+  <div class="body">
+    <div class="qrow hot"><span class="idx">›</span><span class="c-api">◆ api</span><span><span class="i-blocked">▲</span> <b style="color:var(--yellow)">mig</b>rations</span><span class="st i-blocked">BLOCKED 4m</span><span class="msg">add billing schema <b style="color:var(--yellow)">mig</b>ration + backfill</span></div>
+    <div class="qrow"><span class="idx"> </span><span class="c-infra">⬡ infra</span><span><span class="i-work">◐</span> tf-billing</span><span class="st i-work">working 1m</span><span class="msg">provision billing queue</span></div>
+    <div style="color:var(--gray);margin-top:10px;font-size:11px">matching agent name, task text, repo, and branch · 2 of 7</div>
+  </div>
+</div>
+
+<p class="cap">Filter collapses the grid into a flat ranked list, because when you're filtering you already know what you want and spatial memory isn't doing any work. Escape restores the grid.</p>
+
+<h2>Keys</h2>
+
+<p>One letter, three modifiers. <code>m</code> is free under your prefix, and so are all three of its chords, checked against both your config and the herdr defaults you have not overridden. Everything Muster binds globally lives on that one letter, which means you learn one key and derive the other two.</p>
+
+<table>
+<tr><th>Key</th><th>Where</th><th>Does</th></tr>
+<tr><td>prefix+m</td><td>anywhere</td><td>Open Muster. Press again to close. Also the back-to-Muster key. The hot one.</td></tr>
+<tr><td>prefix+shift+m</td><td>anywhere</td><td>Jump straight to the orchestrator, skipping Muster entirely.</td></tr>
+<tr><td>prefix+ctrl+m</td><td>anywhere</td><td>Back to the previous agent you were in. Your other back key.</td></tr>
+<tr><td>↑ ↓ / j k</td><td>Muster</td><td>Move selection. Vim keys only while the filter is empty.</td></tr>
+<tr><td>← → / h l</td><td>Muster</td><td>Move across the grid.</td></tr>
+<tr><td>enter</td><td>Muster</td><td>Close Muster, jump to that agent in its normal tab layout, focused.</td></tr>
+<tr><td>any letter</td><td>Muster</td><td>Start filtering. Escape exits filter mode.</td></tr>
+<tr><td>1 – 9</td><td>Muster</td><td>Jump to that row of the attention ribbon.</td></tr>
+<tr><td>i</td><td>Muster</td><td>Type a message to the orchestrator. Enter sends, escape cancels.</td></tr>
+<tr><td>n</td><td>Muster</td><td>Note on the selected agent.</td></tr>
+<tr><td>t</td><td>Muster</td><td>Tell the orchestrator about the selected finished agent. The repair button.</td></tr>
+<tr><td>esc</td><td>Muster</td><td>Clear filter, then close.</td></tr>
+</table>
+
+<div class="note good">
+  <b class="k">Spiked and answered: jumping is one call and no race</b>
+  <p>I expected the overlay's focus restore to fight an outbound focus call. It does not. <code>agent focus</code> the target, then exit. The overlay tears down on process exit and leaves focus exactly where you put it, across workspaces, in about two milliseconds. No close call, no detached helper, no delay.</p>
+  <p>Measured on 2026-09-05 against 0.8.2: jump from an overlay in <code>w1</code> to an agent in <code>w2</code>, focus confirmed still correct by an independent process 700ms later, overlay pane gone, no residue in the pane list. No visible flicker.</p>
+</div>
+
+<h2>How a repo gets a look</h2>
+
+<p>Hash the repo name into a hue, snap it to the nearest slot in a fixed 8 color set so two repos never land close enough to confuse, and let a config file override any of it. Contrast is the goal, per your Q23, so identity carries on four axes at once and you only need one of them to land.</p>
+
+<div class="sw">
+  <div class="b-contracts c-contracts">✦ contracts &nbsp;<span style="color:var(--gray)">solid</span></div>
+  <div class="b-api c-api">◆ api &nbsp;<span style="color:var(--gray)">solid</span></div>
+  <div class="b-web c-web" style="border-style:double;border-width:3px">▣ web &nbsp;<span style="color:var(--gray)">double</span></div>
+  <div class="b-mobile c-mobile" style="border-style:dashed">⬢ mobile &nbsp;<span style="color:var(--gray)">dashed</span></div>
+  <div class="b-infra c-infra" style="border-style:dotted">⬡ infra &nbsp;<span style="color:var(--gray)">dotted</span></div>
+</div>
+
+<table>
+<tr><th>Axis</th><th>Source</th><th>Why</th></tr>
+<tr><td>Hue</td><td>Hash of repo name, snapped to 8 slots, overridable</td><td>Fastest read, works at the edge of vision</td></tr>
+<tr><td>Sigil</td><td>Assigned round-robin from a set, overridable</td><td>Survives colorblindness and a bad terminal palette</td></tr>
+<tr><td>Grid position</td><td>First seen order, then pinned forever in config</td><td>The one you said matters. You point instead of read.</td></tr>
+<tr><td>Border style</td><td>Derived from the same hash</td><td>Redundant on purpose. Free contrast.</td></tr>
+<tr><td>Worktree</td><td>herdr's own <code>worktree list</code></td><td>Carried in the data model from day one, unused in the UI until you need it</td></tr>
+<tr><td>Chrome</td><td>Read from your herdr theme</td><td>Gruvbox now, follows you if you switch</td></tr>
+</table>
+
+<p>Kitty graphics get used for exactly one thing and only in phase three: a repo avatar in the card header when the terminal supports it, falling back to the sigil when it doesn't. Everything above stays true with graphics off, which is what makes the fallback honest rather than a downgrade.</p>
+
+<h2>The same identity, inside herdr itself</h2>
+
+<p>Muster writes what it knows back onto the panes as metadata tokens, so herdr's own sidebar shows the same colors and the same task line whether or not Muster is open. This is the part that earns its keep on the 99% of the time the overlay is closed.</p>
+
+<div class="cols">
+<div>
+<h4 style="color:var(--gray)">Sidebar today</h4>
+<div class="term"><div class="body" style="width:250px">
+<div class="sect">agents</div>
+<div style="padding:2px 0"><span class="i-work">●</span> claude &nbsp;<span class="i-idle">Work-api</span></div>
+<div style="padding:2px 0"><span class="i-work">●</span> claude &nbsp;<span class="i-idle">Work-web</span></div>
+<div style="padding:2px 0"><span class="i-blocked">▲</span> claude &nbsp;<span class="i-idle">Work-api</span></div>
+<div style="padding:2px 0"><span class="i-work">●</span> claude &nbsp;<span class="i-idle">Work-contr…</span></div>
+<div style="padding:2px 0"><span class="i-work">●</span> claude &nbsp;<span class="i-idle">Work-infra</span></div>
+</div></div>
+<p class="cap">Five identical rows. The workspace name is the only thing telling them apart, and it truncates.</p>
+</div>
+<div>
+<h4 style="color:var(--green)">Sidebar with Muster's tokens</h4>
+<div class="term"><div class="body" style="width:250px">
+<div class="sect">agents</div>
+<div style="padding:2px 0 6px"><span class="i-blocked">▲</span> <span class="c-api">◆api</span> migrations <span class="i-blocked">4m</span><div style="color:var(--fg3);padding-left:15px;font-size:11px">billing schema migration</div></div>
+<div style="padding:2px 0 6px"><span class="i-done">●</span> <span class="c-api">◆api</span> tests <span class="i-done">6m</span><div style="color:var(--fg3);padding-left:15px;font-size:11px">integration suite</div></div>
+<div style="padding:2px 0 6px"><span class="i-stale">◌</span> <span class="c-contracts">✦con</span> bump-v3 <span class="i-stale">22m</span><div style="color:var(--fg3);padding-left:15px;font-size:11px">cut v3 types</div></div>
+<div style="padding:2px 0 6px"><span class="i-work">◐</span> <span class="c-infra">⬡inf</span> tf-billing <span class="i-work">1m</span><div style="color:var(--fg3);padding-left:15px;font-size:11px">billing queue + DLQ</div></div>
+<div style="padding:2px 0 6px"><span class="i-idle">○</span> <span class="c-web">▣web</span> checkout-ui <span class="i-idle">18m</span><div style="color:var(--fg3);padding-left:15px;font-size:11px">parked on api PR</div></div>
+</div></div>
+<p class="cap">Same data, sorted with <code>agent.view.set</code> on <code>attention</code>, rendered by herdr's own config.</p>
+</div>
+</div>
+
+<p>This is pure config plus token writes, no rendering code:</p>
+<pre><span class="c"># ~/.config/herdr/config.toml — written by Muster, backed up first</span>
+[ui.sidebar.agents]
+rows = [
+  ["state_icon", "$repo_tag", "agent", "state_text"],
+  ["$task"],
+]
+<span class="c"># per-repo color, regenerated whenever a repo is added</span>
+[[ui.sidebar.agents.token_styles]]
+token = "repo_tag"
+fg = "#83a598"
+bold = true</pre>
+
+<div class="note warn">
+  <b class="k">Unverified</b>
+  <p>The docs describe inline token styling as <code>{ token = "workspace", fg = "#89b4fa", bold = true }</code> inside a row, and I haven't confirmed whether a global per-token style table exists or whether the style has to be inline in the row. Fifteen minute check against a running server. It changes the shape of the generated config, not whether it works.</p>
+</div>
+
+<h2>Where the task line comes from</h2>
+
+<p>You chose the orchestrator as the writer, a skill to make it automatic, cwd and branch as the fallback, and the plugin installing hooks for you. Good news from the research: <code>herdr pane report-metadata</code> is a real CLI command, not socket-only. The orchestrator writes context with one shell line and no custom tooling.</p>
+
+<pre><span class="c"># what the orchestrator runs when it dispatches work</span>
+herdr pane report-metadata w2:p3 --source muster \
+  --title "billing schema migration" \
+  --token repo=api \
+  --token task="add billing schema migration + backfill" \
+  --token blocked_on="contracts#412" \
+  --ttl-ms 86400000</pre>
+
+<p>Muster ships that as a skill in its plugin root and installs it into your global <code>~/.claude/skills/</code> with a single action, plus a CLAUDE.md line telling the orchestrator to call it on every dispatch. Same installer writes the per-repo Stop hook you asked for in Q9, so a worker agent updates its own line when it finishes, and can be re-run to update them all when the format changes.</p>
+
+<h4>The fallback ladder</h4>
+<table>
+<tr><th>Tier</th><th>Source</th><th>Shows as</th></tr>
+<tr><td>1</td><td>Orchestrator token, fresh</td><td>The task line, plain</td></tr>
+<tr><td>2</td><td>Orchestrator token, older than the agent's last state change</td><td>Task line dimmed, marked stale</td></tr>
+<tr><td>3</td><td>Agent's own Stop hook</td><td>Task line, marked self-reported</td></tr>
+<tr><td>4</td><td>Terminal title, stripped</td><td>Whatever Claude Code put there</td></tr>
+<tr><td>5</td><td>Nothing</td><td>Branch and cwd, and a hint to press <code>n</code></td></tr>
+</table>
+
+<p>Tier 2 matters more than it looks. A task line that was true forty minutes ago and is now wrong is worse than no line, because you'll trust it. Dimming it costs nothing and I'd rather show doubt than confidence.</p>
+
+<h2>The dependency chain, which you flagged as the hard one</h2>
+
+<p>You want it and you don't know how the plugin would learn it. Three sources, and I'd use all three, in this order.</p>
+
+<div class="phase">
+  <h4>Inferred from package manifests</h4>
+  <p>Muster reads <code>package.json</code>, <code>go.mod</code>, <code>Cargo.toml</code>, <code>pyproject.toml</code> in each workspace root and matches dependency names against the other repos it knows about. In your chain, web and mobile both depend on the api client package, and api depends on contracts. That draws most of the graph with zero input from you. It runs once per repo on discovery and is cached.</p>
+</div>
+<div class="phase">
+  <h4>Declared in config, for the edges inference can't see</h4>
+  <p>"This repo must be merged to main before that one can start" is a process rule, not a package dependency. Nothing can infer it. It is a handful of lines you write once and never touch, and if you never write them the chain strip simply does not render. Muster is fully useful with no chain at all.</p>
+  <pre style="margin-top:10px"><span class="n">[chain]</span>
+order = [["contracts"], ["api"], ["web", "mobile"]]
+<span class="c"># repos in the same bracket can run in parallel</span>
+independent = ["infra"]</pre>
+</div>
+<div class="phase later">
+  <h4>Runtime edges from the orchestrator</h4>
+  <p>The <code>blocked_on</code> token in the report command above. When the orchestrator parks web on a specific api PR, that's a live edge for this piece of work, not a standing rule. It expires with its TTL. This is what makes the chain strip say <code>PR open ◐</code> instead of just <code>after api</code>.</p>
+</div>
+
+<p>Gate state on the strip comes from <code>gh pr view --json state</code> against the branch, cached for a minute. If <code>gh</code> isn't authenticated the strip degrades to the static order with no checkmarks, which is still useful.</p>
+
+<h2>Triage rules</h2>
+
+<table>
+<tr><th>State</th><th>Detected from</th><th>Rank</th></tr>
+<tr><td>Blocked</td><td>herdr's native <code>blocked</code> status</td><td>1, then longest waiting first</td></tr>
+<tr><td>Gate open, nobody told</td><td>An agent went <code>done</code>, orchestrator idle since before that, a downstream agent idle longer</td><td>2</td></tr>
+<tr><td>Error in pane</td><td><code>pane.read</code> scanned against a small regex set on each <code>pane_output_changed</code></td><td>3</td></tr>
+<tr><td>Done, unseen</td><td>herdr's native <code>done</code></td><td>4, newest first</td></tr>
+<tr><td>Idle, never done</td><td><code>idle</code> with no <code>done</code> transition and no output for 10 minutes</td><td>5</td></tr>
+<tr><td>Working</td><td>Native</td><td>Not in the ribbon at all</td></tr>
+</table>
+
+<div class="note good">
+  <b class="k">A useful accident in herdr's design</b>
+  <p>The docs say CLI reads do not mark an agent as seen, only focusing does. So Muster can scan every pane continuously and mirror the orchestrator's last message on screen without ever consuming your unseen-work signal. The <code>done</code> state stays honest. That's what makes "unseen since I last looked" enough history for you, and it's why the daemon can be as nosy as it likes.</p>
+</div>
+
+<p>Notifications go through <code>notification.show</code>, which respects your herdr toast settings and never steals focus. Worth knowing: your <code>[ui.toast]</code> delivery is unset, and the default is <code>off</code>. Muster's installer will offer to turn it on, and won't do it silently.</p>
+
+<h2>Architecture</h2>
+
+<pre>  <span class="c">herdr server</span>
+       │  unix socket, event stream
+       ▼
+  <span class="k">musterd</span> <span class="c">— started once by [[startup]], lives as long as the session</span>
+       │   subscribes to pane/agent/workspace/worktree events
+       │   scans pane output for errors and the orchestrator's last message
+       │   computes attention ranking + chain gates
+       │   writes metadata tokens back onto panes
+       │   fires notification.show
+       │   keeps a snapshot at $HERDR_PLUGIN_STATE_DIR/snapshot.json
+       │
+       │  reads snapshot, <span class="s">&lt;5ms</span>
+       ▼
+  <span class="k">muster</span>  <span class="c">— the overlay TUI, spawned fresh on every prefix+m, dies on jump</span></pre>
+
+<p>The daemon is not optional and it isn't about history. It's about the 30 second cadence. If the overlay had to enumerate workspaces, tabs, panes and agents and scan output at open time, you'd wait half a second every time, and you'd stop pressing the key. The client reads one JSON file and draws. Everything expensive already happened.</p>
+
+<p>The daemon is also the only thing that can watch while the overlay is closed, which is the entire notification story and the entire gate-detection story. Without it there is no propagation repair, which is the feature I argued is the most valuable one here.</p>
+
+<p>Failure mode I'll design for up front: if <code>musterd</code> dies, the overlay must still open. It falls back to querying the socket directly, renders in maybe 300ms, shows a small warning in the title bar, and restarts the daemon in the background. A dead daemon degrades the experience, it never blocks you.</p>
+
+<h4>Daemon lifecycle: nothing manual, ever</h4>
+
+<p>The <code>[[startup]]</code> hook runs once per enabled plugin right after herdr restores your session, before you have looked at anything. So the daemon comes up with herdr and there is no step where you start it. That is the whole point of putting it there rather than in the pane command.</p>
+
+<p>Three details make the difference between that being true and it being true most of the time.</p>
+
+<table>
+<tr><th>Situation</th><th>What herdr does</th><th>What Muster has to do about it</th></tr>
+<tr><td>You run <code>herdr</code> and the server starts</td><td>Startup hook fires after session restore</td><td>Nothing. This is the happy path.</td></tr>
+<tr><td>Server already running, you attach a second client</td><td>Startup does <b>not</b> re-run</td><td>Nothing, the daemon is already up. But if it died earlier, nothing brings it back, which is why the overlay self-heals.</td></tr>
+<tr><td><code>herdr update --handoff</code></td><td>Startup runs <b>again</b> on the new server</td><td>Must not spawn a second daemon. A lock file in the state dir, and the second invocation exits quietly.</td></tr>
+<tr><td>You link or enable the plugin mid-session</td><td>Startup does <b>not</b> fire. Confirmed, not assumed.</td><td>The install action starts the daemon itself, so linking Muster works immediately instead of appearing to do nothing.</td></tr>
+<tr><td>Headless server, no client attached</td><td>Startup still runs server-side</td><td>Nothing. This is good. Notifications and gate detection keep working while you are away.</td></tr>
+</table>
+
+<p>Which is why the manifest command is <code>musterd --ensure</code> rather than <code>--daemon</code>. It checks the lock, starts and detaches a daemon if there is not one, and exits immediately either way. Idempotent by construction, so it does not matter how many times herdr calls it.</p>
+
+<div class="note warn">
+  <b class="k">Why it must detach rather than just run</b>
+  <p>The docs describe startup hooks as one-shot initialization that should exit when done, and herdr tracks plugin commands with a running or succeeded status and a concurrency limit that returns <code>plugin_command_limit_reached</code>. A startup command that simply never returns would sit in that table as permanently running and eat a slot for the whole session.</p>
+  <p>So <code>--ensure</code> double-forks and returns in single-digit milliseconds. I have not verified whether herdr also kills or times out a long-running plugin command, and I would rather detach correctly than find out. Same half-day spike.</p>
+</div>
+
+<p>Combined with the fallback already in the plan, where the overlay queries the socket directly and restarts the daemon in the background if the snapshot is missing or stale, there is no path where you type a command to make Muster work. Worst case it opens slowly once and fixes itself.</p>
+
+<h4>Three things the docs do not tell you</h4>
+
+<p>All three came out of the spike and all three would have cost an afternoon each if they had turned up later.</p>
+
+<table>
+<tr><th>Finding</th><th>Consequence</th></tr>
+<tr><td>Manifest commands resolve through <code>PATH</code>, not relative to the plugin root, even though the pane's working directory <em>is</em> the plugin root</td><td><code>bin/muster</code> fails with "no viable candidates found in PATH". It has to be <code>./bin/muster</code>. Every command in the manifest needs the leading dot.</td></tr>
+<tr><td>Closing your own pane with <code>plugin pane close</code> kills the process immediately</td><td>Nothing after that line runs. Any cleanup, any focus call, any final write has to happen before it. This is why the jump focuses first.</td></tr>
+<tr><td>herdr kills the pane's entire process group on close</td><td>A plain forked helper dies with the pane. Anything meant to outlive it needs <code>Setsid</code>. This is exactly how <code>musterd --ensure</code> has to start the daemon, so the spike validated the daemon pattern for free.</td></tr>
+</table>
+
+<h4>Events</h4>
+<p>The daemon subscribes to the live event stream rather than declaring manifest event hooks, because <code>pane_agent_status_changed</code> and <code>pane_output_changed</code> across seven agents would spawn a process per event and hit <code>plugin_command_limit_reached</code>. Manifest <code>[[events]]</code> is used for exactly two things, <code>workspace_created</code> and <code>worktree_created</code>, which fire rarely and mean "a repo may have appeared, go look at it."</p>
+
+<h4>Language</h4>
+<p><strong>Go, with bubbletea and lipgloss.</strong> Reasoning, since you left it to me. Startup has to be single-digit milliseconds, which rules out node and python on your 30 second cadence. Between Go and Rust, this is a styling-heavy TUI with a lot of layout and very little hard computation, and lipgloss is meaningfully better at that than anything in Rust. You said this is an ongoing project, so iteration speed compounds. Both give a single static binary and a trivial <code>[[build]]</code> step for anyone installing from GitHub later. If you'd rather write Rust, ratatui does all of this too and I'll switch without complaint. It's the one call here I hold loosely.</p>
+
+<h2>The manifest</h2>
+
+<pre><span class="n">id</span> = "muster"
+<span class="n">name</span> = "Muster"
+<span class="n">version</span> = "0.1.0"
+<span class="n">min_herdr_version</span> = "0.8.2"
+<span class="n">description</span> = "One screen for every agent across every repo"
+<span class="n">platforms</span> = ["linux", "macos"]
+
+[[build]]
+command = ["go", "build", "-o", "bin/muster", "./cmd/muster"]
+
+[[build]]
+command = ["go", "build", "-o", "bin/musterd", "./cmd/musterd"]
+
+[[startup]]
+command = ["bin/musterd", "--ensure"]
+
+[[panes]]
+id = "home"
+title = "Muster"
+placement = "overlay"
+command = ["bin/muster"]
+
+[[actions]]
+id = "jump-orchestrator"
+title = "Jump to orchestrator"
+contexts = ["global"]
+command = ["bin/muster", "jump", "orchestrator"]
+
+[[actions]]
+id = "back"
+title = "Back to previous agent"
+contexts = ["global"]
+command = ["bin/muster", "jump", "previous"]
+
+[[actions]]
+id = "install-reporting"
+title = "Install orchestrator skill and repo hooks"
+contexts = ["global"]
+command = ["bin/muster", "install"]
+
+[[events]]
+on = "workspace_created"
+command = ["bin/muster", "discover"]
+
+[[events]]
+on = "worktree_created"
+command = ["bin/muster", "discover"]</pre>
+
+<p>Plus three lines in your config, which the installer writes after backing the file up:</p>
+
+<pre>[[keys.command]]
+key = "prefix+m"
+type = "plugin_action"
+command = "muster.home"
+
+[[keys.command]]
+key = "prefix+shift+m"
+type = "plugin_action"
+command = "muster.jump-orchestrator"
+
+[[keys.command]]
+key = "prefix+ctrl+m"
+type = "plugin_action"
+command = "muster.back"</pre>
+
+<div class="note">
+  <b class="k">The cost of using the prefix</b>
+  <p>Prefix bindings are the right default. They compose with herdr's own grammar, they cannot clash with your window manager, and anyone installing Muster gets keys that fit their setup rather than mine. But <code>prefix+m</code> is two keystrokes on something you press every thirty seconds, and that adds up in a way <code>alt+space</code> would not.</p>
+  <p>So the installer writes the prefix bindings and mentions, once, that you can add a single-chord alias for <code>muster.home</code> if the double tap starts to grate. Your call to make later with real data, not mine to make now.</p>
+</div>
+
+<div class="note warn">
+  <b class="k">Two things to verify on a running server</b>
+  <p>Whether a <code>plugin_action</code> keybinding can open a declared <code>[[panes]]</code> entrypoint directly, or whether it can only invoke an <code>[[actions]]</code> entry that then shells out to <code>herdr plugin pane open</code>. The second definitely works, so this is about saving one process spawn on the hottest path in the whole plugin.</p>
+  <p>And whether an overlay pane gets a real TTY with a resize signal, since bubbletea needs both.</p>
+</div>
+
+<h2>Order of work</h2>
+
+<div class="phase" style="border-left-color:var(--green)">
+  <h4 style="color:var(--green)">Done: the spikes, 2026-09-05</h4>
+  <p>An overlay pane gets a real TTY, an initial size, and live resizes. Bubbletea saw 86x33, then 76x23, then 47x21 as the window was dragged. Every plugin env var is set, including <code>HERDR_PANE_ID</code>, which the docs only rule out for popups.</p>
+  <p>Jumping is <code>agent focus</code> then exit. Two milliseconds, cross-workspace, no flicker, no race with the overlay's own focus restore.</p>
+  <p>Startup hooks do not fire when you link a plugin mid-session, which is why the installer starts the daemon itself.</p>
+  <p>The overlay model survives. Everything below rests on that and it holds.</p>
+</div>
+<div class="phase">
+  <h4>Phase 1: the list that works</h4>
+  <p>Daemon with the event subscription and snapshot. Overlay with the ranked ribbon and the repo grid, colors and sigils from the hash, fixed positions. Arrows, filter, enter to jump. The three prefix bindings. Fallback ladder tiers 4 and 5 only, so it's useful before anyone reports anything. This is the thing you'd use every day even if I stopped here.</p>
+</div>
+<div class="phase">
+  <h4>Phase 2: context and the repair button</h4>
+  <p>The reporting skill and its installer. Tiers 1 through 3 of the ladder with staleness dimming. The orchestrator strip with its last message and the <code>i</code> input. Gate detection and the <code>t</code> key that tells the orchestrator what it missed. This is where the Q37 failure actually gets fixed.</p>
+</div>
+<div class="phase">
+  <h4>Phase 3: propagation and chain</h4>
+  <p>Token writes into the sidebar, generated config, <code>agent.view.set</code> sorting. The chain strip with manifest inference, config order, and <code>gh</code> gate state. Notifications. Notes on <code>n</code>.</p>
+</div>
+<div class="phase later">
+  <h4>Later, if it earns it</h4>
+  <p>Kitty graphics avatars. Non-agent pane health beyond "process alive". Publishing, which mostly means pulling your setup out of the code and into config.</p>
+</div>
+
+<h2>What I'd talk you out of</h2>
+
+<ul>
+<li><strong>A real dependency DAG drawing.</strong> You asked for a visual and I've given you a single line instead. With four repos in a mostly linear chain, a drawn graph is a worse version of a sentence. If you get to a dozen repos with real branching, I'll build the graph and I'll be right to.</li>
+<li><strong>The full orchestrator mirror.</strong> You landed on last-message-plus-jump and that's the correct instinct. A live transcript inside a plugin pane means polling <code>pane.read</code> and redrawing while Claude Code redraws underneath you. It would look impressive in a demo and annoy you by Thursday.</li>
+<li><strong>Any history beyond unseen.</strong> You said unseen is enough, herdr gives it away free, and every stored timeline I've seen in a tool like this gets read twice and then never again.</li>
+</ul>
+
+<h2>Discovery: no repo names, anywhere</h2>
+
+<p>You want this usable by anyone with any workflow, so nothing about your setup is allowed into the code. Muster learns everything at runtime and stores what it learns in its own state dir, never in the plugin.</p>
+
+<table>
+<tr><th>Question</th><th>How Muster answers it with no config</th></tr>
+<tr><td>What repos exist?</td><td>Every workspace has a cwd. <code>git rev-parse --show-toplevel</code> on it gives a repo root. Distinct roots are distinct repos.</td></tr>
+<tr><td>What is a repo called?</td><td>The <code>origin</code> remote, normalized to <code>owner/name</code>. Falls back to the directory basename when there is no remote.</td></tr>
+<tr><td>Two clones of the same repo?</td><td>Same name, different roots. They get the same hue and sigil, and the card header disambiguates by path. Deliberate: they <em>are</em> the same repo.</td></tr>
+<tr><td>Two repos with the same basename in different orgs?</td><td>The <code>owner/name</code> key separates them, so they hash to different hues.</td></tr>
+<tr><td>What color and sigil?</td><td>Hashed from the <code>owner/name</code> key. Deterministic, so the same repo looks the same on every machine you use.</td></tr>
+<tr><td>Where does it sit on the grid?</td><td>Assigned in discovery order on first sight, then persisted in state. Stable forever after. Pinnable in config if you want to rearrange.</td></tr>
+<tr><td>What if a workspace has no git repo?</td><td>It gets a neutral gray card keyed on its cwd. Scratch workspaces still show their agents.</td></tr>
+<tr><td>What about the chain?</td><td>Inferred from package manifests, declared in optional config, and refined by runtime tokens. All three are optional. With none of them the chain strip is hidden.</td></tr>
+</table>
+
+<p>The consequence worth stating plainly: on a fresh install with zero configuration, someone gets a working colored, sigiled, attention-ranked grid of their repos on first launch. Config only ever exists to override a decision Muster already made.</p>
+
+<h2>Identifying the orchestrator</h2>
+
+<p>Name plus token, as you picked. One action does both so you never do it twice.</p>
+
+<pre><span class="c"># muster.mark-orchestrator, run once on the pane hosting it</span>
+herdr agent rename $TARGET orchestrator
+herdr pane report-metadata $PANE --source muster --token role=orchestrator</pre>
+
+<p>Detection order is token first, then name, then nothing. The token is authoritative because it survives a rename and can carry more than a string later, things like which repos this orchestrator is responsible for when you eventually run more than one. The name exists because it makes <code>herdr agent prompt orchestrator "..."</code> work from any script, including the reporting skill, without anyone having to look up a pane ID.</p>
+
+<p>If neither is set, the orchestrator strip is replaced by a single line telling you to press a key to mark one. No silent empty space, and no guessing based on which agent happens to talk the most.</p>
+
+<h2>Worktrees: supported by the data model, absent from the UI</h2>
+
+<p>You do not use them, and you want the door left open. That is a shape decision, not a feature, so it costs nothing to make now and would cost a rewrite to make later.</p>
+
+<ul>
+<li>The identity key is <code>(repo, worktree)</code> from the first commit, not <code>repo</code>. Today the worktree half is almost always the main checkout and never renders.</li>
+<li>herdr's <code>worktree list</code> already returns <code>repo_root</code>, <code>checkout_path</code>, <code>is_linked_worktree</code> and <code>open_workspace_id</code>, so Muster gets this for free without shelling out to git.</li>
+<li>The card header already reserves a slot for the branch. When worktrees matter, that slot becomes the worktree label and the card grows one row per worktree. No new layout.</li>
+<li><code>worktree_created</code> is already one of the two manifest event hooks, so a new worktree triggers discovery on day one whether or not the UI shows it.</li>
+</ul>
+
+<p>The one thing I would not do up front is give worktrees their own grid cell. Five repos with three worktrees each is fifteen cells, which destroys the fixed-position property that makes the grid worth having. When it comes, worktrees live inside the repo card.</p>
+
+<h2>Settled</h2>
+
+<table>
+<tr><th>Decision</th><th>Where it came from</th></tr>
+<tr><td>Overlay on a prefix key, closes on jump, reopens on the same key</td><td>Q12, Q13, Q15</td></tr>
+<tr><td>Ranked ribbon on top, fixed repo grid below</td><td>Resolving Q2 against Q23</td></tr>
+<tr><td>Arrows always, letters enter filter mode, vim keys when the filter is empty</td><td>Resolving Q16 against itself</td></tr>
+<tr><td>Gate-open-nobody-told is the first real feature</td><td>Q37</td></tr>
+<tr><td>Orchestrator writes context, skill enforces it, five-tier fallback ladder</td><td>Q6, Q7, Q8, Q9</td></tr>
+<tr><td>Repo identity by hash, four redundant visual axes, fixed grid position</td><td>Q21, Q22, Q23</td></tr>
+<tr><td>Tokens written back so the native sidebar agrees</td><td>Q24</td></tr>
+<tr><td>Notify, never steal focus</td><td>Q30</td></tr>
+<tr><td>Go, bubbletea, lipgloss</td><td>Your call, my recommendation, you confirmed</td></tr>
+<tr><td>Startup daemon plus thin overlay client</td><td>Forced by the thirty second cadence and by notifications</td></tr>
+<tr><td>Zero hardcoded repos, discovery only</td><td>Open question 1</td></tr>
+<tr><td>Orchestrator marked by name and token together</td><td>Open question 2</td></tr>
+<tr><td>Worktrees in the data model, not the UI</td><td>Open question 3</td></tr>
+<tr><td><code>prefix+m</code> family for all three global keys</td><td>Open question 5</td></tr>
+</table>
+
+<h2>Still open</h2>
+
+<ol>
+<li>Whether a <code>plugin_action</code> keybinding can open a declared pane entrypoint directly, or has to route through an action that shells out. Saves one process spawn on the hottest path.</li>
+<li>Your real fullscreen width. The spike ran in a split at 55 and then 86 columns. The three-wide grid needs roughly 120. Below that it should collapse to two columns, and below about 70 to a single dense list. That is a responsive-layout rule I would rather write against your actual number than guess.</li>
+<li>Whether the startup hook fires cleanly on a fresh <code>herdr</code> launch, and whether the detaching <code>--ensure</code> command satisfies it without sitting in the plugin command table as permanently running. The plugin is linked, so this answers itself the next time you start herdr.</li>
+<li>Whether per-token sidebar styles can live in a global table or must be inline in each row. Changes the shape of the generated config, not whether it works.</li>
+<li>Whether <code>prefix+m</code> stays, or earns a single-chord alias once you have felt the double tap a few hundred times.</li>
+</ol>
+
+<p class="cap" style="margin-top:36px">The spikes are done and they passed. Next is phase 1, starting with the daemon and its event subscription, since the overlay is worthless until something is watching.</p>
+
+</div>
+</body>
+</html>

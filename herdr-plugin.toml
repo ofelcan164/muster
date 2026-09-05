@@ -1,0 +1,66 @@
+id = "muster"
+name = "Muster"
+version = "0.0.1"
+min_herdr_version = "0.8.2"
+description = "One screen for every agent across every repo"
+platforms = ["linux", "macos"]
+
+# Commands resolve through PATH, not the plugin root, so the leading ./ matters.
+# See docs/herdr-api-notes.md.
+
+[[build]]
+command = ["go", "build", "-o", "./bin/muster", "./cmd/muster"]
+
+[[build]]
+command = ["go", "build", "-o", "./bin/musterd", "./cmd/musterd"]
+
+# Must detach and return. A command that never exits sits in herdr's plugin
+# command table as permanently running.
+[[startup]]
+command = ["./bin/musterd", "--ensure"]
+
+[[panes]]
+id = "home"
+title = "Muster"
+placement = "overlay"
+command = ["./bin/muster"]
+
+[[actions]]
+id = "open"
+title = "Open Muster"
+contexts = ["global"]
+command = ["./bin/muster", "open"]
+
+[[actions]]
+id = "jump-orchestrator"
+title = "Jump to orchestrator"
+contexts = ["global"]
+command = ["./bin/muster", "jump", "orchestrator"]
+
+[[actions]]
+id = "back"
+title = "Back to previous agent"
+contexts = ["global"]
+command = ["./bin/muster", "jump", "previous"]
+
+[[actions]]
+id = "mark-orchestrator"
+title = "Mark this agent as the orchestrator"
+contexts = ["pane"]
+command = ["./bin/muster", "mark-orchestrator"]
+
+[[actions]]
+id = "install"
+title = "Install reporting skill, repo hooks and keybindings"
+contexts = ["global"]
+command = ["./bin/muster", "install"]
+
+# Rare events only. Status and output events are far too chatty for a
+# process-per-event hook; musterd subscribes to those over the socket.
+[[events]]
+on = "workspace_created"
+command = ["./bin/muster", "discover"]
+
+[[events]]
+on = "worktree_created"
+command = ["./bin/muster", "discover"]
