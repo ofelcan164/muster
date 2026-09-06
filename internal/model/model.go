@@ -50,7 +50,11 @@ type Agent struct {
 	Task       string     `json:"task,omitempty"`
 	TaskSource TaskSource `json:"task_source"`
 	BlockedOn  string     `json:"blocked_on,omitempty"`
-	Note       string     `json:"note,omitempty"`
+
+	// Question is the prompt a blocked agent is waiting on, read from its pane
+	// because herdr does not expose it anywhere else.
+	Question string `json:"question,omitempty"`
+	Note     string `json:"note,omitempty"`
 
 	// StatusSince is when the daemon first observed the current status. herdr
 	// exposes no transition timestamp, so this is measured by the daemon and

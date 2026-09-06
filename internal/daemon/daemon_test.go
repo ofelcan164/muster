@@ -336,3 +336,27 @@ func keysOf(m map[string]model.Repo) []string {
 	}
 	return out
 }
+
+// New must return a daemon whose maps and channels are usable. A nil map here
+// panicked a background goroutine and took the whole daemon down silently.
+func TestNewIsFullyInitialised(t *testing.T) {
+	d := newTestDaemon(t)
+	if d.questions == nil {
+		t.Error("questions map is nil")
+	}
+	if d.rescan == nil {
+		t.Error("rescan channel is nil")
+	}
+	if d.persist == nil || d.persist.GridSlots == nil || d.persist.StatusSince == nil ||
+		d.persist.TaskSeenAt == nil || d.persist.LastDoneSeq == nil ||
+		d.persist.LastProcess == nil || d.persist.Stopped == nil {
+		t.Error("persisted state has a nil map")
+	}
+	// Exercise the paths that write to them.
+	d.mu.Lock()
+	d.questions["w1:p1"] = "Do you want to proceed?"
+	d.mu.Unlock()
+	if got := d.question("w1:p1"); got != "Do you want to proceed?" {
+		t.Errorf("question round trip failed: %q", got)
+	}
+}

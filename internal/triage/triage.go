@@ -249,9 +249,14 @@ func shortNames(full []string) []string {
 	return out
 }
 
-// blockedDetail prefers the agent's own state label, which is where herdr keeps
-// the question an agent is blocked on.
+// blockedDetail says what the agent is actually waiting for. The question read
+// from the pane beats the task line: "Do you want to create abc.txt?" tells you
+// whether you can answer it from here, where the task line only tells you what
+// the agent was working on.
 func blockedDetail(a model.Agent) string {
+	if a.Question != "" {
+		return truncate(a.Question, 80)
+	}
 	if a.Task != "" {
 		return truncate(a.Task, 80)
 	}

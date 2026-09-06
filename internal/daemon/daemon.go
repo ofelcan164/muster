@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/ofelcan/muster/internal/chain"
@@ -49,6 +50,14 @@ type Daemon struct {
 
 	herdrVersion string
 
+	// mu guards state shared with the question fetcher goroutine.
+	mu        sync.Mutex
+	questions map[string]string
+
+	// rescan asks the reconcile loop to run again after the fetcher learns
+	// something the last snapshot did not have.
+	rescan chan struct{}
+
 	// stopped is the last computed set of panes whose process went away,
 	// recomputed on every reconcile.
 	stopped []model.Stopped
@@ -56,10 +65,12 @@ type Daemon struct {
 
 func New(client *herdr.Client, logger *log.Logger) *Daemon {
 	return &Daemon{
-		client:   client,
-		resolver: discover.NewResolver(),
-		persist:  state.LoadPersisted(),
-		log:      logger,
+		client:    client,
+		resolver:  discover.NewResolver(),
+		persist:   state.LoadPersisted(),
+		log:       logger,
+		questions: map[string]string{},
+		rescan:    make(chan struct{}, 1),
 	}
 }
 
@@ -119,6 +130,11 @@ func (d *Daemon) Run(ctx context.Context) error {
 				}
 			}
 
+		case <-d.rescan:
+			if d.reconcile() {
+				lastReachable = time.Now()
+			}
+
 		case <-ticker.C:
 			dirty = false
 			if d.reconcile() {
@@ -149,6 +165,21 @@ func (d *Daemon) reconcile() bool {
 	agents := d.buildAgents(snap, now)
 	orch := d.findOrchestrator(snap, agents, now)
 	repos := d.buildRepos(snap, agents, orch)
+
+	// The question a blocked agent is waiting on is the single most useful
+	// string in the ribbon, and it only exists in the pane. Attach whatever the
+	// fetcher has learned, then ask it for anything still missing.
+	for i := range repos {
+		for j := range repos[i].Agents {
+			a := &repos[i].Agents[j]
+			if a.Status == model.StatusBlocked {
+				a.Question = d.question(a.PaneID)
+			}
+		}
+	}
+	if want := d.blockedNeedingQuestion(agents); len(want) > 0 && d.client != nil {
+		go d.fetchQuestions(context.Background(), want)
+	}
 
 	everDone := make(map[string]bool, len(d.persist.LastDoneSeq))
 	for pane := range d.persist.LastDoneSeq {
