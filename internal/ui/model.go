@@ -34,12 +34,17 @@ func columnsFor(width int) int {
 	}
 }
 
-// target is something the selection can land on. Ribbon rows and grid agents
-// are both targets, so one cursor covers the whole screen.
+// target is something the selection can land on.
+//
+// A repo with no agents is still a target. Selection used to cover agents only,
+// which meant that with two agents across seven repos, five cards could not be
+// reached at all and the arrow keys looked broken.
 type target struct {
+	// paneID is the agent to jump to, or "" for a repo card with no agents.
 	paneID string
-	// column is the grid column a target sits in, used for left and right.
-	// Ribbon rows are column -1.
+	// repoKey identifies the card the target sits in.
+	repoKey string
+	// column is the grid column, used for left and right. Ribbon rows are -1.
 	column int
 	ribbon bool
 }
@@ -47,19 +52,32 @@ type target struct {
 type Model struct {
 	snap *model.Snapshot
 
+	// rowOf maps a screen line to the target drawn on it, filled in by the view
+	// on every render. A terminal click gives coordinates and nothing else, so
+	// the only way to know what was clicked is to remember what was drawn.
+	rowOf map[int]int
+
 	width, height int
 	cursor        int
 	targets       []target
 
-	// filtering is the mode the plan resolves Q16 with: arrows always work, any
-	// letter enters filter mode, and vim keys come back when the filter is
-	// empty. Without the mode there is no free letter for anything.
+	// filtering is entered with "/", following herdr's own convention.
+	//
+	// The plan had any bare letter start filtering, which forced the awkward
+	// rule that vim keys only worked while the query was empty and made every
+	// other letter unavailable for anything else. An explicit "/" costs one
+	// keystroke and gives the whole alphabet back for navigation and actions.
 	filtering bool
 	filter    string
 
 	// jump is set when the user picked something. main focuses it and exits,
 	// which is the whole of jumping: no close call and no delay.
 	jump string
+
+	// sort is how the grid is ordered, and moves is the manual arrangement
+	// layered on top of it.
+	sort  SortMode
+	moves []string
 
 	warning string
 	quit    bool
@@ -86,9 +104,17 @@ func (m *Model) visibleRepos() []model.Repo {
 	q := strings.ToLower(m.filter)
 	var out []model.Repo
 	for _, r := range m.snap.Repos {
+		// A repo that matches on its own name or branch is a hit, whether or not
+		// anything is running in it. Requiring a matching agent meant searching
+		// for a repo with no agents found nothing at all, which is exactly the
+		// case you hit when looking for somewhere to start work.
+		if repoMatches(r, q) {
+			out = append(out, r)
+			continue
+		}
 		var kept []model.Agent
 		for _, a := range r.Agents {
-			if matchesFilter(r, a, q) {
+			if agentMatches(a, q) {
 				kept = append(kept, a)
 			}
 		}
@@ -100,11 +126,21 @@ func (m *Model) visibleRepos() []model.Repo {
 	return out
 }
 
-// matchesFilter searches agent name, task text, repo and branch, which is what
-// the design says the filter covers.
-func matchesFilter(r model.Repo, a model.Agent, q string) bool {
-	for _, field := range []string{a.Name, a.Task, a.Question, r.Display, r.Name, r.Branch} {
-		if strings.Contains(strings.ToLower(field), q) {
+// repoMatches searches the fields that belong to the repo itself.
+func repoMatches(r model.Repo, q string) bool {
+	return containsAny(q, r.Display, r.Name, r.Branch)
+}
+
+// agentMatches searches the fields that belong to an agent. Together these
+// cover agent name, task text, repo and branch, which is what the design says
+// the filter should look at.
+func agentMatches(a model.Agent, q string) bool {
+	return containsAny(q, a.Name, a.Task, a.Question, a.PaneID)
+}
+
+func containsAny(q string, fields ...string) bool {
+	for _, f := range fields {
+		if f != "" && strings.Contains(strings.ToLower(f), q) {
 			return true
 		}
 	}
@@ -113,7 +149,7 @@ func matchesFilter(r model.Repo, a model.Agent, q string) bool {
 
 // rebuild recomputes the selectable targets after anything changes.
 func (m *Model) rebuild() {
-	prev := m.selectedPane()
+	prev := m.selectedKey()
 	m.targets = nil
 
 	if !m.filtering && m.filter == "" {
@@ -132,8 +168,14 @@ func (m *Model) rebuild() {
 		if cols > 1 {
 			col = i % cols
 		}
+		if len(r.Agents) == 0 {
+			// The card itself. Selecting it does not jump anywhere, but it keeps
+			// every repo reachable and the grid navigable.
+			m.targets = append(m.targets, target{repoKey: r.Key, column: col})
+			continue
+		}
 		for _, a := range r.Agents {
-			m.targets = append(m.targets, target{paneID: a.PaneID, column: col})
+			m.targets = append(m.targets, target{paneID: a.PaneID, repoKey: r.Key, column: col})
 		}
 	}
 
@@ -142,13 +184,41 @@ func (m *Model) rebuild() {
 	m.cursor = 0
 	if prev != "" {
 		for i, t := range m.targets {
-			if t.paneID == prev {
+			if m.keyOf(t) == prev {
 				m.cursor = i
 				break
 			}
 		}
 	}
 	m.clampCursor()
+}
+
+// selectedKey identifies the current selection for restoring it after a
+// rebuild, whether it is an agent or a bare repo card.
+func (m *Model) selectedKey() string {
+	if m.cursor < 0 || m.cursor >= len(m.targets) {
+		return ""
+	}
+	t := m.targets[m.cursor]
+	if t.paneID != "" {
+		return "pane:" + t.paneID
+	}
+	return "repo:" + t.repoKey
+}
+
+func (m *Model) keyOf(t target) string {
+	if t.paneID != "" {
+		return "pane:" + t.paneID
+	}
+	return "repo:" + t.repoKey
+}
+
+// selectedRepo is the repo the cursor is in, for highlighting the whole card.
+func (m *Model) selectedRepo() string {
+	if m.cursor < 0 || m.cursor >= len(m.targets) {
+		return ""
+	}
+	return m.targets[m.cursor].repoKey
 }
 
 func (m *Model) clampCursor() {
@@ -186,8 +256,58 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
+
+	case tea.MouseMsg:
+		return m.handleMouse(msg)
 	}
 	return m, nil
+}
+
+// handleMouse makes the overlay clickable. Click to select, click the selection
+// again to jump, and scroll to move through the list.
+func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	switch msg.Button {
+	case tea.MouseButtonWheelUp:
+		m.move(-1)
+		return m, nil
+	case tea.MouseButtonWheelDown:
+		m.move(1)
+		return m, nil
+	}
+	if msg.Action != tea.MouseActionRelease || msg.Button != tea.MouseButtonLeft {
+		return m, nil
+	}
+	idx, ok := m.rowOf[msg.Y]
+	if !ok {
+		return m, nil
+	}
+	if idx == m.cursor {
+		// Clicking what is already selected is the jump, so a double click
+		// works and a single click on something else only moves the selection.
+		return m.activate()
+	}
+	m.cursor = idx
+	return m, nil
+}
+
+// noteRow records that a target was drawn on a screen line.
+func (m *Model) noteRow(y, targetIndex int) {
+	if m.rowOf == nil {
+		m.rowOf = map[int]int{}
+	}
+	m.rowOf[y] = targetIndex
+}
+
+func (m *Model) resetRows() { m.rowOf = map[int]int{} }
+
+// targetIndex finds the cursor position for a drawn item.
+func (m *Model) targetIndex(key string) int {
+	for i, t := range m.targets {
+		if m.keyOf(t) == key {
+			return i
+		}
+	}
+	return -1
 }
 
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -196,17 +316,15 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.filtering {
 		switch msg.Type {
 		case tea.KeyEsc:
-			m.filtering, m.filter = false, ""
-			m.rebuild()
+			// Leave the typing mode but keep the results, so you can navigate
+			// what you just searched for. A second escape clears the query.
+			m.filtering = false
 			return m, nil
 		case tea.KeyEnter:
 			return m.activate()
 		case tea.KeyBackspace:
 			if m.filter != "" {
 				m.filter = m.filter[:len(m.filter)-1]
-			}
-			if m.filter == "" {
-				m.filtering = false
 			}
 			m.rebuild()
 			return m, nil
@@ -248,6 +366,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		return m.activate()
 
+	case "/":
+		m.filtering = true
+		return m, nil
+
 	case "up", "k":
 		m.move(-1)
 		return m, nil
@@ -259,6 +381,19 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "right", "l":
 		m.moveColumn(1)
+		return m, nil
+
+	case "s":
+		// Cycle the sort. First seen is the default and where it returns to.
+		m.sort = m.sort.Next()
+		m.rebuild()
+		return m, nil
+
+	case "K":
+		m.moveSelectedRepo(-1)
+		return m, nil
+	case "J":
+		m.moveSelectedRepo(1)
 		return m, nil
 
 	case "g":
@@ -282,12 +417,6 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Any other letter starts filtering.
-	if len(msg.Runes) == 1 {
-		m.filtering = true
-		m.filter = string(msg.Runes)
-		m.rebuild()
-	}
 	return m, nil
 }
 
@@ -376,4 +505,18 @@ func sortedRepos(repos []model.Repo) []model.Repo {
 	out := append([]model.Repo(nil), repos...)
 	sort.SliceStable(out, func(i, j int) bool { return out[i].GridSlot < out[j].GridSlot })
 	return out
+}
+
+// TargetCount and ReachableRepos exist for tests and diagnostics: they report
+// what the cursor can actually get to.
+func (m *Model) TargetCount() int { return len(m.targets) }
+
+func (m *Model) ReachableRepos() int {
+	seen := map[string]bool{}
+	for _, t := range m.targets {
+		if t.repoKey != "" {
+			seen[t.repoKey] = true
+		}
+	}
+	return len(seen)
 }

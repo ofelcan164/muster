@@ -135,6 +135,8 @@ func key(m *Model, s string) {
 		msg = tea.KeyMsg{Type: tea.KeyDown}
 	case "backspace":
 		msg = tea.KeyMsg{Type: tea.KeyBackspace}
+	case "slash":
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")}
 	default:
 		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
 	}
@@ -145,94 +147,6 @@ func newSized(w int) *Model {
 	m := New(testSnapshot(), "")
 	m.Update(tea.WindowSizeMsg{Width: w, Height: 40})
 	return m
-}
-
-// The mode model that resolves the plan's second contradiction. Vim keys work
-// only while the filter is empty; any other letter enters filter mode, and once
-// there hjkl are literal text so no letter is reserved.
-func TestLetterStartsFilteringAndVimKeysBecomeText(t *testing.T) {
-	m := newSized(143)
-	key(m, "m")
-	if !m.filtering || m.filter != "m" {
-		t.Fatalf("a non-vim letter should start filtering, got filtering=%v filter=%q",
-			m.filtering, m.filter)
-	}
-	key(m, "j")
-	key(m, "k")
-	if m.filter != "mjk" {
-		t.Errorf("hjkl must be literal once filtering, got %q", m.filter)
-	}
-}
-
-func TestEscapeClearsFilterThenCloses(t *testing.T) {
-	m := newSized(143)
-	key(m, "m")
-	key(m, "i")
-	if m.filter != "mi" {
-		t.Fatalf("filter = %q", m.filter)
-	}
-	key(m, "esc")
-	if m.filtering || m.filter != "" {
-		t.Fatalf("escape should leave filter mode, got filtering=%v filter=%q",
-			m.filtering, m.filter)
-	}
-	if m.quit {
-		t.Fatal("escape must not close on the same press that clears the filter")
-	}
-	key(m, "esc")
-	if !m.quit {
-		t.Error("a second escape should close")
-	}
-}
-
-func TestVimKeysWorkOnlyWhenTheFilterIsEmpty(t *testing.T) {
-	m := newSized(143)
-	start := m.cursor
-	key(m, "j")
-	if m.cursor == start {
-		t.Fatal("with an empty filter, j should move the selection")
-	}
-	if m.filtering {
-		t.Fatal("j must not start filtering while the filter is empty")
-	}
-
-	// Now enter filter mode. j is text from here.
-	//
-	// The cursor index is not a useful thing to assert on inside filter mode,
-	// because the target list itself changes as the query narrows. What matters
-	// is that the keystroke landed in the query rather than moving anything.
-	key(m, "m")
-	key(m, "j")
-	if m.filter != "mj" {
-		t.Errorf("filter = %q, want mj", m.filter)
-	}
-
-	// Escape gives the vim keys back.
-	key(m, "esc")
-	before := m.cursor
-	key(m, "j")
-	if m.cursor == before {
-		t.Error("escape should restore vim navigation")
-	}
-}
-
-func TestFilterMatchesAgentTaskRepoAndBranch(t *testing.T) {
-	for _, q := range []string{"migrations", "billing", "web", "ui"} {
-		m := newSized(143)
-		for _, r := range q {
-			key(m, string(r))
-		}
-		if len(m.targets) == 0 {
-			t.Errorf("filter %q matched nothing", q)
-		}
-	}
-	m := newSized(143)
-	for _, r := range "zzzznope" {
-		key(m, string(r))
-	}
-	if len(m.targets) != 0 {
-		t.Errorf("filter should have matched nothing, got %d targets", len(m.targets))
-	}
 }
 
 func TestDigitJumpsToRibbonRow(t *testing.T) {
@@ -306,5 +220,239 @@ func TestWarningIsShown(t *testing.T) {
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 143, Height: 40})
 	if !strings.Contains(out.View(), "daemon was restarted") {
 		t.Error("a degraded daemon should be visible in the header")
+	}
+}
+
+// Search is entered with "/", following herdr's own convention. That leaves
+// every letter free for navigation and actions, which the plan's any-letter
+// rule did not.
+func TestSlashStartsSearch(t *testing.T) {
+	m := newSized(143)
+	if m.filtering {
+		t.Fatal("should not start in search mode")
+	}
+	key(m, "slash")
+	if !m.filtering {
+		t.Fatal("/ should enter search mode")
+	}
+	for _, r := range "api" {
+		key(m, string(r))
+	}
+	if m.filter != "api" {
+		t.Errorf("filter = %q, want api", m.filter)
+	}
+}
+
+func TestVimKeysNavigateAndNeverType(t *testing.T) {
+	m := newSized(143)
+	start := m.cursor
+	key(m, "j")
+	if m.cursor == start {
+		t.Error("j should move the selection")
+	}
+	if m.filtering || m.filter != "" {
+		t.Errorf("j must not type: filtering=%v filter=%q", m.filtering, m.filter)
+	}
+	for _, k := range []string{"h", "k", "l"} {
+		key(m, k)
+		if m.filter != "" {
+			t.Errorf("%s typed into the filter", k)
+		}
+	}
+}
+
+// Once searching, hjkl are literal text again.
+func TestVimKeysAreTextWhileSearching(t *testing.T) {
+	m := newSized(143)
+	key(m, "slash")
+	for _, r := range "hjkl" {
+		key(m, string(r))
+	}
+	if m.filter != "hjkl" {
+		t.Errorf("filter = %q, want hjkl", m.filter)
+	}
+}
+
+// Escape leaves the typing mode but keeps the results, so you can navigate what
+// you just searched for. A second escape clears.
+func TestEscapeLeavesSearchModeThenClears(t *testing.T) {
+	m := newSized(143)
+	key(m, "slash")
+	for _, r := range "api" {
+		key(m, string(r))
+	}
+	key(m, "esc")
+	if m.filtering {
+		t.Error("escape should leave typing mode")
+	}
+	if m.filter != "api" {
+		t.Errorf("escape should keep the results, filter = %q", m.filter)
+	}
+	key(m, "esc")
+	if m.filter != "" {
+		t.Errorf("a second escape should clear, filter = %q", m.filter)
+	}
+	if m.quit {
+		t.Error("clearing must not also close")
+	}
+	key(m, "esc")
+	if !m.quit {
+		t.Error("a third escape should close")
+	}
+}
+
+// The bug: searching for a repo that has no agents found nothing, because the
+// filter only kept repos with matching agents.
+func TestSearchFindsReposWithNoAgents(t *testing.T) {
+	m := newSized(143)
+	key(m, "slash")
+	for _, r := range "infra" {
+		key(m, string(r))
+	}
+	repos := m.visibleRepos()
+	if len(repos) != 1 || repos[0].Display != "infra" {
+		t.Fatalf("searching for an agent-less repo found %d repos: %+v", len(repos), repos)
+	}
+	if len(m.targets) == 0 {
+		t.Error("the matched repo should be selectable")
+	}
+}
+
+func TestSearchMatchesBranchAndTask(t *testing.T) {
+	for _, q := range []string{"billing", "checkout", "migration"} {
+		m := newSized(143)
+		key(m, "slash")
+		for _, r := range q {
+			key(m, string(r))
+		}
+		if len(m.visibleRepos()) == 0 {
+			t.Errorf("search %q matched nothing", q)
+		}
+	}
+	m := newSized(143)
+	key(m, "slash")
+	for _, r := range "zzzznope" {
+		key(m, string(r))
+	}
+	if len(m.visibleRepos()) != 0 {
+		t.Error("expected no matches")
+	}
+}
+
+// The bug: with two agents across four repos, only the agents were reachable,
+// so the arrow keys appeared to move between two things and stop.
+func TestEveryRepoIsReachable(t *testing.T) {
+	m := newSized(143)
+	seen := map[string]bool{}
+	for i := 0; i < len(m.targets); i++ {
+		seen[m.targets[i].repoKey] = true
+	}
+	for _, r := range m.snap.Repos {
+		if !seen[r.Key] {
+			t.Errorf("repo %s cannot be reached by the cursor", r.Key)
+		}
+	}
+}
+
+func TestAgentlessRepoIsSelectableButDoesNotJump(t *testing.T) {
+	m := newSized(143)
+	for i := range m.targets {
+		if m.targets[i].paneID == "" {
+			m.cursor = i
+			key(m, "enter")
+			if m.Jump() != "" {
+				t.Error("a repo card with no agents has nowhere to jump to")
+			}
+			return
+		}
+	}
+	t.Fatal("no agent-less repo target found")
+}
+
+func TestSortCycles(t *testing.T) {
+	m := newSized(143)
+	if m.sort != SortFirstSeen {
+		t.Fatal("first seen should be the default")
+	}
+	key(m, "s")
+	if m.sort == SortFirstSeen {
+		t.Error("s should change the sort")
+	}
+	// One press already happened, so this completes exactly one full cycle.
+	for i := 1; i < int(sortModeCount); i++ {
+		key(m, "s")
+	}
+	if m.sort != SortFirstSeen {
+		t.Errorf("sort should cycle back round, got %v", m.sort)
+	}
+}
+
+func TestAlphabeticalSort(t *testing.T) {
+	m := newSized(143)
+	m.sort = SortAlphabetical
+	repos := m.orderedRepos(m.visibleRepos())
+	for i := 1; i < len(repos); i++ {
+		if repos[i-1].Display > repos[i].Display {
+			t.Errorf("not alphabetical: %s before %s", repos[i-1].Display, repos[i].Display)
+		}
+	}
+}
+
+func TestManualReorderMovesARepo(t *testing.T) {
+	m := newSized(143)
+	before := m.currentOrder()
+	if len(before) < 2 {
+		t.Skip("need two repos")
+	}
+	// Select the second repo's first target, then move it up.
+	for i, tg := range m.targets {
+		if tg.repoKey == before[1] {
+			m.cursor = i
+			break
+		}
+	}
+	key(m, "K")
+	after := m.currentOrder()
+	if after[0] != before[1] {
+		t.Errorf("expected %s to move to the front, order is %v", before[1], after)
+	}
+}
+
+func TestMouseClickSelectsThenJumps(t *testing.T) {
+	m := newSized(143)
+	m.View() // populate row positions
+	// Pick a row that is not already selected, so the first click has to move
+	// the cursor rather than counting as a click on the selection.
+	var row, want int
+	found := false
+	for y, idx := range m.rowOf {
+		if m.targets[idx].paneID != "" && idx != m.cursor {
+			row, want, found = y, idx, true
+			break
+		}
+	}
+	if !found {
+		t.Skip("no clickable unselected agent row")
+	}
+	click := tea.MouseMsg{Y: row, Action: tea.MouseActionRelease, Button: tea.MouseButtonLeft}
+	m.Update(click)
+	if m.cursor != want {
+		t.Fatalf("click selected %d, want %d", m.cursor, want)
+	}
+	if m.Jump() != "" {
+		t.Fatal("the first click should select, not jump")
+	}
+	m.Update(click)
+	if m.Jump() != m.targets[want].paneID {
+		t.Errorf("clicking the selection should jump, got %q", m.Jump())
+	}
+}
+
+func TestMouseWheelMovesSelection(t *testing.T) {
+	m := newSized(143)
+	start := m.cursor
+	m.Update(tea.MouseMsg{Button: tea.MouseButtonWheelDown})
+	if m.cursor == start {
+		t.Error("wheel down should move the selection")
 	}
 }

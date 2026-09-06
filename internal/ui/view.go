@@ -16,22 +16,17 @@ func (m *Model) View() string {
 		// program exits, so a final frame would only flash.
 		return ""
 	}
+	m.resetRows()
 
-	var b strings.Builder
-	b.WriteString(m.header())
-	b.WriteString("\n")
-
-	if ribbon := m.viewRibbon(); ribbon != "" {
-		b.WriteString(ribbon)
-		b.WriteString("\n")
-	}
-	b.WriteString(m.viewRepos())
+	var lines []string
+	lines = append(lines, strings.TrimRight(m.header(), "\n"), "")
+	lines = append(lines, m.ribbonLines(len(lines))...)
+	lines = append(lines, m.repoLines(len(lines))...)
 
 	if m.filtering || m.filter != "" {
-		b.WriteString("\n")
-		b.WriteString(m.viewFilterBar())
+		lines = append(lines, "", m.viewFilterBar())
 	}
-	return b.String()
+	return strings.Join(lines, "\n")
 }
 
 func (m *Model) header() string {
@@ -43,7 +38,7 @@ func (m *Model) header() string {
 			fmt.Sprintf("%d need you", c.NeedsYou))
 	}
 
-	right := styHint.Render("prefix+m closes")
+	right := styHint.Render("/ search · s sort:" + m.sort.String() + " · prefix+m closes")
 	if m.warning != "" {
 		right = styWarn.Render("! " + m.warning)
 	}
@@ -55,14 +50,15 @@ func (m *Model) header() string {
 	return left + strings.Repeat(" ", gap) + right + "\n"
 }
 
-func (m *Model) viewRibbon() string {
+// ribbonLines renders the ranked ribbon, recording which screen line each row
+// lands on so a click can find it. startY is the line this block begins at.
+func (m *Model) ribbonLines(startY int) []string {
 	rows := m.ribbonRows()
 	if len(rows) == 0 || m.filter != "" {
-		return ""
+		return nil
 	}
 
-	var b strings.Builder
-	b.WriteString(m.sectionRule("needs you"))
+	out := []string{m.sectionRule("needs you")}
 	for i, a := range rows {
 		selected := m.cursor < len(m.targets) &&
 			m.targets[m.cursor].ribbon && m.targets[m.cursor].paneID == a.PaneID
@@ -75,17 +71,17 @@ func (m *Model) viewRibbon() string {
 		status := st.Bold(true).Render(strings.ToUpper(string(a.Status)))
 		age := styMeta.Render(ageText(a.Age, a.AgeKnown))
 
-		var lines []string
+		var rowLines []string
 		if m.width < twoColumnMin {
-			// Narrow. The detail is the most valuable thing in the row, and it
-			// is the first casualty of fixed columns, so it gets its own line.
+			// Narrow. The detail is the most valuable thing in the row and the
+			// first casualty of fixed columns, so it gets its own line.
 			head := fmt.Sprintf(" %s %s %s %s %s",
 				idx, icon,
 				repoStyle(repo).Render(truncate(repo.Sigil+" "+repo.Display, 14)),
 				styFG.Render(truncate(a.Agent, 14)), status)
-			lines = append(lines, fitLine(head, m.width))
+			rowLines = append(rowLines, fitLine(head, m.width))
 			if a.Detail != "" {
-				lines = append(lines, fitLine(
+				rowLines = append(rowLines, fitLine(
 					"    "+styDim.Render(truncate(a.Detail, m.width-5)), m.width))
 			}
 		} else {
@@ -94,98 +90,120 @@ func (m *Model) viewRibbon() string {
 			head := fmt.Sprintf(" %s %s  %s %s  %s %s  ",
 				idx, pad(sigil, 14), icon, pad(name, 16), pad(status, 8), pad(age, 4))
 			head += styDim.Render(truncate(a.Detail, max(10, m.width-lipgloss.Width(head)-1)))
-			lines = append(lines, fitLine(head, m.width))
+			rowLines = append(rowLines, fitLine(head, m.width))
 		}
 
-		for _, line := range lines {
+		if ti := m.targetIndex("pane:" + a.PaneID); ti >= 0 {
+			for k := range rowLines {
+				m.noteRow(startY+len(out)+k, ti)
+			}
+		}
+		for _, line := range rowLines {
 			switch {
 			case selected:
 				line = stySel.Render(line)
 			case a.Rank <= 2:
 				// The top two ranks keep a warm background even unselected, so
-				// the thing that most needs you is visible before you read it.
+				// the thing that most needs you reads before you do.
 				line = styHot.Render(line)
 			}
-			b.WriteString(line + "\n")
+			out = append(out, line)
 		}
 	}
-	return b.String()
+	return append(out, "")
 }
 
-func (m *Model) viewRepos() string {
-	repos := sortedRepos(m.visibleRepos())
+func (m *Model) repoLines(startY int) []string {
+	repos := m.orderedRepos(m.visibleRepos())
 	if len(repos) == 0 {
 		if m.filter != "" {
-			return m.sectionRule("no matches") + styDim.Render("  nothing matches "+m.filter) + "\n"
+			return []string{m.sectionRule("no matches"),
+				styDim.Render("  nothing matches " + m.filter)}
 		}
-		return m.sectionRule("repos") + styDim.Render("  no repos discovered yet") + "\n"
+		return []string{m.sectionRule("repos"), styDim.Render("  no repos discovered yet")}
 	}
 
 	label := "repos"
 	if m.filter != "" {
 		label = "matches"
 	}
+	out := []string{m.sectionRule(label)}
 
 	cols := columnsFor(m.width)
 	if m.filter != "" {
 		cols = 1
 	}
-	if cols == 1 {
-		return m.sectionRule(label) + m.viewList(repos)
-	}
-	return m.sectionRule(label) + m.viewGrid(repos, cols)
-}
-
-// viewGrid lays repos out in fixed cells. A repo keeps its slot whether it has
-// five agents or none, so you point instead of read.
-func (m *Model) viewGrid(repos []model.Repo, cols int) string {
-	cellWidth := (m.width - (cols - 1)) / cols
-	if cellWidth < 20 {
-		return m.viewList(repos)
+	cellWidth := m.width
+	if cols > 1 {
+		cellWidth = (m.width - (cols - 1)) / cols
+		if cellWidth < 20 {
+			cols, cellWidth = 1, m.width
+		}
 	}
 
-	var rows []string
 	for i := 0; i < len(repos); i += cols {
-		var cells []string
-		for c := 0; c < cols; c++ {
-			if i+c < len(repos) {
-				cells = append(cells, m.renderCard(repos[i+c], cellWidth))
-			} else {
-				cells = append(cells, lipgloss.NewStyle().Width(cellWidth).Render(""))
+		var cells [][]string
+		height := 0
+		for c := 0; c < cols && i+c < len(repos); c++ {
+			lines := m.cardLines(repos[i+c], cellWidth, startY+len(out), c == 0 || cols == 1)
+			cells = append(cells, lines)
+			if len(lines) > height {
+				height = len(lines)
 			}
 		}
-		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, cells...))
+		// Pad every cell to the tallest, so columns stay aligned.
+		for c := range cells {
+			for len(cells[c]) < height {
+				cells[c] = append(cells[c], strings.Repeat(" ", cellWidth))
+			}
+		}
+		for row := 0; row < height; row++ {
+			var parts []string
+			for c := 0; c < cols; c++ {
+				if c < len(cells) {
+					parts = append(parts, cells[c][row])
+				} else {
+					parts = append(parts, strings.Repeat(" ", cellWidth))
+				}
+			}
+			out = append(out, fitLine(strings.Join(parts, " "), m.width))
+		}
 	}
-	return strings.Join(rows, "\n") + "\n"
+	return out
 }
 
-// viewList is the narrow layout. Below about seventy columns a grid is a worse
-// version of a list, so it becomes one dense column.
-func (m *Model) viewList(repos []model.Repo) string {
-	var b strings.Builder
-	for _, r := range repos {
-		b.WriteString(m.renderCard(r, m.width))
-	}
-	return b.String()
-}
-
-func (m *Model) renderCard(r model.Repo, width int) string {
+// cardLines renders one repo card. Row positions are only recorded for the
+// first column, because a click resolves by line and multi-column rows would
+// otherwise overwrite each other. Keyboard reaches every column regardless.
+func (m *Model) cardLines(r model.Repo, width, startY int, trackRows bool) []string {
 	style := repoStyle(r)
-	var b strings.Builder
+	var out []string
 
-	// Header: sigil, name, branch. The branch slot is the one that becomes a
-	// worktree label when worktrees start mattering.
 	head := style.Bold(true).Render(r.Sigil + " " + strings.ToUpper(r.Display))
 	if r.Branch != "" {
 		head += " " + styFaint.Render(truncate(r.Branch, max(6, width-lipgloss.Width(head)-3)))
 	}
-	b.WriteString(fitLine(" "+head, width) + "\n")
+	headLine := fitLine(" "+head, width)
+	if m.selectedRepo() == r.Key && m.selectedPane() == "" {
+		headLine = stySel.Render(fitLine(" "+head, width))
+	}
+	if trackRows {
+		if ti := m.targetIndex("repo:" + r.Key); ti >= 0 {
+			m.noteRow(startY+len(out), ti)
+		}
+	}
+	out = append(out, headLine)
 
 	if len(r.Agents) == 0 {
-		b.WriteString(fitLine(styFaint.Render("   no agents"), width) + "\n")
+		out = append(out, fitLine(styFaint.Render("   no agents"), width))
 	}
 	for _, a := range r.Agents {
-		b.WriteString(m.renderAgent(a, width))
+		if trackRows {
+			if ti := m.targetIndex("pane:" + a.PaneID); ti >= 0 {
+				m.noteRow(startY+len(out), ti)
+			}
+		}
+		out = append(out, m.agentLines(a, width)...)
 	}
 
 	if len(r.OtherPanes) > 0 {
@@ -195,13 +213,12 @@ func (m *Model) renderCard(r model.Repo, width int) string {
 		}
 		foot := fmt.Sprintf("   %s · %s", plural(len(r.OtherPanes), "pane"),
 			truncate(strings.Join(labels, " · "), max(6, width-18)))
-		b.WriteString(fitLine(styFaint.Render(foot), width) + "\n")
+		out = append(out, fitLine(styFaint.Render(foot), width))
 	}
-	b.WriteString(strings.Repeat(" ", width) + "\n")
-	return b.String()
+	return append(out, strings.Repeat(" ", width))
 }
 
-func (m *Model) renderAgent(a model.Agent, width int) string {
+func (m *Model) agentLines(a model.Agent, width int) []string {
 	selected := m.selectedPane() == a.PaneID
 	st := statusStyle(a.Status)
 
@@ -216,9 +233,9 @@ func (m *Model) renderAgent(a model.Agent, width int) string {
 
 	first := fitLine(line, width)
 	if selected {
-		first = stySel.Render(padLine(line, width))
+		first = stySel.Render(fitLine(line, width))
 	}
-	out := first + "\n"
+	out := []string{first}
 
 	// Task line, dimmed and marked when it came from a lower rung of the
 	// ladder. Showing doubt beats showing false confidence.
@@ -227,18 +244,30 @@ func (m *Model) renderAgent(a model.Agent, width int) string {
 		if a.TaskSource == model.TaskFromOrchestratorStale {
 			style = styFaint
 		}
-		out += fitLine(style.Render("     "+truncate(task, max(6, width-6))), width) + "\n"
+		out = append(out, fitLine(style.Render("     "+truncate(task, max(6, width-6))), width))
 	}
 	return out
 }
 
 func (m *Model) viewFilterBar() string {
-	shown := 0
-	for _, r := range m.visibleRepos() {
-		shown += len(r.Agents)
+	repos := m.visibleRepos()
+	agents := 0
+	for _, r := range repos {
+		agents += len(r.Agents)
 	}
-	bar := " " + styMeta.Render("filter ") + styMatch.Render(m.filter) + "▏" +
-		styFaint.Render(fmt.Sprintf("  %d of %d · esc clears", shown, m.snap.Counts.Agents))
+	cursor := ""
+	if m.filtering {
+		cursor = "▏"
+	}
+	hint := "  esc clears"
+	if m.filtering {
+		hint = "  esc keeps results · enter jumps"
+	}
+	// Count repos as well as agents. A search that matches a repo with nothing
+	// running in it is a hit, and reporting "0 of 2" for it reads as a miss.
+	bar := " " + styMeta.Render("search ") + styMatch.Render(m.filter) + cursor +
+		styFaint.Render(fmt.Sprintf("  %s · %s%s",
+			plural(len(repos), "repo"), plural(agents, "agent"), hint))
 	return padLine(bar, m.width)
 }
 
