@@ -14,6 +14,7 @@ import (
 	"github.com/ofelcan/muster/internal/chain"
 	"github.com/ofelcan/muster/internal/daemon"
 	"github.com/ofelcan/muster/internal/state"
+	"github.com/ofelcan/muster/internal/ui"
 )
 
 func main() {
@@ -51,12 +52,31 @@ func main() {
 		os.Exit(cmdChain(args[1:]))
 
 	case "open":
-		// Keep the daemon alive on the hot path even though there is nothing to
-		// draw yet: a missing daemon is the one failure the overlay must heal
-		// rather than surface.
-		ensure()
-		fmt.Fprintln(os.Stderr, "muster: the overlay is not built yet; use `musterd dump`")
-		os.Exit(2)
+		// The action a keybinding invokes. It cannot open a pane entrypoint
+		// itself, so it asks herdr to.
+		if err := ui.OpenPane(); err != nil {
+			fmt.Fprintf(os.Stderr, "muster open: %v\n", err)
+			os.Exit(1)
+		}
+
+	case "jump":
+		target := ""
+		if len(args) > 1 {
+			target = args[1]
+		}
+		if target == "" {
+			fmt.Fprintln(os.Stderr, "muster jump: needs a target")
+			os.Exit(2)
+		}
+		if err := ui.Jump(target); err != nil {
+			fmt.Fprintf(os.Stderr, "muster jump: %v\n", err)
+			os.Exit(1)
+		}
+
+	case "":
+		// No arguments means the [[panes]] entrypoint: this process is the
+		// overlay.
+		os.Exit(runOverlay())
 
 	default:
 		usage()
@@ -180,6 +200,26 @@ func cmdChain(args []string) int {
 		usage()
 		return 2
 	}
+}
+
+// runOverlay draws the screen, then focuses whatever was chosen.
+//
+// Focus happens after the program has torn down, because the overlay restoring
+// its own focus on exit would otherwise fight an outbound focus call.
+func runOverlay() int {
+	target, err := ui.Run()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "muster: %v\n", err)
+		return 1
+	}
+	if target == "" {
+		return 0
+	}
+	if err := ui.Jump(target); err != nil {
+		fmt.Fprintf(os.Stderr, "muster: jump: %v\n", err)
+		return 1
+	}
+	return 0
 }
 
 func ensure() {
