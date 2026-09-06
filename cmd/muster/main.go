@@ -50,6 +50,9 @@ func main() {
 		ensure()
 		os.Exit(cmdInstallKeys(args[1:]))
 
+	case "uninstall":
+		os.Exit(cmdUninstall(args[1:]))
+
 	case "uninstall-keys":
 		res, err := install.Remove()
 		if err != nil {
@@ -118,7 +121,8 @@ usage:
   muster chain get [--json]        print the recorded dependency order
   muster chain set <spec> [--independent a,b] [--by NAME]
   muster chain clear
-  muster install                   start the daemon and install reporting
+  muster install                   start the daemon and install keybindings
+  muster uninstall [--purge]       remove everything Muster wrote outside itself
   muster discover                  rescan after a workspace or worktree appears
 
 chain spec syntax:
@@ -300,6 +304,42 @@ func reloadConfig() {
 
 // herdrBin honours the path herdr injects, never a bare `herdr` off PATH.
 func herdrBin() string { return os.Getenv("HERDR_BIN_PATH") }
+
+// cmdUninstall undoes everything Muster wrote outside its own state directory.
+func cmdUninstall(args []string) int {
+	fs := flag.NewFlagSet("uninstall", flag.ExitOnError)
+	purge := fs.Bool("purge", false, "also delete Muster's learned state")
+	_ = fs.Parse(args)
+
+	res, err := install.Uninstall()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "muster uninstall: %v\n", err)
+		return 1
+	}
+	if res.Changed {
+		fmt.Printf("removed Muster's block from %s\n", res.Path)
+		fmt.Printf("backup: %s\n", res.Backup)
+	} else {
+		fmt.Println("nothing of Muster's was in the config")
+	}
+
+	if *purge {
+		dir := state.Dir()
+		if dir == "" {
+			fmt.Fprintln(os.Stderr, "no state directory to purge")
+		} else if err := os.RemoveAll(dir); err != nil {
+			fmt.Fprintf(os.Stderr, "purge state: %v\n", err)
+		} else {
+			fmt.Printf("removed state at %s\n", dir)
+		}
+	} else {
+		fmt.Printf("state left at %s (--purge removes it)\n", state.Dir())
+	}
+
+	reloadConfig()
+	fmt.Println("\nunlink the plugin with: herdr plugin unlink muster")
+	return 0
+}
 
 func ensure() {
 	if _, err := daemon.Ensure(); err != nil {

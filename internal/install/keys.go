@@ -124,6 +124,18 @@ func block() string {
 	return b.String()
 }
 
+// Uninstall removes everything Muster put in the config.
+//
+// The goal is that after unlinking the plugin there is nothing left that only
+// makes sense with Muster installed. herdr has no uninstall hook, so this
+// cannot run automatically; it exists so that `muster uninstall` genuinely
+// returns the config to how it was.
+//
+// Everything Muster writes goes inside one marked block for exactly this
+// reason: removal is then a single deletion rather than a hunt for scattered
+// keys that might or might not have been ours.
+func Uninstall() (*Result, error) { return Remove() }
+
 // Remove takes the managed block back out, for undoing an install.
 func Remove() (*Result, error) {
 	path := ConfigPath()

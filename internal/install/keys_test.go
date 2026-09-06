@@ -160,3 +160,51 @@ func TestWorksWithNoExistingConfig(t *testing.T) {
 		t.Error("bindings missing")
 	}
 }
+
+// After uninstalling there must be nothing left that only makes sense with
+// Muster installed. herdr has no uninstall hook, so this command is the only
+// thing that can make that true.
+func TestUninstallLeavesNothingMusterSpecific(t *testing.T) {
+	path := setup(t, userConfig)
+	if _, err := Keys(""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Uninstall(); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := strings.ToLower(string(body))
+	for _, trace := range []string{"muster", "plugin_action", "keys.command"} {
+		if strings.Contains(text, trace) {
+			t.Errorf("uninstall left %q behind:\n%s", trace, body)
+		}
+	}
+	if string(body) != userConfig {
+		t.Errorf("config did not return to its original content:\ngot:\n%s\nwant:\n%s", body, userConfig)
+	}
+}
+
+// Uninstalling twice is not an error and does not keep taking backups of an
+// already-clean file.
+func TestUninstallIsIdempotent(t *testing.T) {
+	setup(t, userConfig)
+	if _, err := Keys(""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Uninstall(); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Uninstall()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Changed {
+		t.Error("second uninstall reported a change")
+	}
+	if res.Backup != "" {
+		t.Error("second uninstall took an unnecessary backup")
+	}
+}
