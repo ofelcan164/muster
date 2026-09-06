@@ -52,10 +52,13 @@ type target struct {
 type Model struct {
 	snap *model.Snapshot
 
-	// rowOf maps a screen line to the target drawn on it, filled in by the view
-	// on every render. A terminal click gives coordinates and nothing else, so
-	// the only way to know what was clicked is to remember what was drawn.
-	rowOf map[int]int
+	// hits are the clickable regions the view drew, rebuilt on every render.
+	// A terminal click gives coordinates and nothing else, so the only way to
+	// know what was clicked is to remember where things were put.
+	hits []hitRegion
+
+	// hover is the target under the pointer, or -1.
+	hover int
 
 	width, height int
 	cursor        int
@@ -84,7 +87,7 @@ type Model struct {
 }
 
 func New(snap *model.Snapshot, warning string) *Model {
-	m := &Model{snap: snap, warning: warning, width: 80, height: 24}
+	m := &Model{snap: snap, warning: warning, width: 80, height: 24, hover: -1}
 	m.rebuild()
 	return m
 }
@@ -274,31 +277,58 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		m.move(1)
 		return m, nil
 	}
+	// Motion gives the hover highlight, so the card under the pointer lights up
+	// the same way the keyboard selection does.
+	if msg.Action == tea.MouseActionMotion {
+		if idx, ok := m.targetAt(msg.X, msg.Y); ok {
+			m.hover = idx
+		} else {
+			m.hover = -1
+		}
+		return m, nil
+	}
+
 	if msg.Action != tea.MouseActionRelease || msg.Button != tea.MouseButtonLeft {
 		return m, nil
 	}
-	idx, ok := m.rowOf[msg.Y]
+	idx, ok := m.targetAt(msg.X, msg.Y)
 	if !ok {
 		return m, nil
 	}
 	if idx == m.cursor {
-		// Clicking what is already selected is the jump, so a double click
-		// works and a single click on something else only moves the selection.
+		// Clicking what is already selected is the jump, so a second click
+		// commits and a first click on something else only moves the selection.
 		return m.activate()
 	}
 	m.cursor = idx
 	return m, nil
 }
 
-// noteRow records that a target was drawn on a screen line.
-func (m *Model) noteRow(y, targetIndex int) {
-	if m.rowOf == nil {
-		m.rowOf = map[int]int{}
-	}
-	m.rowOf[y] = targetIndex
+// hitRegion is a rectangle of the screen belonging to one target. Cards claim
+// their whole area rather than a single line, so clicking anywhere on a card
+// selects it, including its task line and its footer.
+type hitRegion struct {
+	y      int
+	x0, x1 int // inclusive
+	target int
 }
 
-func (m *Model) resetRows() { m.rowOf = map[int]int{} }
+// noteRegion records that a target occupies part of a screen line.
+func (m *Model) noteRegion(y, x0, x1, targetIndex int) {
+	m.hits = append(m.hits, hitRegion{y: y, x0: x0, x1: x1, target: targetIndex})
+}
+
+func (m *Model) resetRows() { m.hits = m.hits[:0] }
+
+// targetAt finds the target under a screen position.
+func (m *Model) targetAt(x, y int) (int, bool) {
+	for _, h := range m.hits {
+		if h.y == y && x >= h.x0 && x <= h.x1 {
+			return h.target, true
+		}
+	}
+	return -1, false
+}
 
 // targetIndex finds the cursor position for a drawn item.
 func (m *Model) targetIndex(key string) int {
@@ -520,3 +550,29 @@ func (m *Model) ReachableRepos() int {
 	}
 	return len(seen)
 }
+
+// Hit is a clickable region, exposed for tests.
+type Hit struct {
+	Y, X0, X1, Target int
+}
+
+// Hits reports the regions the last render made clickable.
+func (m *Model) Hits() []Hit {
+	out := make([]Hit, 0, len(m.hits))
+	for _, h := range m.hits {
+		out = append(out, Hit{Y: h.y, X0: h.x0, X1: h.x1, Target: h.target})
+	}
+	return out
+}
+
+// TargetPane is the agent a target jumps to, or "" for a bare repo card.
+func (m *Model) TargetPane(i int) string {
+	if i < 0 || i >= len(m.targets) {
+		return ""
+	}
+	return m.targets[i].paneID
+}
+
+// Cursor and Hover are exposed for tests.
+func (m *Model) Cursor() int { return m.cursor }
+func (m *Model) Hover() int  { return m.hover }

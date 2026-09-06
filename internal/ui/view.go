@@ -95,7 +95,7 @@ func (m *Model) ribbonLines(startY int) []string {
 
 		if ti := m.targetIndex("pane:" + a.PaneID); ti >= 0 {
 			for k := range rowLines {
-				m.noteRow(startY+len(out)+k, ti)
+				m.noteRegion(startY+len(out)+k, 0, m.width-1, ti)
 			}
 		}
 		for _, line := range rowLines {
@@ -145,7 +145,11 @@ func (m *Model) repoLines(startY int) []string {
 		var cells [][]string
 		height := 0
 		for c := 0; c < cols && i+c < len(repos); c++ {
-			lines := m.cardLines(repos[i+c], cellWidth, startY+len(out), c == 0 || cols == 1)
+			// Each column starts after the cells before it, plus one space of
+			// separator per gap. Passing the offset is what makes every column
+			// clickable rather than only the first.
+			x0 := c * (cellWidth + 1)
+			lines := m.cardLines(repos[i+c], cellWidth, startY+len(out), x0)
 			cells = append(cells, lines)
 			if len(lines) > height {
 				height = len(lines)
@@ -175,7 +179,7 @@ func (m *Model) repoLines(startY int) []string {
 // cardLines renders one repo card. Row positions are only recorded for the
 // first column, because a click resolves by line and multi-column rows would
 // otherwise overwrite each other. Keyboard reaches every column regardless.
-func (m *Model) cardLines(r model.Repo, width, startY int, trackRows bool) []string {
+func (m *Model) cardLines(r model.Repo, width, startY, x0 int) []string {
 	style := repoStyle(r)
 	var out []string
 
@@ -183,27 +187,31 @@ func (m *Model) cardLines(r model.Repo, width, startY int, trackRows bool) []str
 	if r.Branch != "" {
 		head += " " + styFaint.Render(truncate(r.Branch, max(6, width-lipgloss.Width(head)-3)))
 	}
+	// The card header belongs to the repo target when the repo has no agents,
+	// and otherwise to its first agent, so clicking the title does something
+	// sensible either way.
+	headTarget := m.targetIndex("repo:" + r.Key)
+	if len(r.Agents) > 0 {
+		headTarget = m.targetIndex("pane:" + r.Agents[0].PaneID)
+	}
 	headLine := fitLine(" "+head, width)
-	if m.selectedRepo() == r.Key && m.selectedPane() == "" {
+	if m.isActive(headTarget) {
 		headLine = stySel.Render(fitLine(" "+head, width))
 	}
-	if trackRows {
-		if ti := m.targetIndex("repo:" + r.Key); ti >= 0 {
-			m.noteRow(startY+len(out), ti)
-		}
-	}
+	m.claim(startY+len(out), x0, width, headTarget)
 	out = append(out, headLine)
 
 	if len(r.Agents) == 0 {
+		m.claim(startY+len(out), x0, width, headTarget)
 		out = append(out, fitLine(styFaint.Render("   no agents"), width))
 	}
 	for _, a := range r.Agents {
-		if trackRows {
-			if ti := m.targetIndex("pane:" + a.PaneID); ti >= 0 {
-				m.noteRow(startY+len(out), ti)
-			}
+		ti := m.targetIndex("pane:" + a.PaneID)
+		lines := m.agentLines(a, width, ti)
+		for k := range lines {
+			m.claim(startY+len(out)+k, x0, width, ti)
 		}
-		out = append(out, m.agentLines(a, width)...)
+		out = append(out, lines...)
 	}
 
 	if len(r.OtherPanes) > 0 {
@@ -213,13 +221,31 @@ func (m *Model) cardLines(r model.Repo, width, startY int, trackRows bool) []str
 		}
 		foot := fmt.Sprintf("   %s · %s", plural(len(r.OtherPanes), "pane"),
 			truncate(strings.Join(labels, " · "), max(6, width-18)))
+		m.claim(startY+len(out), x0, width, headTarget)
 		out = append(out, fitLine(styFaint.Render(foot), width))
 	}
+	m.claim(startY+len(out), x0, width, headTarget)
 	return append(out, strings.Repeat(" ", width))
 }
 
-func (m *Model) agentLines(a model.Agent, width int) []string {
-	selected := m.selectedPane() == a.PaneID
+// claim marks a whole cell-width line as belonging to a target.
+func (m *Model) claim(y, x0, width, target int) {
+	if target >= 0 {
+		m.noteRegion(y, x0, x0+width-1, target)
+	}
+}
+
+// isActive reports whether a target is selected or hovered, which render the
+// same way: the pointer should light up exactly what a click would take.
+func (m *Model) isActive(target int) bool {
+	if target < 0 {
+		return false
+	}
+	return target == m.cursor || target == m.hover
+}
+
+func (m *Model) agentLines(a model.Agent, width, target int) []string {
+	selected := m.isActive(target)
 	st := statusStyle(a.Status)
 
 	marker := " "

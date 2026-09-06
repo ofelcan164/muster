@@ -423,18 +423,18 @@ func TestMouseClickSelectsThenJumps(t *testing.T) {
 	m.View() // populate row positions
 	// Pick a row that is not already selected, so the first click has to move
 	// the cursor rather than counting as a click on the selection.
-	var row, want int
+	var row, col, want int
 	found := false
-	for y, idx := range m.rowOf {
-		if m.targets[idx].paneID != "" && idx != m.cursor {
-			row, want, found = y, idx, true
+	for _, h := range m.Hits() {
+		if m.TargetPane(h.Target) != "" && h.Target != m.cursor {
+			row, col, want, found = h.Y, h.X0, h.Target, true
 			break
 		}
 	}
 	if !found {
 		t.Skip("no clickable unselected agent row")
 	}
-	click := tea.MouseMsg{Y: row, Action: tea.MouseActionRelease, Button: tea.MouseButtonLeft}
+	click := tea.MouseMsg{X: col, Y: row, Action: tea.MouseActionRelease, Button: tea.MouseButtonLeft}
 	m.Update(click)
 	if m.cursor != want {
 		t.Fatalf("click selected %d, want %d", m.cursor, want)
@@ -443,7 +443,7 @@ func TestMouseClickSelectsThenJumps(t *testing.T) {
 		t.Fatal("the first click should select, not jump")
 	}
 	m.Update(click)
-	if m.Jump() != m.targets[want].paneID {
+	if m.Jump() != m.TargetPane(want) {
 		t.Errorf("clicking the selection should jump, got %q", m.Jump())
 	}
 }
@@ -454,5 +454,64 @@ func TestMouseWheelMovesSelection(t *testing.T) {
 	m.Update(tea.MouseMsg{Button: tea.MouseButtonWheelDown})
 	if m.cursor == start {
 		t.Error("wheel down should move the selection")
+	}
+}
+
+// The whole card should be clickable, not just its first line. Clicking a
+// task line or a footer is still clicking that card.
+func TestWholeCardIsClickable(t *testing.T) {
+	m := newSized(143)
+	m.View()
+
+	byTarget := map[int]int{}
+	for _, h := range m.Hits() {
+		byTarget[h.Target]++
+	}
+	if len(byTarget) == 0 {
+		t.Fatal("nothing was made clickable")
+	}
+	for target, lines := range byTarget {
+		if lines < 2 {
+			t.Errorf("target %d claims only %d line, expected its whole card", target, lines)
+		}
+	}
+}
+
+// Every column has to be clickable, not only the first.
+func TestAllGridColumnsAreClickable(t *testing.T) {
+	m := newSized(143)
+	m.View()
+
+	cols := map[int]bool{}
+	for _, h := range m.Hits() {
+		cols[h.X0] = true
+	}
+	if len(cols) < 2 {
+		t.Errorf("hits landed in %d column offsets, expected several: %v", len(cols), cols)
+	}
+}
+
+func TestHoverHighlightsWhatAClickWouldTake(t *testing.T) {
+	m := newSized(143)
+	m.View()
+	hits := m.Hits()
+	if len(hits) == 0 {
+		t.Skip("nothing clickable")
+	}
+	var h Hit
+	for _, c := range hits {
+		if c.Target != m.Cursor() {
+			h = c
+			break
+		}
+	}
+	m.Update(tea.MouseMsg{X: h.X0, Y: h.Y, Action: tea.MouseActionMotion})
+	if m.Hover() != h.Target {
+		t.Errorf("hover = %d, want %d", m.Hover(), h.Target)
+	}
+	// Moving off everything clears it.
+	m.Update(tea.MouseMsg{X: 0, Y: 9999, Action: tea.MouseActionMotion})
+	if m.Hover() != -1 {
+		t.Errorf("hover should clear off-target, got %d", m.Hover())
 	}
 }
