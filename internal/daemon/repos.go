@@ -1,0 +1,268 @@
+package daemon
+
+import (
+	"github.com/ofelcan/muster/internal/herdr"
+	"github.com/ofelcan/muster/internal/identity"
+	"github.com/ofelcan/muster/internal/model"
+	"sort"
+	"strings"
+)
+
+// buildRepos groups agents and non-agent panes under the repo their workspace
+// sits in. Every repo here was learned at runtime from a workspace cwd.
+func (d *Daemon) buildRepos(snap *herdr.Snapshot, agents map[string]model.Agent, orch model.Orchestrator) []model.Repo {
+	wsByID := make(map[string]herdr.Workspace, len(snap.Workspaces))
+	for _, w := range snap.Workspaces {
+		wsByID[w.WorkspaceID] = w
+	}
+
+	// A workspace has no cwd of its own, so take it from its panes. The most
+	// common pane cwd is a better answer than the first one, which might be a
+	// shell someone has cd'd out of.
+	wsCwd := map[string]string{}
+	for wsID := range wsByID {
+		wsCwd[wsID] = dominantCwd(snap.Panes, wsID)
+	}
+
+	// Iterate workspaces in a stable order. Grid slots are handed out on first
+	// sight and then pinned forever, so allocating them from Go's randomised
+	// map iteration would give a different layout on every fresh install: the
+	// exact opposite of the fixed positions the grid exists to provide.
+	ordered := make([]herdr.Workspace, 0, len(snap.Workspaces))
+	ordered = append(ordered, snap.Workspaces...)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		if ordered[i].Number != ordered[j].Number {
+			return ordered[i].Number < ordered[j].Number
+		}
+		return ordered[i].WorkspaceID < ordered[j].WorkspaceID
+	})
+
+	byKey := map[string]*model.Repo{}
+	for _, ws := range ordered {
+		wsID := ws.WorkspaceID
+		cwd := wsCwd[wsID]
+		if cwd == "" {
+			continue
+		}
+		var hint *herdr.WorkspaceWorktree
+		if ws.Worktree != nil {
+			hint = ws.Worktree
+		}
+		info := d.resolver.Resolve(cwd, hint)
+
+		r, ok := byKey[info.Key]
+		if !ok {
+			colorIdx, border := identity.Look(info.Key)
+			slot := d.persist.AssignSlot(info.Key)
+			r = &model.Repo{
+				Key:          info.Key,
+				Name:         info.Name,
+				Root:         info.Root,
+				Branch:       info.Branch,
+				WorktreePath: info.WorktreePath,
+				IsWorktree:   info.IsWorktree,
+				IsGit:        info.IsGit,
+				ColorIndex:   colorIdx,
+				Sigil:        identity.Sigil(slot),
+				Border:       border,
+				GridSlot:     slot,
+			}
+			if !info.IsGit {
+				r.ColorIndex = -1
+				r.Sigil = identity.NeutralSigil
+			}
+			byKey[info.Key] = r
+		}
+		r.WorkspaceIDs = append(r.WorkspaceIDs, wsID)
+	}
+
+	repoForWorkspace := map[string]*model.Repo{}
+	for _, r := range byKey {
+		for _, wsID := range r.WorkspaceIDs {
+			repoForWorkspace[wsID] = r
+		}
+	}
+
+	procs := d.foregroundProcesses(snap, agents)
+
+	live := make(map[string]bool, len(snap.Panes))
+	for _, p := range snap.Panes {
+		live[p.PaneID] = true
+	}
+	d.detectStoppedProcesses(procs, live)
+
+	for _, p := range snap.Panes {
+		r := repoForWorkspace[p.WorkspaceID]
+		if r == nil {
+			continue
+		}
+		if a, isAgent := agents[p.PaneID]; isAgent {
+			a.IsOrchestrator = orch.Found && orch.PaneID == p.PaneID
+			r.Agents = append(r.Agents, a)
+			continue
+		}
+		// Non-agent panes are ignored for triage and shown as a footer, so you
+		// know what is running without opening the workspace. The label is the
+		// real foreground process where the daemon has one: a dead dev server
+		// shows as "shell", which is the information you actually wanted.
+		r.OtherPanes = append(r.OtherPanes, model.Pane{
+			PaneID:  p.PaneID,
+			Label:   paneLabel(p, procs[p.PaneID]),
+			Command: procs[p.PaneID],
+		})
+	}
+
+	out := make([]model.Repo, 0, len(byKey))
+	for _, r := range byKey {
+		// A workspace with no repository earns a card only while something is
+		// running in it. Otherwise every stray shell tab would take a fixed
+		// grid cell, and the grid is worth having precisely because the cells
+		// mean something.
+		if !r.IsGit && len(r.Agents) == 0 {
+			delete(d.persist.GridSlots, r.Key)
+			continue
+		}
+		sort.SliceStable(r.Agents, func(i, j int) bool { return r.Agents[i].PaneID < r.Agents[j].PaneID })
+		sort.SliceStable(r.OtherPanes, func(i, j int) bool { return r.OtherPanes[i].PaneID < r.OtherPanes[j].PaneID })
+		sort.Strings(r.WorkspaceIDs)
+		// Emit empty arrays rather than nil, which Go would marshal as null.
+		// The snapshot is a contract with the overlay, and a client should
+		// never have to special-case null where it expects a list.
+		if r.Agents == nil {
+			r.Agents = []model.Agent{}
+		}
+		if r.OtherPanes == nil {
+			r.OtherPanes = []model.Pane{}
+		}
+		if r.WorkspaceIDs == nil {
+			r.WorkspaceIDs = []string{}
+		}
+		out = append(out, *r)
+	}
+	assignDisplayNames(out)
+
+	// Stopped panes are resolved against the finished repo set, so a stop in a
+	// workspace that no longer maps to a repo is simply dropped.
+	repoByPane := map[string]*model.Repo{}
+	for i := range out {
+		for _, p := range out[i].OtherPanes {
+			repoByPane[p.PaneID] = &out[i]
+		}
+	}
+	d.stopped = d.stoppedRows(snap, repoByPane)
+
+	// Grid slot order, so a repo is in the same cell every time you look.
+	sort.SliceStable(out, func(i, j int) bool { return out[i].GridSlot < out[j].GridSlot })
+	return out
+}
+
+// assignDisplayNames shortens "owner/name" to "name", keeping the owner only
+// where two repos would otherwise show the same label.
+//
+// The identity key stays the full owner/name, so colour, sigil and grid slot
+// never move. This only changes what is drawn, and it matters because on a
+// three-wide grid the owner eats width the branch and task line need more.
+func assignDisplayNames(repos []model.Repo) {
+	counts := map[string]int{}
+	for _, r := range repos {
+		counts[shortName(r.Name)]++
+	}
+	for i := range repos {
+		if short := shortName(repos[i].Name); counts[short] == 1 {
+			repos[i].Display = short
+		} else {
+			repos[i].Display = repos[i].Name
+		}
+	}
+}
+
+func shortName(name string) string {
+	if _, after, ok := strings.Cut(name, "/"); ok && after != "" {
+		return after
+	}
+	return name
+}
+
+// paneLabel produces something short enough for a one-line footer. A raw
+// terminal title is usually "user@host:/long/path", which tells you nothing you
+// did not already know and crowds out the panes that matter.
+//
+// An explicit pane label wins, then the foreground process, then the title.
+func paneLabel(p herdr.Pane, proc string) string {
+	if s := strings.TrimSpace(p.Label); s != "" {
+		return s
+	}
+	if proc != "" {
+		return proc
+	}
+	for _, s := range []string{p.Title} {
+		if s = strings.TrimSpace(s); s != "" {
+			return s
+		}
+	}
+	t := strings.TrimSpace(p.TerminalTitleStripped)
+	if t == "" {
+		return p.PaneID
+	}
+	// Strip a "user@host:path" prompt title down to the command or the leaf
+	// directory.
+	if _, after, ok := strings.Cut(t, ":"); ok && strings.Contains(t, "@") {
+		t = strings.TrimSpace(after)
+		if t == "" || strings.HasPrefix(t, "~") || strings.HasPrefix(t, "/") {
+			return "shell"
+		}
+	}
+	if i := strings.IndexAny(t, " \t"); i > 0 {
+		t = t[:i]
+	}
+	return t
+}
+
+// dominantCwd returns the most common cwd among a workspace's panes.
+func dominantCwd(panes []herdr.Pane, wsID string) string {
+	counts := map[string]int{}
+	for _, p := range panes {
+		if p.WorkspaceID != wsID {
+			continue
+		}
+		cwd := p.Cwd
+		if cwd == "" {
+			cwd = p.ForegroundCwd
+		}
+		if cwd != "" {
+			counts[cwd]++
+		}
+	}
+	best, bestN := "", 0
+	for cwd, n := range counts {
+		// Ties break on the lexicographically smaller path purely so the result
+		// is deterministic across reconciles.
+		if n > bestN || (n == bestN && cwd < best) {
+			best, bestN = cwd, n
+		}
+	}
+	return best
+}
+
+// foregroundProcesses reads the running process for each non-agent pane.
+//
+// pane.process_info costs about 0.8ms, so this is cheap enough to do on every
+// reconcile, unlike pane.read at 350ms. Agent panes are skipped because their
+// foreground process is always the agent binary, which the model already knows.
+func (d *Daemon) foregroundProcesses(snap *herdr.Snapshot, agents map[string]model.Agent) map[string]string {
+	out := make(map[string]string, len(snap.Panes))
+	if d.client == nil {
+		return out
+	}
+	for _, p := range snap.Panes {
+		if _, isAgent := agents[p.PaneID]; isAgent {
+			continue
+		}
+		name, err := d.client.PaneForegroundProcess(p.PaneID)
+		if err != nil || name == "" {
+			continue
+		}
+		out[p.PaneID] = name
+	}
+	return out
+}
