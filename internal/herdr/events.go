@@ -1,0 +1,169 @@
+package herdr
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"net"
+	"strings"
+	"time"
+)
+
+// Verified against a live 0.8.2 server on 2026-09-06. The mechanics below are
+// not in the docs and three of them shape the daemon's design:
+//
+//  1. events.subscribe holds the connection open and replies
+//     {"result":{"type":"subscription_started"}}. Live events then arrive on the
+//     same connection in ~25ms.
+//  2. Subscription type names are dotted ("pane.updated"); delivered event names
+//     are underscored ("pane_updated"). The one exception is
+//     pane.agent_status_changed, which is delivered dotted. Normalise both.
+//  3. Every subscribe replays the session's whole retained event history before
+//     live events, paced at exactly one event per 100ms. The replay includes
+//     events for panes and workspaces that have since been closed, and is not
+//     causally ordered. Two subscribes a second apart produced byte-identical
+//     replays. Events are therefore usable only as a "something changed" hint,
+//     never as a state log.
+//  4. A second events.subscribe on an already-subscribed connection makes the
+//     server reset it. Subscriptions are single-shot and read-only, so the set
+//     of subscriptions is fixed for the life of a connection and RPCs must use
+//     their own connection.
+//  5. One invalid entry rejects the whole batch with invalid_request and an
+//     empty id. pane.agent_status_changed, pane.output_matched and
+//     pane.scroll_changed all require a pane_id and so cannot be subscribed
+//     globally.
+//
+// Because of (4) and (5), Muster subscribes only to globally-scoped types.
+// pane.updated carries the full pane record including agent, agent_status, cwd
+// and terminal_title_stripped, which covers every per-pane signal Muster would
+// otherwise need a per-pane subscription for.
+var GlobalSubscriptions = []string{
+	"pane.created",
+	"pane.closed",
+	"pane.updated",
+	"pane.exited",
+	"pane.agent_detected",
+	"workspace.created",
+	"workspace.closed",
+	"workspace.renamed",
+	"workspace.updated",
+	"workspace.metadata_updated",
+	"tab.created",
+	"tab.closed",
+	"tab.renamed",
+	"worktree.created",
+	"worktree.opened",
+	"worktree.removed",
+}
+
+type Event struct {
+	Name string
+	Data json.RawMessage
+}
+
+type wireEvent struct {
+	Event string          `json:"event"`
+	Data  json.RawMessage `json:"data"`
+}
+
+// normaliseEvent folds herdr's inconsistent dotted and underscored event names
+// into the underscored form used everywhere else in the API.
+func normaliseEvent(name string) string { return strings.ReplaceAll(name, ".", "_") }
+
+// Subscribe holds a long-lived subscription and delivers events on the returned
+// channel, reconnecting with backoff until ctx is done. The channel closes when
+// the subscription stops for good.
+//
+// Callers must treat every event as a hint to reconcile from SessionSnapshot,
+// including during the historical replay that follows each (re)connect.
+func (c *Client) Subscribe(ctx context.Context, types []string) <-chan Event {
+	out := make(chan Event, 256)
+	go func() {
+		defer close(out)
+		backoff := 250 * time.Millisecond
+		for ctx.Err() == nil {
+			if err := c.streamOnce(ctx, types, out); err != nil && ctx.Err() == nil {
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(backoff):
+				}
+				if backoff < 15*time.Second {
+					backoff *= 2
+				}
+				continue
+			}
+			backoff = 250 * time.Millisecond
+		}
+	}()
+	return out
+}
+
+func (c *Client) streamOnce(ctx context.Context, types []string, out chan<- Event) error {
+	conn, err := net.DialTimeout("unix", c.socket, 3*time.Second)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	// Close the connection as soon as the context is cancelled so the blocking
+	// read below unwinds instead of hanging until the next event.
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = conn.Close()
+		case <-done:
+		}
+	}()
+
+	subs := make([]map[string]string, 0, len(types))
+	for _, t := range types {
+		subs = append(subs, map[string]string{"type": t})
+	}
+	req, err := json.Marshal(map[string]any{
+		"id":     "muster-events",
+		"method": "events.subscribe",
+		"params": map[string]any{"subscriptions": subs},
+	})
+	if err != nil {
+		return err
+	}
+	if _, err := conn.Write(append(req, '\n')); err != nil {
+		return err
+	}
+
+	// No read deadline: a healthy subscription is silent whenever the session
+	// is idle, so a timeout here would tear down a working connection.
+	r := bufio.NewReaderSize(conn, 1<<20)
+	for {
+		line, err := r.ReadBytes('\n')
+		if err != nil {
+			return err
+		}
+		if len(line) == 0 {
+			continue
+		}
+		var ev wireEvent
+		if err := json.Unmarshal(line, &ev); err != nil {
+			continue
+		}
+		if ev.Event == "" {
+			// The subscription_started acknowledgement, or an error envelope.
+			var env envelope
+			if json.Unmarshal(line, &env) == nil && env.Error != nil {
+				return env.Error
+			}
+			continue
+		}
+		select {
+		case out <- Event{Name: normaliseEvent(ev.Event), Data: ev.Data}:
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			// Dropping is safe: events only ever schedule a reconcile, and a
+			// reconcile is already pending if the buffer is full.
+		}
+	}
+}
