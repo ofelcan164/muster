@@ -69,7 +69,23 @@ pane layout     -> .result.layout          {area{x,y,width,height}, focused_pane
 api snapshot    -> .result.snapshot        {focused_pane_id, focused_workspace_id,
                                             focused_tab_id, workspaces[], agents[]}
 plugin pane open-> .result.plugin_pane.pane.pane_id
+pane read      -> .result.read.text        also .revision, .truncated
+session.snapshot-> .result.snapshot         panes[] and agents[] both carry
+                                            .tokens and .state_labels
 ```
+
+Two things about workspaces that cost me a wrong assumption:
+
+- **A workspace has no `cwd` field.** `WorkspaceInfo` is `{workspace_id, label,
+  number, active_tab_id, agent_status, focused, pane_count, tab_count, tokens,
+  worktree}`. To get a workspace's directory, read it off its panes. Taking the
+  most common pane `cwd` beats taking the first, which may be a shell someone
+  has `cd`'d out of.
+- **`workspace.worktree` was null for every workspace I made with
+  `workspace create --cwd <a git repo>`**, so it cannot be relied on for the
+  branch. `worktree list` also fails outright with `not_git_worktree` when the
+  focused workspace is not in a work tree. Reading `.git/HEAD` and
+  `.git/config` directly is both more reliable and cheaper than either.
 
 `pane layout` `area` is the tab area, so `area.x` is the sidebar width and
 `area.width` is what an overlay actually gets.
@@ -113,6 +129,55 @@ layout_updated
 `[[events]]` spawns a process per event and there is a concurrency cap that
 returns `plugin_command_limit_reached`, so only declare rare events there.
 
+### Manifest `[[events]]` names are dotted too
+
+`on = "workspace_created"` is silently wrong. `herdr plugin list` reports it as
+`warning: unknown event 'workspace_created'` and the hook never fires. `plugin
+link` still succeeds, so nothing fails loudly. Use `on = "workspace.created"`.
+
+The warning only shows in `plugin list` output, so check there after linking.
+
+### Holding a subscription (verified 2026-09-06, 0.8.2)
+
+`events.subscribe` is the long-lived one. `events.wait` is a one-shot match with
+a timeout and is not a subscription at all. Subscribe replies
+`{"result":{"type":"subscription_started"}}` and then streams events on the same
+connection. Live delivery measured at 23 to 26ms.
+
+Five things that shape any daemon built on this.
+
+1. **Subscription names are dotted, delivered names are underscored.**
+   You subscribe to `pane.updated` and receive `pane_updated`. The list above is
+   the delivered form. The exception is `pane_agent_status_changed`, which comes
+   back dotted as `pane.agent_status_changed`. Normalise both.
+
+2. **Every subscribe replays the session's whole event history first, paced at
+   one event per 100ms.** The replay includes events for panes and workspaces
+   that have since closed, and it is not causally ordered: I saw `pane_closed`
+   for `w1:p2` arrive before that pane's `pane_created`. Two subscribes a second
+   apart replayed byte-identical sequences. So the stream is a "something
+   changed" hint and nothing more. Build state from `session.snapshot`, never
+   from the events, and expect ten redundant wakeups a second while a replay
+   drains.
+
+3. **A second `events.subscribe` on a subscribed connection resets it.** The
+   server closes the socket. Subscriptions are fixed for the life of a
+   connection, so a new pane cannot be added to an existing subscription, and
+   RPCs need their own connection.
+
+4. **`pane.agent_status_changed`, `pane.output_matched` and
+   `pane.scroll_changed` require a `pane_id`.** There is no global agent-status
+   subscription. One invalid entry rejects the whole batch with
+   `invalid_request` and an empty `id`, and no events follow.
+
+5. **`pane.updated` is global and carries the full pane record**, including
+   `agent`, `agent_status`, `cwd`, `terminal_title_stripped` and `revision`.
+   That covers every per-pane signal, so subscribing globally to `pane.updated`
+   avoids (3) and (4) entirely. This is the one worth knowing: it removes the
+   need for per-pane subscriptions and the resubscribe-per-pane churn they force.
+
+Polling is not needed. Subscriptions work.
+
 ## Agent state
 
 `idle` `working` `blocked` `done` `unknown`.
@@ -120,6 +185,15 @@ returns `plugin_command_limit_reached`, so only declare rare events there.
 `done` is idle after work you have not seen. Focusing marks seen.
 **CLI reads do not mark seen**, so a daemon can poll `pane read` and
 `agent read` continuously without consuming the unseen signal.
+
+Confirmed 2026-09-06: an agent left in `done` stayed `done` across four
+`pane read` calls over 32 seconds.
+
+**`pane read` is slow: 330 to 375ms per call**, against 2.2ms for
+`session.snapshot`. It is by far the most expensive thing in the API. Reading
+seven agent panes inline costs about two and a half seconds, so output scanning
+has to run off whatever path keeps state fresh. Doing it inside musterd's
+reconcile pushed the first snapshot after startup from 15ms to 1054ms.
 
 ## Env in plugin commands
 
@@ -141,10 +215,30 @@ Always call herdr through `HERDR_BIN_PATH`, not a bare `herdr`.
 `state_text`, `workspace`, `tab`, `pane`, `agent`, `terminal_title`,
 `terminal_title_stripped`. Custom metadata tokens are `$name`. Per-token style
 is documented as inline `{ token = "workspace", fg = "#89b4fa", bold = true }`.
-**Unverified:** whether a global per-token style table also works.
+**Answered 2026-09-06: there is no global style table.** A
+`[[ui.sidebar.agents.token_styles]]` block is rejected with `unknown config key
+ui.sidebar.agents.token_styles; ignoring key`. Style has to be inline in the row,
+and a custom token keeps its `$` inside the inline form:
+`{ token = "$repo_tag", fg = "#83a598", bold = true }` validates, while
+`{ token = "repo_tag", ... }` fails with `custom tokens must start with '$'`.
+
+To check config without touching the real one, redirect the config home:
+`XDG_CONFIG_HOME=/tmp/fake herdr config check` reads
+`/tmp/fake/herdr/config.toml`. `herdr config check` itself takes no path.
 
 `[[keys.command]]` accepts `type = "shell" | "popup" | "plugin_action"`.
-**Unverified:** whether `plugin_action` can open a `[[panes]]` entrypoint
-directly or must go through an `[[actions]]` entry that shells out.
+
+**Answered 2026-09-06: `plugin_action` cannot open a `[[panes]]` entrypoint.**
+Only `[[actions]]` ids are addressable. `plugin action list` returns the five
+`[[actions]]` entries and not the `home` pane entrypoint, and
+`herdr plugin action invoke muster.home` returns `plugin_action_not_found` while
+`muster.open` runs. So `prefix+m` has to bind to an `[[actions]]` entry that
+shells out to `herdr plugin pane open`, costing one extra process spawn on the
+hottest path.
+
+Watch out: `herdr config check` does not resolve action ids. It accepts
+`command = "totally.bogus-nonexistent"` as `config: ok`, so a keybinding
+pointing at a pane entrypoint validates cleanly and then does nothing when
+pressed.
 
 `[ui.toast] delivery` defaults to `off`, so notifications need opting in.
