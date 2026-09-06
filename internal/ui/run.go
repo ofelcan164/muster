@@ -72,6 +72,44 @@ func Jump(paneID string) error {
 	return c.Call("agent.focus", map[string]any{"target": paneID}, nil)
 }
 
+// TogglePane opens the overlay, or closes it if it is already open.
+//
+// The plan makes prefix+m the one hot key: press it to open, press it again to
+// close, and press it to come back. herdr does not toggle on its own, so
+// opening twice stacks two overlays on top of each other. Finding an existing
+// one by its manifest title is how the overlay locates itself, since the pane
+// list reports that title as the label.
+func TogglePane() error {
+	if pane := findOverlayPane(); pane != "" {
+		return herdr.NewClient("").Call("plugin.pane.close",
+			map[string]any{"pane_id": pane}, nil)
+	}
+	return OpenPane()
+}
+
+// findOverlayPane returns an open Muster overlay, or "".
+func findOverlayPane() string {
+	var out struct {
+		Panes []struct {
+			PaneID string `json:"pane_id"`
+			Label  string `json:"label"`
+		} `json:"panes"`
+	}
+	if err := herdr.NewClient("").Call("pane.list", struct{}{}, &out); err != nil {
+		return ""
+	}
+	for _, p := range out.Panes {
+		if p.Label == overlayTitle {
+			return p.PaneID
+		}
+	}
+	return ""
+}
+
+// overlayTitle is the [[panes]] title from the manifest, which is what shows up
+// as the pane label.
+const overlayTitle = "Muster"
+
 // OpenPane asks herdr to open the overlay pane.
 //
 // A plugin_action keybinding cannot address a [[panes]] entrypoint directly,
