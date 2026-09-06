@@ -58,9 +58,9 @@ command = ["./bin/muster", "install"]
 # Rare events only. Status and output events are far too chatty for a
 # process-per-event hook; musterd subscribes to those over the socket.
 [[events]]
-on = "workspace_created"
+on = "workspace.created"
 command = ["./bin/muster", "discover"]
 
 [[events]]
-on = "worktree_created"
+on = "worktree.created"
 command = ["./bin/muster", "discover"]
