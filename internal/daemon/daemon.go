@@ -202,15 +202,20 @@ func (d *Daemon) reconcile() bool {
 		ribbon = []model.Attention{}
 	}
 
+	d.trackFocus(snap.FocusedPaneID, agents)
+
 	out := model.Snapshot{
-		Schema:       model.SchemaVersion,
-		GeneratedAt:  now,
-		DaemonPID:    os.Getpid(),
-		HerdrVersion: snap.Version,
-		Repos:        repos,
-		Attention:    ribbon,
-		Orch:         orch,
-		Counts:       countOf(repos, ribbon),
+		Schema:        model.SchemaVersion,
+		GeneratedAt:   now,
+		DaemonPID:     os.Getpid(),
+		HerdrVersion:  snap.Version,
+		Repos:         repos,
+		Attention:     ribbon,
+		Orch:          orch,
+		FocusedPane:   snap.FocusedPaneID,
+		PreviousAgent: d.previousAgent(),
+		FocusHistory:  append([]string(nil), d.persist.FocusHistory...),
+		Counts:        countOf(repos, ribbon),
 	}
 
 	body, err := json.Marshal(out)

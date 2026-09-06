@@ -73,6 +73,10 @@ type Persisted struct {
 	// agent ever passed through done.
 	LastDoneSeq map[string]uint64 `json:"last_done_seq"`
 
+	// FocusHistory is the recently focused agent panes, most recent first.
+	// Two entries is all the back key needs.
+	FocusHistory []string `json:"focus_history"`
+
 	// LastProcess is the foreground process last seen in each non-agent pane.
 	// Comparing against it is how a stopped dev server is detected: a fact,
 	// unlike pattern matching a pane's text for something that looks like an

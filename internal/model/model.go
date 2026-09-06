@@ -181,6 +181,18 @@ type Snapshot struct {
 	Attention []Attention  `json:"attention"`
 	Orch      Orchestrator `json:"orchestrator"`
 
+	// FocusedPane is where you are now. PreviousAgent is the agent you were in
+	// before it, which is what the back key returns you to. Both are tracked by
+	// the daemon because herdr keeps no focus history of its own.
+	FocusedPane   string `json:"focused_pane,omitempty"`
+	PreviousAgent string `json:"previous_agent,omitempty"`
+
+	// FocusHistory is the recently focused agents, most recent first. The back
+	// key resolves against this rather than PreviousAgent alone, so pressing it
+	// twice in quick succession still toggles even if the daemon has not
+	// reconciled in between.
+	FocusHistory []string `json:"focus_history,omitempty"`
+
 	// Warnings are daemon-side problems worth surfacing in the overlay title
 	// bar, such as a degraded subscription.
 	Warnings []string `json:"warnings,omitempty"`
