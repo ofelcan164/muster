@@ -94,3 +94,60 @@ func pluginID() string {
 	}
 	return "muster"
 }
+
+// ResolveTarget turns a jump alias into a pane id.
+//
+// The two aliases are the ones with global keys of their own: the orchestrator,
+// and whichever agent you were in last. Both come from the snapshot, so this
+// stays a file read on a key you press constantly.
+func ResolveTarget(name string) (string, error) {
+	switch name {
+	case "orchestrator", "previous":
+	default:
+		return name, nil // already a pane id
+	}
+
+	snap, err := daemon.ReadSnapshot()
+	if err != nil {
+		return "", fmt.Errorf("no snapshot: is musterd running?")
+	}
+	if name == "orchestrator" {
+		if !snap.Orch.Found {
+			return "", fmt.Errorf("no orchestrator marked: run the mark-orchestrator action on its pane")
+		}
+		return snap.Orch.PaneID, nil
+	}
+	return previousAgent(snap)
+}
+
+// previousAgent picks the agent to go back to.
+//
+// It resolves against the live focused pane rather than the snapshot's idea of
+// it, because the back key is a toggle you press in quick succession and the
+// daemon may not have reconciled since the last press. Without this, pressing
+// back twice quickly re-focuses the pane you are already in.
+func previousAgent(snap *model.Snapshot) (string, error) {
+	focused := liveFocusedPane()
+	if focused == "" {
+		focused = snap.FocusedPane
+	}
+	for _, pane := range snap.FocusHistory {
+		if pane != focused {
+			return pane, nil
+		}
+	}
+	if snap.PreviousAgent != "" && snap.PreviousAgent != focused {
+		return snap.PreviousAgent, nil
+	}
+	return "", fmt.Errorf("no previous agent yet")
+}
+
+// liveFocusedPane asks the server where focus actually is. Around 2ms, which is
+// affordable on a key press and worth it to make the toggle reliable.
+func liveFocusedPane() string {
+	snap, err := herdr.NewClient("").SessionSnapshot()
+	if err != nil {
+		return ""
+	}
+	return snap.FocusedPaneID
+}

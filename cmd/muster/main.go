@@ -13,6 +13,8 @@ import (
 
 	"github.com/ofelcan/muster/internal/chain"
 	"github.com/ofelcan/muster/internal/daemon"
+	"github.com/ofelcan/muster/internal/herdr"
+	"github.com/ofelcan/muster/internal/install"
 	"github.com/ofelcan/muster/internal/state"
 	"github.com/ofelcan/muster/internal/ui"
 )
@@ -46,7 +48,27 @@ func main() {
 		// install action has to start the daemon itself. Otherwise linking
 		// Muster appears to do nothing until herdr is next restarted.
 		ensure()
-		fmt.Fprintln(os.Stderr, "muster: daemon ensured; the reporting skill installer is not built yet")
+		os.Exit(cmdInstallKeys(args[1:]))
+
+	case "uninstall-keys":
+		res, err := install.Remove()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "muster: %v\n", err)
+			os.Exit(1)
+		}
+		if res.Changed {
+			fmt.Printf("removed Muster keybindings from %s\n", res.Path)
+			fmt.Printf("backup: %s\n", res.Backup)
+			reloadConfig()
+		} else {
+			fmt.Println("no Muster keybindings were installed")
+		}
+
+	case "mark-orchestrator":
+		if err := ui.MarkOrchestrator(); err != nil {
+			fmt.Fprintf(os.Stderr, "muster: %v\n", err)
+			os.Exit(1)
+		}
 
 	case "chain":
 		os.Exit(cmdChain(args[1:]))
@@ -68,7 +90,12 @@ func main() {
 			fmt.Fprintln(os.Stderr, "muster jump: needs a target")
 			os.Exit(2)
 		}
-		if err := ui.Jump(target); err != nil {
+		pane, err := ui.ResolveTarget(target)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "muster jump: %v\n", err)
+			os.Exit(1)
+		}
+		if err := ui.Jump(pane); err != nil {
 			fmt.Fprintf(os.Stderr, "muster jump: %v\n", err)
 			os.Exit(1)
 		}
@@ -221,6 +248,58 @@ func runOverlay() int {
 	}
 	return 0
 }
+
+// cmdInstallKeys writes the keybindings and says exactly what it did. This is
+// the only file Muster edits that the user owns, so nothing about it is silent.
+func cmdInstallKeys(args []string) int {
+	fs := flag.NewFlagSet("install", flag.ExitOnError)
+	skipKeys := fs.Bool("no-keys", false, "skip the keybindings")
+	_ = fs.Parse(args)
+
+	if *skipKeys {
+		fmt.Println("daemon ensured; keybindings skipped")
+		return 0
+	}
+
+	res, err := install.Keys(herdrBin())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "muster install: %v\n", err)
+		return 1
+	}
+	if !res.Changed {
+		fmt.Println("keybindings already installed, nothing to do")
+		return 0
+	}
+
+	fmt.Printf("wrote keybindings to %s\n", res.Path)
+	if res.Backup != "" {
+		fmt.Printf("backup:  %s\n", res.Backup)
+	}
+	for _, b := range install.Bindings {
+		fmt.Printf("  %-16s %s\n", b.Key, b.Why)
+	}
+
+	// A conflicting key is disabled rather than rejected, so the diagnostic is
+	// the only way to find out a binding did not actually take.
+	if res.Diagnostic != "" && res.Diagnostic != "config: ok" {
+		fmt.Printf("\nherdr config check:\n%s\n", res.Diagnostic)
+	}
+	reloadConfig()
+	return 0
+}
+
+// reloadConfig makes the bindings live without restarting herdr.
+func reloadConfig() {
+	c := herdr.NewClient("")
+	if err := c.Call("server.reload_config", struct{}{}, nil); err != nil {
+		fmt.Fprintf(os.Stderr, "reload config: %v (restart herdr to pick them up)\n", err)
+		return
+	}
+	fmt.Println("config reloaded")
+}
+
+// herdrBin honours the path herdr injects, never a bare `herdr` off PATH.
+func herdrBin() string { return os.Getenv("HERDR_BIN_PATH") }
 
 func ensure() {
 	if _, err := daemon.Ensure(); err != nil {
