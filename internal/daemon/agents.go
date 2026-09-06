@@ -23,6 +23,11 @@ func (d *Daemon) buildAgents(snap *herdr.Snapshot, now time.Time) map[string]mod
 		status := model.Status(a.AgentStatus)
 		since, ageKnown := d.stampStatus(a.PaneID, string(status), now)
 
+		if status == model.StatusWorking {
+			// Seeing an agent work is what separates "stalled" from "never
+			// used" later on.
+			d.persist.EverWorked[a.PaneID] = true
+		}
 		if status == model.StatusDone {
 			// Remember that this pane has passed through done, so the
 			// idle-never-done rule can tell a stalled agent from a finished one.
@@ -61,6 +66,11 @@ func (d *Daemon) buildAgents(snap *herdr.Snapshot, now time.Time) map[string]mod
 	for pane := range d.persist.TaskSeenAt {
 		if !live[pane] {
 			delete(d.persist.TaskSeenAt, pane)
+		}
+	}
+	for pane := range d.persist.EverWorked {
+		if !live[pane] {
+			delete(d.persist.EverWorked, pane)
 		}
 	}
 	for pane := range d.persist.LastDoneSeq {

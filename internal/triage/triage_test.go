@@ -92,6 +92,9 @@ func TestIdleNeverDoneNeedsBothQuietAndNoDoneHistory(t *testing.T) {
 		Now:      now,
 		Repos:    []model.Repo{repo("api", stale, fresh, finishedBefore)},
 		EverDone: map[string]bool{finishedBefore.PaneID: true},
+		EverWorked: map[string]bool{
+			stale.PaneID: true, fresh.PaneID: true, finishedBefore.PaneID: true,
+		},
 	}
 	got := Rank(in)
 	if len(got) != 1 {
@@ -269,7 +272,8 @@ func TestDoneWithUnknownAgeSortsLast(t *testing.T) {
 func TestIdleNeverDoneFiresOnALowerBound(t *testing.T) {
 	a := agent("quiet", model.StatusIdle, 30*time.Minute)
 	a.AgeKnown = false
-	got := Rank(Input{Now: now, Repos: []model.Repo{repo("api", a)}})
+	got := Rank(Input{Now: now, Repos: []model.Repo{repo("api", a)},
+		EverWorked: map[string]bool{a.PaneID: true}})
 	if len(got) != 1 || got[0].Rank != 5 {
 		t.Fatalf("threshold rules should still fire on a lower bound, got %+v", got)
 	}
@@ -351,5 +355,24 @@ func TestGateSilentWithoutAChain(t *testing.T) {
 		if r.Reason == model.ReasonGateUntold {
 			t.Fatal("no chain means no way to know what downstream is")
 		}
+	}
+}
+
+// The noisiest thing the ribbon did: an agent you opened and never used sat in
+// it forever claiming to be stalled. It was idle, which is a different thing.
+func TestIdleAgentThatNeverWorkedIsNotStalled(t *testing.T) {
+	never := agent("untouched", model.StatusIdle, 3*time.Hour)
+	worked := agent("stalled", model.StatusIdle, 30*time.Minute)
+
+	got := Rank(Input{
+		Now:        now,
+		Repos:      []model.Repo{repo("api", never, worked)},
+		EverWorked: map[string]bool{worked.PaneID: true},
+	})
+	if len(got) != 1 {
+		t.Fatalf("want only the agent that actually worked, got %+v", got)
+	}
+	if got[0].Agent != "stalled" {
+		t.Errorf("flagged %q, want stalled", got[0].Agent)
 	}
 }

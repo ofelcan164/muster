@@ -73,6 +73,12 @@ type Persisted struct {
 	// agent ever passed through done.
 	LastDoneSeq map[string]uint64 `json:"last_done_seq"`
 
+	// EverWorked records panes observed in the working state at least once.
+	// Rank 5 turns on this: an agent you opened and never gave work to is idle,
+	// not stalled, and flagging it forever is the noisiest thing the ribbon can
+	// do.
+	EverWorked map[string]bool `json:"ever_worked"`
+
 	// FocusHistory is the recently focused agent panes, most recent first.
 	// Two entries is all the back key needs.
 	FocusHistory []string `json:"focus_history"`
@@ -120,6 +126,7 @@ func LoadPersisted() *Persisted {
 		LastDoneSeq: map[string]uint64{},
 		TaskSeenAt:  map[string]TaskStamp{},
 		LastProcess: map[string]string{},
+		EverWorked:  map[string]bool{},
 		Stopped:     map[string]string{},
 	}
 	b, err := os.ReadFile(PersistPath())
@@ -143,6 +150,9 @@ func LoadPersisted() *Persisted {
 	}
 	if p.LastProcess == nil {
 		p.LastProcess = map[string]string{}
+	}
+	if p.EverWorked == nil {
+		p.EverWorked = map[string]bool{}
 	}
 	if p.Stopped == nil {
 		p.Stopped = map[string]string{}

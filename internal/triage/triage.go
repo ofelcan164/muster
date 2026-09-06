@@ -57,6 +57,10 @@ type Input struct {
 	// EverDone reports whether a pane has ever been observed entering "done".
 	// The idle-never-done rule turns on this.
 	EverDone map[string]bool
+
+	// EverWorked reports whether a pane was ever seen working. An agent that
+	// has never done anything is idle, not stalled.
+	EverWorked map[string]bool
 }
 
 type agentRef struct {
@@ -136,9 +140,15 @@ func Rank(in Input) []model.Attention {
 		})
 	}
 
-	// Rank 5: idle, never marked done, quiet long enough to look stalled.
+	// Rank 5: an agent that did some work, never reported done, and has been
+	// quiet long enough to look stalled.
+	//
+	// The EverWorked condition is what stops this firing on a shell you opened
+	// and never used. Without it every idle agent qualifies forever, which made
+	// this by far the noisiest rule in the ribbon.
 	stale := filter(all, func(x agentRef) bool {
 		return x.agent.Status == model.StatusIdle &&
+			in.EverWorked[x.agent.PaneID] &&
 			!in.EverDone[x.agent.PaneID] &&
 			x.agent.Age(in.Now) >= StaleAfter
 	})

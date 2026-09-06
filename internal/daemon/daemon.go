@@ -193,6 +193,13 @@ func (d *Daemon) reconcile() bool {
 		Stopped:  d.stopped,
 		Chain:    chain.Load(state.Dir()),
 		EverDone: everDone,
+		EverWorked: func() map[string]bool {
+			out := make(map[string]bool, len(d.persist.EverWorked))
+			for k, v := range d.persist.EverWorked {
+				out[k] = v
+			}
+			return out
+		}(),
 	})
 
 	if repos == nil {
