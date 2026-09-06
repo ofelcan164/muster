@@ -360,3 +360,55 @@ func TestNewIsFullyInitialised(t *testing.T) {
 		t.Errorf("question round trip failed: %q", got)
 	}
 }
+
+// A repo earns its grid cell by hosting an agent, and keeps it afterwards so
+// the grid does not shift when you close one.
+func TestRepoEarnsThenKeepsItsCell(t *testing.T) {
+	d := newTestDaemon(t)
+	root := t.TempDir()
+	api := gitRepo(t, filepath.Join(root, "api"), "git@github.com:acme/api.git", "main")
+
+	base := func(agents []herdr.Agent) *herdr.Snapshot {
+		return &herdr.Snapshot{
+			Workspaces: []herdr.Workspace{{WorkspaceID: "w1", Number: 1}},
+			Panes:      []herdr.Pane{pane("w1:p1", "w1", api)},
+			Agents:     agents,
+		}
+	}
+
+	// Never had an agent: no card, no slot burned.
+	empty := base(nil)
+	if got := d.buildRepos(empty, map[string]model.Agent{}, model.Orchestrator{}); len(got) != 0 {
+		t.Fatalf("a repo with no agent history should not take a cell, got %+v", got)
+	}
+
+	// An agent appears: it earns a card.
+	busy := base([]herdr.Agent{agentPane("w1:p1", "w1", api, "working")})
+	got := d.buildRepos(busy, d.buildAgents(busy, time.Now()), model.Orchestrator{})
+	if len(got) != 1 {
+		t.Fatalf("want a card once an agent runs, got %d", len(got))
+	}
+	slot := got[0].GridSlot
+
+	// The agent goes away: the card stays put.
+	got = d.buildRepos(empty, map[string]model.Agent{}, model.Orchestrator{})
+	if len(got) != 1 {
+		t.Fatalf("the card should survive the agent closing, got %d", len(got))
+	}
+	if got[0].GridSlot != slot {
+		t.Errorf("grid slot moved from %d to %d", slot, got[0].GridSlot)
+	}
+}
+
+// A scratch workspace follows the same rule, so shell tabs stay out of the grid.
+func TestScratchWorkspaceStillNeedsAnAgent(t *testing.T) {
+	d := newTestDaemon(t)
+	scratch := t.TempDir()
+	snap := &herdr.Snapshot{
+		Workspaces: []herdr.Workspace{{WorkspaceID: "w1", Number: 1}},
+		Panes:      []herdr.Pane{pane("w1:p1", "w1", scratch)},
+	}
+	if got := d.buildRepos(snap, map[string]model.Agent{}, model.Orchestrator{}); len(got) != 0 {
+		t.Errorf("a shell-only workspace should not take a cell, got %+v", got)
+	}
+}

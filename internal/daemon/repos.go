@@ -114,11 +114,14 @@ func (d *Daemon) buildRepos(snap *herdr.Snapshot, agents map[string]model.Agent,
 
 	out := make([]model.Repo, 0, len(byKey))
 	for _, r := range byKey {
-		// A workspace with no repository earns a card only while something is
-		// running in it. Otherwise every stray shell tab would take a fixed
-		// grid cell, and the grid is worth having precisely because the cells
-		// mean something.
-		if !r.IsGit && len(r.Agents) == 0 {
+		// A repo earns a grid cell by hosting an agent, and keeps it afterwards.
+		//
+		// Keeping it is what the fixed grid depends on: closing an agent must
+		// not make every other card shift. Earning it first is what stops a
+		// repo you have merely opened a shell in from holding a cell forever.
+		if len(r.Agents) > 0 {
+			d.persist.EverHadAgent[r.Key] = true
+		} else if !d.persist.EverHadAgent[r.Key] {
 			delete(d.persist.GridSlots, r.Key)
 			continue
 		}
