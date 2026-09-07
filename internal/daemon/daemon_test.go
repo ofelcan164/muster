@@ -178,33 +178,6 @@ func TestRepoWithoutOrigin(t *testing.T) {
 	}
 }
 
-// A scratch workspace earns a card only while an agent is running in it.
-func TestScratchWorkspaceHiddenUntilItHasAgents(t *testing.T) {
-	d := newTestDaemon(t)
-	scratch := t.TempDir()
-
-	empty := &herdr.Snapshot{
-		Workspaces: []herdr.Workspace{{WorkspaceID: "w1", Number: 1}},
-		Panes:      []herdr.Pane{pane("w1:p1", "w1", scratch)},
-	}
-	if repos := d.buildRepos(empty, map[string]model.Agent{}, model.Orchestrator{}); len(repos) != 0 {
-		t.Fatalf("empty scratch workspace should not take a grid cell, got %+v", repos)
-	}
-
-	busy := &herdr.Snapshot{
-		Workspaces: []herdr.Workspace{{WorkspaceID: "w1", Number: 1}},
-		Panes:      []herdr.Pane{pane("w1:p1", "w1", scratch)},
-		Agents:     []herdr.Agent{agentPane("w1:p1", "w1", scratch, "working")},
-	}
-	repos := d.buildRepos(busy, d.buildAgents(busy, time.Now()), model.Orchestrator{})
-	if len(repos) != 1 {
-		t.Fatalf("scratch workspace with an agent should appear, got %d", len(repos))
-	}
-	if repos[0].IsGit {
-		t.Error("scratch workspace should not be marked as git")
-	}
-}
-
 // Grid slots are the whole reason the grid is worth having. They must not move.
 func TestGridSlotsAreStableAndDeterministic(t *testing.T) {
 	root := t.TempDir()
@@ -361,9 +334,9 @@ func TestNewIsFullyInitialised(t *testing.T) {
 	}
 }
 
-// A repo earns its grid cell by hosting an agent, and keeps it afterwards so
-// the grid does not shift when you close one.
-func TestRepoEarnsThenKeepsItsCell(t *testing.T) {
+// Every discovered repo gets a card. The overlay handles keeping the quiet ones
+// out of the way by ordering, not by hiding them.
+func TestQuietReposStillGetACard(t *testing.T) {
 	d := newTestDaemon(t)
 	root := t.TempDir()
 	api := gitRepo(t, filepath.Join(root, "api"), "git@github.com:acme/api.git", "main")
@@ -376,13 +349,13 @@ func TestRepoEarnsThenKeepsItsCell(t *testing.T) {
 		}
 	}
 
-	// Never had an agent: no card, no slot burned.
+	// No agent yet: still a card.
 	empty := base(nil)
-	if got := d.buildRepos(empty, map[string]model.Agent{}, model.Orchestrator{}); len(got) != 0 {
-		t.Fatalf("a repo with no agent history should not take a cell, got %+v", got)
+	if got := d.buildRepos(empty, map[string]model.Agent{}, model.Orchestrator{}); len(got) != 1 {
+		t.Fatalf("a discovered repo should get a card, got %+v", got)
 	}
 
-	// An agent appears: it earns a card.
+	// An agent appears.
 	busy := base([]herdr.Agent{agentPane("w1:p1", "w1", api, "working")})
 	got := d.buildRepos(busy, d.buildAgents(busy, time.Now()), model.Orchestrator{})
 	if len(got) != 1 {
@@ -400,15 +373,20 @@ func TestRepoEarnsThenKeepsItsCell(t *testing.T) {
 	}
 }
 
-// A scratch workspace follows the same rule, so shell tabs stay out of the grid.
-func TestScratchWorkspaceStillNeedsAnAgent(t *testing.T) {
+// A scratch workspace with no agents still gets a card, so its shells are
+// visible. Ordering keeps it below anything you are actually working in.
+func TestScratchWorkspaceGetsACard(t *testing.T) {
 	d := newTestDaemon(t)
 	scratch := t.TempDir()
 	snap := &herdr.Snapshot{
 		Workspaces: []herdr.Workspace{{WorkspaceID: "w1", Number: 1}},
 		Panes:      []herdr.Pane{pane("w1:p1", "w1", scratch)},
 	}
-	if got := d.buildRepos(snap, map[string]model.Agent{}, model.Orchestrator{}); len(got) != 0 {
-		t.Errorf("a shell-only workspace should not take a cell, got %+v", got)
+	got := d.buildRepos(snap, map[string]model.Agent{}, model.Orchestrator{})
+	if len(got) != 1 {
+		t.Fatalf("want a card, got %+v", got)
+	}
+	if got[0].IsGit {
+		t.Error("a scratch workspace is not a git repo")
 	}
 }

@@ -114,16 +114,11 @@ func (d *Daemon) buildRepos(snap *herdr.Snapshot, agents map[string]model.Agent,
 
 	out := make([]model.Repo, 0, len(byKey))
 	for _, r := range byKey {
-		// A repo earns a grid cell by hosting an agent, and keeps it afterwards.
-		//
-		// Keeping it is what the fixed grid depends on: closing an agent must
-		// not make every other card shift. Earning it first is what stops a
-		// repo you have merely opened a shell in from holding a cell forever.
+		// Every discovered repo gets a card, whether or not anything is running
+		// in it. Ordering is what keeps the quiet ones out of the way: the
+		// overlay sorts repos with agents ahead of repos without.
 		if len(r.Agents) > 0 {
 			d.persist.EverHadAgent[r.Key] = true
-		} else if !d.persist.EverHadAgent[r.Key] {
-			delete(d.persist.GridSlots, r.Key)
-			continue
 		}
 		sort.SliceStable(r.Agents, func(i, j int) bool { return r.Agents[i].PaneID < r.Agents[j].PaneID })
 		sort.SliceStable(r.OtherPanes, func(i, j int) bool { return r.OtherPanes[i].PaneID < r.OtherPanes[j].PaneID })

@@ -58,6 +58,14 @@ func (m *Model) orderedRepos(repos []model.Repo) []model.Repo {
 		sort.SliceStable(out, func(i, j int) bool { return out[i].GridSlot < out[j].GridSlot })
 	}
 
+	// Repos with agents always come first, whatever the sort. A quiet repo is
+	// still worth a card, but it should never sit between two you are working
+	// in. This runs after the sort so it never disturbs the order within each
+	// group, and before manual moves so you can still override it.
+	sort.SliceStable(out, func(i, j int) bool {
+		return len(out[i].Agents) > 0 && len(out[j].Agents) == 0
+	})
+
 	return applyMoves(out, m.moves)
 }
 
