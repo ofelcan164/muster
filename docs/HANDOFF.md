@@ -115,10 +115,8 @@ Both of these cost real time to establish and are recorded in
 
 ## Known problems
 
-Ordered by how much they matter.
-
-**`internal/ui/model.go` is 645 lines** and does state, navigation, filtering
-and mouse handling. It wants splitting the way `internal/daemon` was.
+Nothing open. Everything phase 1 shipped with is either fixed or was measured
+and found not to be a problem. See the git log from `ca3695e` on.
 
 ## What is not built
 
