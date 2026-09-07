@@ -536,6 +536,20 @@ func (m *Model) agentByPane(paneID string) (model.Repo, model.Agent, bool) {
 	return model.Repo{}, model.Agent{}, false
 }
 
+// repoByKey finds a repo by its identity key.
+//
+// Ribbon rows resolve their repo this way rather than through the pane, because
+// a stopped-process row points at a non-agent pane and so has no agent to look
+// up. That left those rows with a blank sigil.
+func (m *Model) repoByKey(key string) model.Repo {
+	for _, r := range m.snap.Repos {
+		if r.Key == key {
+			return r
+		}
+	}
+	return model.Repo{ColorIndex: -1, Sigil: "·"}
+}
+
 // sortedRepos returns repos in grid slot order, which is what pins a repo to
 // the same cell for good.
 func sortedRepos(repos []model.Repo) []model.Repo {

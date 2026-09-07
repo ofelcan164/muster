@@ -6,6 +6,8 @@
 package ui
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/ofelcan/muster/internal/identity"
@@ -25,6 +27,7 @@ var (
 	colBlue   = lipgloss.Color("#83a598")
 	colOrange = lipgloss.Color("#fe8019")
 	colSelBG  = lipgloss.Color("#3c3836")
+	colPanel  = lipgloss.Color("#282828")
 	colHotBG  = lipgloss.Color("#3a2a26")
 )
 
@@ -38,6 +41,7 @@ var (
 	styWarn    = lipgloss.NewStyle().Foreground(colOrange)
 	styHint    = lipgloss.NewStyle().Foreground(colFaint)
 	stySel     = lipgloss.NewStyle().Background(colSelBG)
+	styPanel   = lipgloss.NewStyle().Background(colPanel)
 	styHot     = lipgloss.NewStyle().Background(colHotBG)
 	styMatch   = lipgloss.NewStyle().Foreground(colYellow).Bold(true)
 )
@@ -71,6 +75,57 @@ func statusIcon(s model.Status) string {
 	default:
 		return "◌"
 	}
+}
+
+// reasonAccent is the colour a ribbon row is keyed to. It comes from why the
+// row is there rather than from the agent's status, because the ribbon answers
+// "why does this need me" and the grid already answers "what state is it in".
+func reasonAccent(r model.Reason) lipgloss.Color {
+	switch r {
+	case model.ReasonBlocked:
+		return colRed
+	case model.ReasonGateUntold:
+		return colOrange
+	case model.ReasonProcessStopped:
+		return colYellow
+	case model.ReasonDoneUnseen:
+		return colGreen
+	default:
+		return colDim
+	}
+}
+
+// reasonLabel is the short word in the badge. It says why, not what: an agent
+// sitting at a permission prompt is "BLOCKED", but one whose dev server died is
+// "STOPPED", and those read differently at a glance.
+func reasonLabel(r model.Reason, status model.Status) string {
+	switch r {
+	case model.ReasonGateUntold:
+		return "GATE"
+	case model.ReasonProcessStopped:
+		return "STOPPED"
+	case model.ReasonIdleNeverDone:
+		return "STALE"
+	case model.ReasonBlocked:
+		return "BLOCKED"
+	case model.ReasonDoneUnseen:
+		return "DONE"
+	default:
+		return strings.ToUpper(string(status))
+	}
+}
+
+// badge is a filled label. Solid colour on the accent reads at the edge of
+// vision, which is the whole job of the ribbon.
+func badge(text string, accent lipgloss.Color) string {
+	return lipgloss.NewStyle().
+		Background(accent).Foreground(colBG).Bold(true).
+		Render(" " + text + " ")
+}
+
+// accentBar is the left edge marking a row's urgency without spending width.
+func accentBar(accent lipgloss.Color) string {
+	return lipgloss.NewStyle().Foreground(accent).Render("▌")
 }
 
 // repoStyle is the repo's hashed colour. A scratch workspace with no repository

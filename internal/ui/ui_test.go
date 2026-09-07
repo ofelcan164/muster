@@ -681,3 +681,67 @@ func TestClickRegionsLineUpWithWhatWasDrawn(t *testing.T) {
 		return
 	}
 }
+
+// A ribbon row is keyed on why it is there, not on the agent's status, so the
+// badge and the accent have to come from the reason.
+func TestRibbonBadgesReadFromTheReason(t *testing.T) {
+	cases := []struct {
+		reason model.Reason
+		want   string
+	}{
+		{model.ReasonBlocked, "BLOCKED"},
+		{model.ReasonGateUntold, "GATE"},
+		{model.ReasonProcessStopped, "STOPPED"},
+		{model.ReasonDoneUnseen, "DONE"},
+		{model.ReasonIdleNeverDone, "STALE"},
+	}
+	for _, c := range cases {
+		if got := reasonLabel(c.reason, model.StatusUnknown); got != c.want {
+			t.Errorf("reasonLabel(%s) = %q, want %q", c.reason, got, c.want)
+		}
+	}
+}
+
+func TestReasonAccentsAreDistinct(t *testing.T) {
+	seen := map[string]model.Reason{}
+	for _, r := range []model.Reason{
+		model.ReasonBlocked, model.ReasonGateUntold,
+		model.ReasonProcessStopped, model.ReasonDoneUnseen,
+	} {
+		c := string(reasonAccent(r))
+		if prev, dup := seen[c]; dup {
+			t.Errorf("%s and %s share accent %s", prev, r, c)
+		}
+		seen[c] = r
+	}
+}
+
+// A stopped-process row points at a non-agent pane, so resolving its repo
+// through the agent list left it with a blank sigil.
+func TestRibbonResolvesRepoForNonAgentRows(t *testing.T) {
+	snap := testSnapshot()
+	snap.Attention = []model.Attention{{
+		Rank: 3, Reason: model.ReasonProcessStopped,
+		RepoKey: "acme/web", PaneID: "acme/web:p9",
+		Agent: "dev", Status: model.StatusUnknown, Detail: "vite stopped",
+	}}
+	m := New(snap, "")
+	out, _ := m.Update(tea.WindowSizeMsg{Width: 143, Height: 40})
+	plain := ansi.ReplaceAllString(out.View(), "")
+	if !strings.Contains(plain, "web/dev") {
+		t.Errorf("ribbon lost the repo for a non-agent row:\n%s", plain)
+	}
+	if !strings.Contains(plain, "▣") {
+		t.Error("the repo sigil is missing from the row")
+	}
+}
+
+// The section head carries the count and the colour of the worst row, so the
+// ribbon signals severity before any of it is read.
+func TestAttentionRuleShowsTheCount(t *testing.T) {
+	m := newSized(143)
+	plain := ansi.ReplaceAllString(m.View(), "")
+	if !strings.Contains(plain, "NEEDS YOU 2") {
+		t.Errorf("expected a counted heading, got:\n%s", strings.SplitN(plain, "\n", 4)[2])
+	}
+}

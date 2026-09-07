@@ -58,38 +58,37 @@ func (m *Model) ribbonLines(startY int) []string {
 		return nil
 	}
 
-	out := []string{m.sectionRule("needs you")}
+	out := []string{m.attentionRule(len(rows))}
 	for i, a := range rows {
 		ti := m.ribbonTargetIndex("pane:" + a.PaneID)
 		selected := m.isActive(ti)
 
-		repo, _, _ := m.agentByPane(a.PaneID)
-		st := statusStyle(a.Status)
+		repo := m.repoByKey(a.RepoKey)
+		accent := reasonAccent(a.Reason)
 
-		idx := styFaint.Render(fmt.Sprintf("%d", i+1))
-		icon := st.Render(statusIcon(a.Status))
-		status := st.Bold(true).Render(strings.ToUpper(string(a.Status)))
+		bar := accentBar(accent)
+		idx := lipgloss.NewStyle().Foreground(accent).Bold(true).Render(fmt.Sprintf("%d", i+1))
+		label := badge(reasonLabel(a.Reason, a.Status), accent)
+		who := repoStyle(repo).Bold(true).Render(repo.Sigil+" "+repo.Display) +
+			styFaint.Render("/") + styFG.Bold(true).Render(a.Agent)
 		age := styMeta.Render(ageText(a.Age, a.AgeKnown))
 
 		var rowLines []string
 		if m.width < twoColumnMin {
 			// Narrow. The detail is the most valuable thing in the row and the
 			// first casualty of fixed columns, so it gets its own line.
-			head := fmt.Sprintf(" %s %s %s %s %s",
-				idx, icon,
-				repoStyle(repo).Render(truncate(repo.Sigil+" "+repo.Display, 14)),
-				styFG.Render(truncate(a.Agent, 14)), status)
+			head := fmt.Sprintf("%s %s %s %s", bar, idx, label, truncate(who, m.width-24))
 			rowLines = append(rowLines, fitLine(head, m.width))
 			if a.Detail != "" {
 				rowLines = append(rowLines, fitLine(
-					"    "+styDim.Render(truncate(a.Detail, m.width-5)), m.width))
+					bar+"     "+styFG.Render(truncate(a.Detail, m.width-7)), m.width))
 			}
 		} else {
-			sigil := repoStyle(repo).Render(repo.Sigil + " " + repo.Display)
-			name := styFG.Render(truncate(a.Agent, 16))
-			head := fmt.Sprintf(" %s %s  %s %s  %s %s  ",
-				idx, pad(sigil, 14), icon, pad(name, 16), pad(status, 8), pad(age, 4))
-			head += styDim.Render(truncate(a.Detail, max(10, m.width-lipgloss.Width(head)-1)))
+			head := fmt.Sprintf("%s %s %s %s %s  ",
+				bar, idx, pad(label, 11), pad(who, 34), pad(age, 4))
+			// The detail is the sentence you actually read, so it gets the
+			// bright foreground rather than the dim one the grid uses.
+			head += styFG.Render(truncate(a.Detail, max(10, m.width-lipgloss.Width(head)-1)))
 			rowLines = append(rowLines, fitLine(head, m.width))
 		}
 
@@ -106,6 +105,10 @@ func (m *Model) ribbonLines(startY int) []string {
 				// The top two ranks keep a warm background even unselected, so
 				// the thing that most needs you reads before you do.
 				line = styHot.Render(line)
+			default:
+				// The rest still get a panel so the ribbon reads as one block
+				// rather than trailing off into the background.
+				line = styPanel.Render(line)
 			}
 			out = append(out, line)
 		}
@@ -306,6 +309,23 @@ func (m *Model) viewFilterBar() string {
 		styFaint.Render(fmt.Sprintf("  %s · %s%s",
 			plural(len(repos), "repo"), plural(agents, "agent"), hint))
 	return padLine(bar, m.width)
+}
+
+// attentionRule heads the ribbon. It carries a count and the colour of the most
+// urgent row, so the section itself signals how bad things are before you read
+// a single line of it.
+func (m *Model) attentionRule(n int) string {
+	accent := colDim
+	if len(m.snap.Attention) > 0 {
+		accent = reasonAccent(m.snap.Attention[0].Reason)
+	}
+	head := lipgloss.NewStyle().Background(accent).Foreground(colBG).Bold(true).
+		Render(fmt.Sprintf(" NEEDS YOU %d ", n))
+	rule := m.width - lipgloss.Width(head) - 1
+	if rule < 0 {
+		rule = 0
+	}
+	return head + lipgloss.NewStyle().Foreground(accent).Render(strings.Repeat("─", rule))
 }
 
 // sectionRule is exactly one line. It must not append a newline of its own:
