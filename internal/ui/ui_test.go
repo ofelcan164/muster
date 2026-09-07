@@ -745,3 +745,53 @@ func TestAttentionRuleShowsTheCount(t *testing.T) {
 		t.Errorf("expected a counted heading, got:\n%s", strings.SplitN(plain, "\n", 4)[2])
 	}
 }
+
+// An overlay left open must follow the daemon rather than freeze on whatever
+// was true when it opened. This showed up as the grid claiming an agent was
+// working while herdr's sidebar showed it blocked.
+func TestOverlayRefreshesFromTheSnapshot(t *testing.T) {
+	m := newSized(143)
+	before := ansi.ReplaceAllString(m.View(), "")
+	if strings.Contains(before, "SOMETHING NEW") {
+		t.Fatal("fixture already contains the marker")
+	}
+
+	updated := testSnapshot()
+	updated.Repos[0].Display = "something new"
+	m.SetReloader(func() *model.Snapshot { return updated })
+
+	m.Update(refreshMsg{})
+	after := ansi.ReplaceAllString(m.View(), "")
+	if !strings.Contains(after, "SOMETHING NEW") {
+		t.Error("the overlay did not pick up the new snapshot")
+	}
+}
+
+// A refresh must not move the selection out from under you.
+func TestRefreshKeepsTheSelection(t *testing.T) {
+	m := newSized(143)
+	for i := 0; i < 3; i++ {
+		key(m, "j")
+	}
+	want := m.selectedKey()
+
+	m.SetReloader(func() *model.Snapshot { return testSnapshot() })
+	m.Update(refreshMsg{})
+
+	if got := m.selectedKey(); got != want {
+		t.Errorf("selection moved across a refresh: %q became %q", want, got)
+	}
+}
+
+// A failed read must leave the last good view up rather than blanking it.
+func TestRefreshSurvivesAMissingSnapshot(t *testing.T) {
+	m := newSized(143)
+	m.SetReloader(func() *model.Snapshot { return nil })
+	m.Update(refreshMsg{})
+	if m.snap == nil {
+		t.Fatal("a failed reload wiped the snapshot")
+	}
+	if out := m.View(); !strings.Contains(out, "MUSTER") {
+		t.Error("the view did not survive a failed reload")
+	}
+}

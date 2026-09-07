@@ -3,6 +3,7 @@ package ui
 import (
 	"sort"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -82,6 +83,10 @@ type Model struct {
 	sort  SortMode
 	moves []string
 
+	// reload fetches a fresh snapshot. Injected so the model stays testable
+	// without touching the filesystem.
+	reload func() *model.Snapshot
+
 	warning string
 	quit    bool
 }
@@ -92,7 +97,34 @@ func New(snap *model.Snapshot, warning string) *Model {
 	return m
 }
 
-func (m *Model) Init() tea.Cmd { return nil }
+// refreshInterval is how often the overlay re-reads the snapshot.
+//
+// The overlay is meant to be short-lived, spawned per keypress, so it used to
+// read once and never again. Left open, it froze: an agent could go from
+// working to blocked and the screen would still show the old state while
+// herdr's own sidebar showed the new one. A read costs about 25 microseconds,
+// so refreshing is cheaper than reasoning about when not to.
+const refreshInterval = 700 * time.Millisecond
+
+type refreshMsg struct{}
+
+func refreshTick() tea.Cmd {
+	return tea.Tick(refreshInterval, func(time.Time) tea.Msg { return refreshMsg{} })
+}
+
+func (m *Model) Init() tea.Cmd { return refreshTick() }
+
+// SetSnapshot swaps in fresh data, keeping the selection where it was.
+func (m *Model) SetSnapshot(s *model.Snapshot) {
+	if s == nil {
+		return
+	}
+	m.snap = s
+	m.rebuild()
+}
+
+// SetReloader supplies the function the overlay calls to refresh itself.
+func (m *Model) SetReloader(f func() *model.Snapshot) { m.reload = f }
 
 // Jump returns the pane the user chose, or "".
 func (m *Model) Jump() string { return m.jump }
@@ -262,6 +294,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.MouseMsg:
 		return m.handleMouse(msg)
+
+	case refreshMsg:
+		if m.reload != nil {
+			m.SetSnapshot(m.reload())
+		}
+		return m, refreshTick()
 	}
 	return m, nil
 }
@@ -280,7 +318,9 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	// Motion gives the hover highlight, so the card under the pointer lights up
 	// the same way the keyboard selection does.
 	if msg.Action == tea.MouseActionMotion {
-		if idx, ok := m.targetAt(msg.X, msg.Y); ok {
+		idx, ok := m.targetAt(msg.X, msg.Y)
+		m.logMouse(msg, idx, ok)
+		if ok {
 			m.hover = idx
 		} else {
 			m.hover = -1
@@ -292,6 +332,7 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	idx, ok := m.targetAt(msg.X, msg.Y)
+	m.logMouse(msg, idx, ok)
 	if !ok {
 		return m, nil
 	}

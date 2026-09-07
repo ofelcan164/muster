@@ -153,11 +153,14 @@ func TestStoppedProcessRanksThird(t *testing.T) {
 	}
 }
 
-func TestOrchestratorIsNotTriaged(t *testing.T) {
-	o := agent("orchestrator", model.StatusBlocked, time.Hour)
+// Superseded: a blocked orchestrator now does reach the ribbon. See
+// TestBlockedOrchestratorReachesTheRibbon and
+// TestOrchestratorStaysOutOfInformationalRanks.
+func TestOrchestratorIsNotTriagedWhenWorking(t *testing.T) {
+	o := agent("orchestrator", model.StatusWorking, time.Hour)
 	o.IsOrchestrator = true
 	if got := Rank(Input{Now: now, Repos: []model.Repo{repo("api", o)}}); len(got) != 0 {
-		t.Fatalf("orchestrator has its own strip, got %+v", got)
+		t.Fatalf("a working orchestrator has its own strip, got %+v", got)
 	}
 }
 
@@ -374,5 +377,37 @@ func TestIdleAgentThatNeverWorkedIsNotStalled(t *testing.T) {
 	}
 	if got[0].Agent != "stalled" {
 		t.Errorf("flagged %q, want stalled", got[0].Agent)
+	}
+}
+
+// A blocked orchestrator produced an empty ribbon while herdr's own sidebar
+// showed it as blocked. Its strip cannot convey a permission prompt with the
+// urgency the ribbon can.
+func TestBlockedOrchestratorReachesTheRibbon(t *testing.T) {
+	o := agent("orchestrator", model.StatusBlocked, 2*time.Minute)
+	o.IsOrchestrator = true
+	o.Question = "Do you want to proceed?"
+
+	got := Rank(Input{Now: now, Repos: []model.Repo{repo("work", o)}})
+	if len(got) != 1 {
+		t.Fatalf("a blocked orchestrator must reach the ribbon, got %+v", got)
+	}
+	if got[0].Rank != 1 || got[0].Detail != "Do you want to proceed?" {
+		t.Errorf("unexpected row %+v", got[0])
+	}
+}
+
+// It still stays out of the ranks its own strip already covers.
+func TestOrchestratorStaysOutOfInformationalRanks(t *testing.T) {
+	for _, st := range []model.Status{model.StatusDone, model.StatusIdle} {
+		o := agent("orchestrator", st, time.Hour)
+		o.IsOrchestrator = true
+		got := Rank(Input{
+			Now: now, Repos: []model.Repo{repo("work", o)},
+			EverWorked: map[string]bool{o.PaneID: true},
+		})
+		if len(got) != 0 {
+			t.Errorf("status %s: orchestrator should stay in its strip, got %+v", st, got)
+		}
 	}
 }

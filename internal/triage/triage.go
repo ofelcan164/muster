@@ -71,11 +71,16 @@ type agentRef struct {
 // Rank builds the ribbon. Rows are ordered by rank, then by the tie-break the
 // table specifies for that rank, and the result is capped at RibbonMax.
 func Rank(in Input) []model.Attention {
+	// The orchestrator has its own strip, so it stays out of the informational
+	// ranks. It does not stay out of the ribbon entirely: an orchestrator
+	// sitting at a permission prompt is the single most important thing on the
+	// screen, and excluding it wholesale meant a blocked orchestrator produced
+	// an empty ribbon while herdr's own sidebar showed it as blocked.
 	var all []agentRef
 	for _, r := range in.Repos {
 		for _, a := range r.Agents {
-			if a.IsOrchestrator {
-				continue // the orchestrator has its own strip
+			if a.IsOrchestrator && !needsYouRegardless(a) {
+				continue
 			}
 			all = append(all, agentRef{repo: r, agent: a})
 		}
@@ -169,6 +174,13 @@ func Rank(in Input) []model.Attention {
 		rows = rows[:RibbonMax]
 	}
 	return rows
+}
+
+// needsYouRegardless reports statuses that surface even for the orchestrator.
+// Being blocked is a request for you specifically; the strip cannot convey that
+// with the urgency the ribbon can.
+func needsYouRegardless(a model.Agent) bool {
+	return a.Status == model.StatusBlocked
 }
 
 // detectGates finds the failure the plan calls the most valuable thing Muster

@@ -28,6 +28,16 @@ func Run() (string, error) {
 	}
 
 	m := New(snap, warning)
+	// Keep it live. The daemon rewrites the snapshot every few seconds, and an
+	// overlay left open should follow rather than freeze on whatever was true
+	// when it opened.
+	m.SetReloader(func() *model.Snapshot {
+		fresh, err := daemon.ReadSnapshot()
+		if err != nil {
+			return nil
+		}
+		return fresh
+	})
 	// All-motion rather than cell-motion: cell motion only reports movement
 	// while a button is held, which gives drag but never hover.
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseAllMotion())
