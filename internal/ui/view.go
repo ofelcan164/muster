@@ -60,8 +60,8 @@ func (m *Model) ribbonLines(startY int) []string {
 
 	out := []string{m.sectionRule("needs you")}
 	for i, a := range rows {
-		selected := m.cursor < len(m.targets) &&
-			m.targets[m.cursor].ribbon && m.targets[m.cursor].paneID == a.PaneID
+		ti := m.ribbonTargetIndex("pane:" + a.PaneID)
+		selected := m.isActive(ti)
 
 		repo, _, _ := m.agentByPane(a.PaneID)
 		st := statusStyle(a.Status)
@@ -93,7 +93,7 @@ func (m *Model) ribbonLines(startY int) []string {
 			rowLines = append(rowLines, fitLine(head, m.width))
 		}
 
-		if ti := m.targetIndex("pane:" + a.PaneID); ti >= 0 {
+		if ti >= 0 {
 			for k := range rowLines {
 				m.noteRegion(startY+len(out)+k, 0, m.width-1, ti)
 			}
@@ -179,39 +179,42 @@ func (m *Model) repoLines(startY int) []string {
 // cardLines renders one repo card. Row positions are only recorded for the
 // first column, because a click resolves by line and multi-column rows would
 // otherwise overwrite each other. Keyboard reaches every column regardless.
+// cardLines renders one repo card.
+//
+// Every line is built alongside the target it belongs to, then styled from that
+// target's state. Doing it in one pass is what keeps the highlight and the
+// click region identical: they are derived from the same mapping, so a card
+// cannot end up clickable in places it does not light up.
 func (m *Model) cardLines(r model.Repo, width, startY, x0 int) []string {
 	style := repoStyle(r)
-	var out []string
+
+	type row struct {
+		text   string
+		target int
+	}
+	var rows []row
 
 	head := style.Bold(true).Render(r.Sigil + " " + strings.ToUpper(r.Display))
 	if r.Branch != "" {
 		head += " " + styFaint.Render(truncate(r.Branch, max(6, width-lipgloss.Width(head)-3)))
 	}
-	// The card header belongs to the repo target when the repo has no agents,
-	// and otherwise to its first agent, so clicking the title does something
+	// The header belongs to the repo target when nothing is running here, and
+	// otherwise to the first agent, so clicking the title does something
 	// sensible either way.
 	headTarget := m.targetIndex("repo:" + r.Key)
 	if len(r.Agents) > 0 {
 		headTarget = m.targetIndex("pane:" + r.Agents[0].PaneID)
 	}
-	headLine := fitLine(" "+head, width)
-	if m.isActive(headTarget) {
-		headLine = stySel.Render(fitLine(" "+head, width))
-	}
-	m.claim(startY+len(out), x0, width, headTarget)
-	out = append(out, headLine)
+	rows = append(rows, row{" " + head, headTarget})
 
 	if len(r.Agents) == 0 {
-		m.claim(startY+len(out), x0, width, headTarget)
-		out = append(out, fitLine(styFaint.Render("   no agents"), width))
+		rows = append(rows, row{styFaint.Render("   no agents"), headTarget})
 	}
 	for _, a := range r.Agents {
 		ti := m.targetIndex("pane:" + a.PaneID)
-		lines := m.agentLines(a, width, ti)
-		for k := range lines {
-			m.claim(startY+len(out)+k, x0, width, ti)
+		for _, line := range m.agentLines(a, width) {
+			rows = append(rows, row{line, ti})
 		}
-		out = append(out, lines...)
 	}
 
 	if len(r.OtherPanes) > 0 {
@@ -221,11 +224,22 @@ func (m *Model) cardLines(r model.Repo, width, startY, x0 int) []string {
 		}
 		foot := fmt.Sprintf("   %s · %s", plural(len(r.OtherPanes), "pane"),
 			truncate(strings.Join(labels, " · "), max(6, width-18)))
-		m.claim(startY+len(out), x0, width, headTarget)
-		out = append(out, fitLine(styFaint.Render(foot), width))
+		rows = append(rows, row{styFaint.Render(foot), headTarget})
 	}
-	m.claim(startY+len(out), x0, width, headTarget)
-	return append(out, strings.Repeat(" ", width))
+	// A blank tail line, still part of the card so the hover block reads as one
+	// shape rather than stopping mid-card.
+	rows = append(rows, row{"", headTarget})
+
+	out := make([]string, 0, len(rows))
+	for i, rw := range rows {
+		m.claim(startY+i, x0, width, rw.target)
+		line := fitLine(rw.text, width)
+		if m.isActive(rw.target) {
+			line = stySel.Render(line)
+		}
+		out = append(out, line)
+	}
+	return out
 }
 
 // claim marks a whole cell-width line as belonging to a target.
@@ -244,8 +258,9 @@ func (m *Model) isActive(target int) bool {
 	return target == m.cursor || target == m.hover
 }
 
-func (m *Model) agentLines(a model.Agent, width, target int) []string {
-	selected := m.isActive(target)
+// agentLines renders one agent. Selection styling is applied by the caller, so
+// that a whole card highlights as a block rather than a single row.
+func (m *Model) agentLines(a model.Agent, width int) []string {
 	st := statusStyle(a.Status)
 
 	marker := " "
@@ -257,11 +272,7 @@ func (m *Model) agentLines(a model.Agent, width, target int) []string {
 		styFG.Render(truncate(a.Name, 14)),
 		styMeta.Render(ageText(a.Age(time.Now()), a.AgeKnown)))
 
-	first := fitLine(line, width)
-	if selected {
-		first = stySel.Render(fitLine(line, width))
-	}
-	out := []string{first}
+	out := []string{line}
 
 	// Task line, dimmed and marked when it came from a lower rung of the
 	// ladder. Showing doubt beats showing false confidence.
@@ -270,7 +281,7 @@ func (m *Model) agentLines(a model.Agent, width, target int) []string {
 		if a.TaskSource == model.TaskFromOrchestratorStale {
 			style = styFaint
 		}
-		out = append(out, fitLine(style.Render("     "+truncate(task, max(6, width-6))), width))
+		out = append(out, style.Render("     "+truncate(task, max(6, width-6))))
 	}
 	return out
 }
@@ -297,13 +308,16 @@ func (m *Model) viewFilterBar() string {
 	return padLine(bar, m.width)
 }
 
+// sectionRule is exactly one line. It must not append a newline of its own:
+// rendering is line-based now, and a rule that secretly counted as two lines
+// shifted every click region below it by one per section.
 func (m *Model) sectionRule(label string) string {
 	text := " " + strings.ToUpper(label) + " "
 	rule := m.width - lipgloss.Width(text) - 1
 	if rule < 0 {
 		rule = 0
 	}
-	return stySection.Render(text) + styFaint.Render(strings.Repeat("─", rule)) + "\n"
+	return stySection.Render(text) + styFaint.Render(strings.Repeat("─", rule))
 }
 
 // taskText prefers the blocking question, which says what the agent needs

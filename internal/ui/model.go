@@ -328,9 +328,19 @@ func (m *Model) targetAt(x, y int) (int, bool) {
 }
 
 // targetIndex finds the cursor position for a drawn item.
-func (m *Model) targetIndex(key string) int {
+//
+// An agent in the ribbon is also in the grid, so it has two targets. Which one
+// a rendered line should point at depends on where the line is: a grid card must
+// not resolve to the ribbon row above it, or clicking the card would move the
+// cursor into the ribbon and light up the wrong thing.
+func (m *Model) targetIndex(key string) int { return m.findTarget(key, false) }
+
+// ribbonTargetIndex finds the ribbon row for an item.
+func (m *Model) ribbonTargetIndex(key string) int { return m.findTarget(key, true) }
+
+func (m *Model) findTarget(key string, ribbon bool) int {
 	for i, t := range m.targets {
-		if m.keyOf(t) == key {
+		if t.ribbon == ribbon && m.keyOf(t) == key {
 			return i
 		}
 	}
@@ -573,3 +583,8 @@ func (m *Model) TargetPane(i int) string {
 // Cursor and Hover are exposed for tests.
 func (m *Model) Cursor() int { return m.cursor }
 func (m *Model) Hover() int  { return m.hover }
+
+// IsRibbonTarget reports whether a target is a ribbon row, for tests.
+func (m *Model) IsRibbonTarget(i int) bool {
+	return i >= 0 && i < len(m.targets) && m.targets[i].ribbon
+}

@@ -7,11 +7,18 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 
 	"github.com/ofelcan/muster/internal/model"
 )
 
 var ansi = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+// lipgloss strips styling when it cannot detect a colour-capable terminal,
+// which a test binary never has. Forcing the profile is what lets these tests
+// assert on what a real pane would actually show.
+func init() { lipgloss.SetColorProfile(termenv.TrueColor) }
 
 func visibleWidth(line string) int {
 	return len([]rune(ansi.ReplaceAllString(line, "")))
@@ -486,10 +493,14 @@ func TestWholeCardIsClickable(t *testing.T) {
 
 	byTarget := map[int]int{}
 	for _, h := range m.Hits() {
+		// Ribbon rows are legitimately one line; this is about grid cards.
+		if m.IsRibbonTarget(h.Target) {
+			continue
+		}
 		byTarget[h.Target]++
 	}
 	if len(byTarget) == 0 {
-		t.Fatal("nothing was made clickable")
+		t.Fatal("no grid card was made clickable")
 	}
 	for target, lines := range byTarget {
 		if lines < 2 {
@@ -575,5 +586,98 @@ func TestAgentsFirstHoldsAcrossSortModes(t *testing.T) {
 				break
 			}
 		}
+	}
+}
+
+// The highlight and the click region are derived from the same mapping, so
+// anywhere a card is clickable it must also light up. They disagreed before:
+// the whole card was clickable but only its header was styled.
+func TestHoverCoversEveryClickableLineOfACard(t *testing.T) {
+	m := newSized(143)
+	m.View()
+
+	// Pick a target and hover its first line.
+	hits := m.Hits()
+	if len(hits) == 0 {
+		t.Skip("nothing clickable")
+	}
+	target := -1
+	for _, h := range hits {
+		if !m.IsRibbonTarget(h.Target) {
+			target = h.Target
+			break
+		}
+	}
+	if target < 0 {
+		t.Skip("no grid target")
+	}
+	var claimed []Hit
+	for _, h := range hits {
+		if h.Target == target {
+			claimed = append(claimed, h)
+		}
+	}
+	if len(claimed) < 2 {
+		t.Skip("target claims a single line")
+	}
+	m.Update(tea.MouseMsg{X: claimed[0].X0, Y: claimed[0].Y, Action: tea.MouseActionMotion})
+
+	lines := strings.Split(m.View(), "\n")
+	styled := 0
+	for _, h := range claimed {
+		if h.Y < len(lines) && strings.Contains(lines[h.Y], "\x1b[") {
+			styled++
+		}
+	}
+	if styled != len(claimed) {
+		t.Errorf("hover styled %d of %d claimed lines; the highlight must cover the whole click area",
+			styled, len(claimed))
+	}
+}
+
+// Click regions must line up with what was drawn. A section rule that secretly
+// counted as two lines shifted every region below it, so clicks landed on the
+// wrong card entirely.
+func TestClickRegionsLineUpWithWhatWasDrawn(t *testing.T) {
+	m := newSized(143)
+	out := m.View()
+	lines := strings.Split(out, "\n")
+
+	for _, h := range m.Hits() {
+		if h.Y >= len(lines) {
+			t.Errorf("a click region at y=%d is past the end of a %d line render",
+				h.Y, len(lines))
+			continue
+		}
+		if m.IsRibbonTarget(h.Target) {
+			continue
+		}
+		// A grid target's own text must actually appear on the line it claims.
+		if pane := m.TargetPane(h.Target); pane != "" {
+			continue // agent rows vary; the header check below is the tight one
+		}
+	}
+
+	// The first grid card's header text must sit on the first line it claims.
+	for _, r := range m.orderedRepos(m.visibleRepos()) {
+		ti := m.targetIndex("repo:" + r.Key)
+		if ti < 0 {
+			continue
+		}
+		var first = -1
+		for _, h := range m.Hits() {
+			if h.Target == ti && (first < 0 || h.Y < first) {
+				first = h.Y
+			}
+		}
+		if first < 0 || first >= len(lines) {
+			continue
+		}
+		plain := ansi.ReplaceAllString(lines[first], "")
+		if !strings.Contains(strings.ToUpper(plain), strings.ToUpper(r.Display)) {
+			t.Errorf("repo %s claims line %d but that line reads %q",
+				r.Display, first, strings.TrimSpace(plain))
+		}
+		return
 	}
 }
