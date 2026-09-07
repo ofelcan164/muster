@@ -3,11 +3,6 @@
 A herdr plugin: one overlay showing every agent across every repo. Go, bubbletea,
 lipgloss. A daemon (`musterd`) writes a snapshot; the overlay (`muster`) reads it.
 
-`docs/plan.html` is the design. `docs/HANDOFF.md` is the current state and the
-decisions that were deliberate. `docs/herdr-api-notes.md` is what the herdr API
-actually does, with evidence. Read those before changing behaviour; they exist so
-nothing here gets re-derived.
-
 ## Build and test
 
 ```
@@ -28,8 +23,8 @@ overlay, or the live session keeps running the old one.
   `pane.read` on the reconcile path.
 - **The daemon owns `state.json`** and rewrites it several times a second. The
   overlay writes `ui.json`. Do not merge them.
-- **herdr mouse coordinates are pane-local and 0-based.** Measured, not assumed.
-  No offset correction belongs anywhere.
+- **herdr mouse coordinates are pane-local and 0-based.** Measured against a
+  real mouse, not assumed. No offset correction belongs anywhere.
 - **`AgeKnown` false means a lower bound.** Fine for a threshold, wrong for
   ordering. `internal/triage` handles both cases explicitly; do not collapse them.
 - **Nothing is hardcoded about any repo.** Names, colours, sigils and grid slots
@@ -42,7 +37,6 @@ overlay, or the live session keeps running the old one.
   replacement.
 - **Stage explicit paths.** A broad `git add` has twice swept unrelated work into
   a commit.
-- **Do not commit the HTML docs.** `docs/questions*.html` stay untracked.
 - **Do not launch the herdr TUI from an agent session.** It hangs. Drive the
   server from the CLI and read the overlay with `herdr pane read <pane>`.
 - **Ask before prompting the user's agents.** They cost the user tokens.

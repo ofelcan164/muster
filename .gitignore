@@ -1,1 +1,5 @@
 bin/
+
+# The user asked for these to stay out of git. Enforced here rather than
+# written down somewhere and hoped for.
+docs/questions*.html
