@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -108,7 +109,18 @@ func cmdDaemon() int {
 	}
 	defer lock.Release()
 
-	logger := log.New(os.Stderr, "musterd ", log.LstdFlags|log.Lmsgprefix)
+	// The daemon's own handle on the log, so it can rotate mid-run. Ensure also
+	// points the child's stderr here, which stays as it is: a panic writes once
+	// and is exactly what you want in the file.
+	out := io.Writer(os.Stderr)
+	if logFile, err := state.OpenLog(); err == nil {
+		defer logFile.Close()
+		out = logFile
+	} else {
+		fmt.Fprintf(os.Stderr, "musterd: log: %v, writing to stderr\n", err)
+	}
+
+	logger := log.New(out, "musterd ", log.LstdFlags|log.Lmsgprefix)
 	logger.Printf("start pid=%d socket=%s state=%s", os.Getpid(), herdr.SocketPath(), state.Dir())
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
