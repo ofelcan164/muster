@@ -179,9 +179,6 @@ func (m *Model) repoLines(startY int) []string {
 	return out
 }
 
-// cardLines renders one repo card. Row positions are only recorded for the
-// first column, because a click resolves by line and multi-column rows would
-// otherwise overwrite each other. Keyboard reaches every column regardless.
 // cardLines renders one repo card.
 //
 // Every line is built alongside the target it belongs to, then styled from that

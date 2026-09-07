@@ -45,6 +45,30 @@ Confirmed by spike:
   find your own pane without the env var.
 - Sized to the tab area, i.e. terminal width minus the sidebar.
 
+**Answered 2026-09-07: mouse coordinates arrive pane-local and 0-based.**
+This was the open question the whole click and hover story rested on, and a
+unit test could never answer it: the handler was being called with coordinates
+the model itself produced.
+
+Measured by opening the overlay through `plugin.pane.open` with
+`env.MUSTER_MOUSE_DEBUG` set, then moving a real mouse across it. 487 events
+against a pane herdr reported at screen `x=97 y=1`, inside a tab area starting
+at screen column 26:
+
+```
+view 142x40    x range 0..141    y range 0..20
+123 events below x=26     0 events at or above x=142     y reaches 0, never 40
+```
+
+Screen-absolute coordinates would have started at 26 and run to 167, and y
+would have started at 1. So herdr translates, the same as tmux does, and no
+offset correction belongs in Muster.
+
+The 141 events that resolved to nothing are all geometry working correctly:
+they land on the column separators, on the columns integer division leaves over
+at the right edge (`x=140,141` for a 142-wide three-column grid), on the header
+and section rules, or below the last card.
+
 ## Jumping out of an overlay
 
 `agent focus <target>` then exit the process. That is the whole thing.

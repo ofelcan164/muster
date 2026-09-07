@@ -97,6 +97,10 @@ alternative.
 Both of these cost real time to establish and are recorded in
 `docs/herdr-api-notes.md` with the evidence.
 
+- Mouse coordinates from herdr are **pane-local and 0-based**. Measured with a
+  real mouse against a pane at screen `x=97` inside a tab area starting at
+  column 26; nothing in Muster needs an offset correction. Hover was never
+  broken.
 - A `plugin_action` keybinding **cannot** open a `[[panes]]` entrypoint. Only
   `[[actions]]` ids resolve. `prefix+m` binds to an action that shells out.
 - There is **no global per-token sidebar style table**. Styles must be inline in
@@ -112,26 +116,6 @@ Both of these cost real time to establish and are recorded in
 ## Known problems
 
 Ordered by how much they matter.
-
-**Mouse hover may be resolving to the wrong card.** Unconfirmed as of writing.
-Clicks and hover are matched against rectangular hit regions recorded during
-render, and the unit tests pass because they call the handler directly with
-coordinates the model itself produced. That proves the logic and says nothing
-about whether the coordinates herdr delivers are pane-local or screen-absolute.
-If they carry the sidebar's 26-column offset, hover lands on the wrong column
-and every test still passes. Set `MUSTER_MOUSE_DEBUG` to a path and open the
-overlay through `plugin.pane.open` with that in `env` to see what actually
-arrives. `internal/ui/debug.go`.
-
-**Manual repo order is session-only.** `J`/`K` reorder but nothing persists it.
-
-**Click regions only resolve the first grid column for ribbon rows.** Ribbon
-rows claim full width, which is right, but the interaction between that and
-multi-column grid rows has not been stress-tested at every width.
-
-**The daemon logs unboundedly.** One line per failed reconcile while the server
-is unreachable, with no rotation. Bounded in practice because the daemon exits
-after 60 seconds of an unreachable server, but a flapping server would grow it.
 
 **`internal/ui/model.go` is 645 lines** and does state, navigation, filtering
 and mouse handling. It wants splitting the way `internal/daemon` was.
