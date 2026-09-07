@@ -53,6 +53,21 @@ func main() {
 	case "uninstall":
 		os.Exit(cmdUninstall(args[1:]))
 
+	case "install-skill":
+		os.Exit(cmdInstallSkill())
+
+	case "uninstall-skill":
+		res, err := install.RemoveSkill()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "muster: %v\n", err)
+			os.Exit(1)
+		}
+		if res.Changed {
+			fmt.Printf("removed the reporting skill from %s\n", res.Path)
+		} else {
+			fmt.Println("the reporting skill was not installed")
+		}
+
 	case "uninstall-keys":
 		res, err := install.Remove()
 		if err != nil {
@@ -122,6 +137,7 @@ usage:
   muster chain set <spec> [--independent a,b] [--by NAME]
   muster chain clear
   muster install                   start the daemon and install keybindings
+  muster install-skill             install the reporting skill for the orchestrator
   muster uninstall [--purge]       remove everything Muster wrote outside itself
   muster discover                  rescan after a workspace or worktree appears
 
@@ -131,7 +147,8 @@ chain spec syntax:
 The chain is written by the orchestrator during workflow setup and persists
 across sessions. Read it back with "chain get" to confirm or replace it.
 
-The overlay is not built yet. Use "musterd dump" to see the current state.
+The reporting skill teaches the orchestrator to write the task line Muster
+shows. Without it agents fall back to their terminal titles.
 `)
 }
 
@@ -305,6 +322,28 @@ func reloadConfig() {
 // herdrBin honours the path herdr injects, never a bare `herdr` off PATH.
 func herdrBin() string { return os.Getenv("HERDR_BIN_PATH") }
 
+// cmdInstallSkill installs the reporting skill into the user's personal skills.
+//
+// It is a separate command from `muster install` on purpose. Keybindings go in
+// herdr's config, which is Muster's business; a skill goes in the user's Claude
+// directory, which is not, so installing it stays something you ask for.
+func cmdInstallSkill() int {
+	res, err := install.Skill()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "muster install-skill: %v\n", err)
+		return 1
+	}
+	if res.Changed {
+		fmt.Printf("installed the reporting skill at %s\n", res.Path)
+	} else {
+		fmt.Printf("the reporting skill is already current at %s\n", res.Path)
+	}
+	fmt.Println("\nit triggers on:")
+	fmt.Printf("  %s\n", install.SkillDescription())
+	fmt.Println("\nremove it with: muster uninstall-skill")
+	return 0
+}
+
 // cmdUninstall undoes everything Muster wrote outside its own state directory.
 func cmdUninstall(args []string) int {
 	fs := flag.NewFlagSet("uninstall", flag.ExitOnError)
@@ -321,6 +360,12 @@ func cmdUninstall(args []string) int {
 		fmt.Printf("backup: %s\n", res.Backup)
 	} else {
 		fmt.Println("nothing of Muster's was in the config")
+	}
+
+	if skill, err := install.RemoveSkill(); err != nil {
+		fmt.Fprintf(os.Stderr, "muster uninstall: skill: %v\n", err)
+	} else if skill.Changed {
+		fmt.Printf("removed the reporting skill from %s\n", skill.Path)
 	}
 
 	if *purge {

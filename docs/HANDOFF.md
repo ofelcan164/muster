@@ -120,12 +120,21 @@ and found not to be a problem. See the git log from `ca3695e` on.
 
 ## What is not built
 
-- Phase 2 entirely: the reporting skill, ladder tiers 1 to 3, the orchestrator
-  strip's `i` input, the `t` repair key.
 - Phase 3 entirely: sidebar tokens and generated config, `agent.view.set`
   sorting, the chain strip, notifications, notes on `n`.
 - Tier 3 of the fallback ladder is **cancelled**, not pending. The user chose to
-  skip per-repo Stop hooks.
+  skip per-repo Stop hooks. `taskFor` still reads a `self_task` token, so the
+  rung works if anything ever writes one; nothing does, and the reporting skill
+  deliberately does not mention it.
+
+Phase 2 is done. Tiers 1, 2, 4 and 5 of the ladder and gate detection turned out
+to have been built in phase 1 already, whatever this file said. What was
+genuinely missing was the reporting skill and its installer, the orchestrator
+strip, and the `i` and `t` keys.
+
+`muster install-skill` writes the skill and `muster uninstall-skill` removes it;
+`muster uninstall` calls the latter. It has never been run against the user's
+real `~/.claude/skills/`, only a temp directory. That is theirs to run.
 
 ## Decisions waiting on the user
 

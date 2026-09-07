@@ -51,9 +51,18 @@ command = ["./bin/muster", "mark-orchestrator"]
 
 [[actions]]
 id = "install"
-title = "Install reporting skill, repo hooks and keybindings"
+title = "Install Muster's keybindings"
 contexts = ["global"]
 command = ["./bin/muster", "install"]
+
+# Separate from install on purpose. Keybindings go in herdr's config, which is
+# Muster's business. A skill goes in the user's Claude directory, which is not,
+# so installing it stays something they ask for.
+[[actions]]
+id = "install-skill"
+title = "Install the reporting skill for the orchestrator"
+contexts = ["global"]
+command = ["./bin/muster", "install-skill"]
 
 # Rare events only. Status and output events are far too chatty for a
 # process-per-event hook; musterd subscribes to those over the socket.
