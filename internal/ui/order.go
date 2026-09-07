@@ -113,7 +113,16 @@ func applyMoves(repos []model.Repo, moves []string) []model.Repo {
 }
 
 // moveSelectedRepo shifts the selected repo one place in the manual order.
+//
+// Not while filtering. The order is built from what is visible, so a move made
+// against three matches would record an arrangement of three repos and push
+// every other repo behind them. Filtering already collapses the grid into a
+// ranked list where position carries no meaning, so there is nothing to
+// rearrange.
 func (m *Model) moveSelectedRepo(delta int) {
+	if m.filter != "" {
+		return
+	}
 	key := m.selectedRepo()
 	if key == "" {
 		return
@@ -136,6 +145,9 @@ func (m *Model) moveSelectedRepo(delta int) {
 	order[at], order[to] = order[to], order[at]
 	m.moves = order
 	m.rebuild()
+	if m.saveOrder != nil {
+		m.saveOrder(order)
+	}
 }
 
 // currentOrder is the repo keys as they are drawn right now.

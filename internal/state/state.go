@@ -246,3 +246,54 @@ func WriteAtomic(path string, data []byte) error {
 	}
 	return os.Rename(tmp, path)
 }
+
+// UIStatePath is the overlay's own file, deliberately separate from
+// PersistPath.
+//
+// The daemon holds Persisted in memory and rewrites it several times a second,
+// so anything the overlay wrote there would survive until the next reconcile
+// and no longer. Two writers, two files, no coordination needed.
+func UIStatePath() string { return filepath.Join(Dir(), "ui.json") }
+
+// UIState is what the overlay remembers between openings.
+type UIState struct {
+	// RepoOrder is the arrangement made with J and K, as repo keys in drawn
+	// order. Keys that no longer exist are ignored on load rather than pruned,
+	// so a repo you rearranged and then closed keeps its place if it comes back.
+	RepoOrder []string `json:"repo_order"`
+
+	lastWritten []byte
+}
+
+// LoadUI reads the overlay's state. A missing or corrupt file is not an error:
+// the overlay opens with the default order, which is what it did before any of
+// this existed.
+func LoadUI() *UIState {
+	u := &UIState{}
+	b, err := os.ReadFile(UIStatePath())
+	if err != nil {
+		return u
+	}
+	_ = json.Unmarshal(b, u)
+	u.lastWritten = b
+	return u
+}
+
+// Save writes the overlay's state, skipping a write that would change nothing.
+func (u *UIState) Save() error {
+	if Dir() == "" {
+		return ErrNoStateDir
+	}
+	b, err := json.Marshal(u)
+	if err != nil {
+		return err
+	}
+	if bytes.Equal(b, u.lastWritten) {
+		return nil
+	}
+	if err := WriteAtomic(UIStatePath(), b); err != nil {
+		return err
+	}
+	u.lastWritten = b
+	return nil
+}

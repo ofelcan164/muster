@@ -10,6 +10,7 @@ import (
 	"github.com/ofelcan/muster/internal/daemon"
 	"github.com/ofelcan/muster/internal/herdr"
 	"github.com/ofelcan/muster/internal/model"
+	"github.com/ofelcan/muster/internal/state"
 )
 
 // staleAfter is when a snapshot stops being trustworthy. The daemon rewrites
@@ -28,6 +29,17 @@ func Run() (string, error) {
 	}
 
 	m := New(snap, warning)
+	// The arrangement made with J and K, restored from the last time the overlay
+	// was open. A grid you rearrange and that forgets is worse than one you
+	// cannot rearrange at all.
+	ui := state.LoadUI()
+	m.SetManualOrder(ui.RepoOrder)
+	m.SetOrderSaver(func(order []string) {
+		ui.RepoOrder = order
+		// A failed write costs this session's arrangement and nothing else, and
+		// there is nowhere to report it from inside a full-screen overlay.
+		_ = ui.Save()
+	})
 	// Keep it live. The daemon rewrites the snapshot every few seconds, and an
 	// overlay left open should follow rather than freeze on whatever was true
 	// when it opened.

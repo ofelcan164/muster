@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"sort"
 	"strings"
 	"time"
 
@@ -83,6 +82,10 @@ type Model struct {
 	sort  SortMode
 	moves []string
 
+	// saveOrder persists the manual arrangement. Injected the same way reload
+	// is, so the model never touches the filesystem itself.
+	saveOrder func([]string)
+
 	// reload fetches a fresh snapshot. Injected so the model stays testable
 	// without touching the filesystem.
 	reload func() *model.Snapshot
@@ -125,6 +128,18 @@ func (m *Model) SetSnapshot(s *model.Snapshot) {
 
 // SetReloader supplies the function the overlay calls to refresh itself.
 func (m *Model) SetReloader(f func() *model.Snapshot) { m.reload = f }
+
+// SetManualOrder restores an arrangement made in an earlier session.
+func (m *Model) SetManualOrder(order []string) {
+	m.moves = order
+	m.rebuild()
+}
+
+// SetOrderSaver supplies the function that persists the manual arrangement.
+func (m *Model) SetOrderSaver(f func([]string)) { m.saveOrder = f }
+
+// ManualOrder is the current arrangement, exposed for tests.
+func (m *Model) ManualOrder() []string { return m.moves }
 
 // Jump returns the pane the user chose, or "".
 func (m *Model) Jump() string { return m.jump }
@@ -193,7 +208,11 @@ func (m *Model) rebuild() {
 		}
 	}
 
-	repos := m.visibleRepos()
+	// The same ordering the view draws, not the raw snapshot order. These were
+	// two separate calls, so pressing s or moving a card with J left the cursor
+	// walking one order while the screen showed another, and the column recorded
+	// here disagreed with the column the card was painted in.
+	repos := m.orderedRepos(m.visibleRepos())
 	cols := columnsFor(m.width)
 	if m.filter != "" {
 		cols = 1 // filtering always collapses to one list
@@ -589,14 +608,6 @@ func (m *Model) repoByKey(key string) model.Repo {
 		}
 	}
 	return model.Repo{ColorIndex: -1, Sigil: "·"}
-}
-
-// sortedRepos returns repos in grid slot order, which is what pins a repo to
-// the same cell for good.
-func sortedRepos(repos []model.Repo) []model.Repo {
-	out := append([]model.Repo(nil), repos...)
-	sort.SliceStable(out, func(i, j int) bool { return out[i].GridSlot < out[j].GridSlot })
-	return out
 }
 
 // TargetCount and ReachableRepos exist for tests and diagnostics: they report
