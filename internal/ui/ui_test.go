@@ -391,9 +391,17 @@ func TestAlphabeticalSort(t *testing.T) {
 	m := newSized(143)
 	m.sort = SortAlphabetical
 	repos := m.orderedRepos(m.visibleRepos())
+	// Agents-first is the outer key, so alphabetical holds within each group
+	// rather than across the whole list.
 	for i := 1; i < len(repos); i++ {
+		prevBusy := len(repos[i-1].Agents) > 0
+		busy := len(repos[i].Agents) > 0
+		if prevBusy != busy {
+			continue // group boundary
+		}
 		if repos[i-1].Display > repos[i].Display {
-			t.Errorf("not alphabetical: %s before %s", repos[i-1].Display, repos[i].Display)
+			t.Errorf("not alphabetical within its group: %s before %s",
+				repos[i-1].Display, repos[i].Display)
 		}
 	}
 }
@@ -421,8 +429,8 @@ func TestManualReorderMovesARepo(t *testing.T) {
 func TestMouseClickSelectsThenJumps(t *testing.T) {
 	m := newSized(143)
 	m.View() // populate row positions
-	// Pick a row that is not already selected, so the first click has to move
-	// the cursor rather than counting as a click on the selection.
+	// One click goes. Requiring two would make the mouse slower than the
+	// keyboard, which defeats the point of having it.
 	var row, col, want int
 	found := false
 	for _, h := range m.Hits() {
@@ -434,18 +442,31 @@ func TestMouseClickSelectsThenJumps(t *testing.T) {
 	if !found {
 		t.Skip("no clickable unselected agent row")
 	}
-	click := tea.MouseMsg{X: col, Y: row, Action: tea.MouseActionRelease, Button: tea.MouseButtonLeft}
-	m.Update(click)
-	if m.cursor != want {
-		t.Fatalf("click selected %d, want %d", m.cursor, want)
-	}
-	if m.Jump() != "" {
-		t.Fatal("the first click should select, not jump")
-	}
-	m.Update(click)
+	m.Update(tea.MouseMsg{X: col, Y: row, Action: tea.MouseActionRelease, Button: tea.MouseButtonLeft})
 	if m.Jump() != m.TargetPane(want) {
-		t.Errorf("clicking the selection should jump, got %q", m.Jump())
+		t.Errorf("a single click should jump to %q, got %q", m.TargetPane(want), m.Jump())
 	}
+}
+
+// Clicking a repo card with no agents selects it without jumping, because there
+// is nowhere to go.
+func TestClickingAnAgentlessCardDoesNotJump(t *testing.T) {
+	m := newSized(143)
+	m.View()
+	for _, h := range m.Hits() {
+		if m.TargetPane(h.Target) == "" {
+			m.Update(tea.MouseMsg{X: h.X0, Y: h.Y,
+				Action: tea.MouseActionRelease, Button: tea.MouseButtonLeft})
+			if m.Jump() != "" {
+				t.Errorf("nowhere to jump, got %q", m.Jump())
+			}
+			if m.Cursor() != h.Target {
+				t.Errorf("the click should still select the card")
+			}
+			return
+		}
+	}
+	t.Skip("no agent-less card in the fixture")
 }
 
 func TestMouseWheelMovesSelection(t *testing.T) {
@@ -513,5 +534,46 @@ func TestHoverHighlightsWhatAClickWouldTake(t *testing.T) {
 	m.Update(tea.MouseMsg{X: 0, Y: 9999, Action: tea.MouseActionMotion})
 	if m.Hover() != -1 {
 		t.Errorf("hover should clear off-target, got %d", m.Hover())
+	}
+}
+
+// Quiet repos are still shown, just never above one you are working in.
+func TestReposWithAgentsSortFirst(t *testing.T) {
+	m := newSized(143)
+	repos := m.orderedRepos(m.visibleRepos())
+	if len(repos) < 2 {
+		t.Skip("need several repos")
+	}
+	seenQuiet := false
+	for _, r := range repos {
+		if len(r.Agents) == 0 {
+			seenQuiet = true
+			continue
+		}
+		if seenQuiet {
+			t.Errorf("repo %s has agents but sorts after a quiet one", r.Display)
+		}
+	}
+	// And nothing was dropped.
+	if len(repos) != len(m.snap.Repos) {
+		t.Errorf("showing %d of %d repos; quiet repos should still appear",
+			len(repos), len(m.snap.Repos))
+	}
+}
+
+// The rule holds under every sort mode, not just the default.
+func TestAgentsFirstHoldsAcrossSortModes(t *testing.T) {
+	for _, mode := range []SortMode{SortFirstSeen, SortAlphabetical, SortAttention} {
+		m := newSized(143)
+		m.sort = mode
+		seenQuiet := false
+		for _, r := range m.orderedRepos(m.visibleRepos()) {
+			if len(r.Agents) == 0 {
+				seenQuiet = true
+			} else if seenQuiet {
+				t.Errorf("sort %v put a busy repo after a quiet one", mode)
+				break
+			}
+		}
 	}
 }

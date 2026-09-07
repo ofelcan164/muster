@@ -28,7 +28,9 @@ func Run() (string, error) {
 	}
 
 	m := New(snap, warning)
-	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	// All-motion rather than cell-motion: cell motion only reports movement
+	// while a button is held, which gives drag but never hover.
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseAllMotion())
 	if _, err := p.Run(); err != nil {
 		return "", err
 	}

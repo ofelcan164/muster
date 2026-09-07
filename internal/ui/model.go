@@ -295,13 +295,10 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
-	if idx == m.cursor {
-		// Clicking what is already selected is the jump, so a second click
-		// commits and a first click on something else only moves the selection.
-		return m.activate()
-	}
+	// One click goes. Requiring a click to select and another to commit makes
+	// the mouse slower than the keyboard, which defeats the point of having it.
 	m.cursor = idx
-	return m, nil
+	return m.activate()
 }
 
 // hitRegion is a rectangle of the screen belonging to one target. Cards claim
