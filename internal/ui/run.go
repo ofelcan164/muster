@@ -40,6 +40,13 @@ func Run() (string, error) {
 		// there is nowhere to report it from inside a full-screen overlay.
 		_ = ui.Save()
 	})
+	// How i and t reach the orchestrator. agent.prompt is the same call the
+	// orchestrator's own tooling uses, so a message from Muster is not a
+	// special case at the other end.
+	m.SetPrompter(func(paneID, text string) error {
+		return herdr.NewClient("").Call("agent.prompt",
+			map[string]any{"target": paneID, "text": text}, nil)
+	})
 	// Keep it live. The daemon rewrites the snapshot every few seconds, and an
 	// overlay left open should follow rather than freeze on whatever was true
 	// when it opened.

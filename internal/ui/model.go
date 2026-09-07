@@ -1,9 +1,3 @@
-// Package ui is the overlay: one screen showing every agent across every repo,
-// opened and closed on a single key.
-//
-// It owns no state of its own beyond the selection. Everything it draws comes
-// from the daemon's snapshot, which it re-reads while it is open, so the screen
-// follows the session rather than freezing on whatever was true when it opened.
 package ui
 
 import (
@@ -66,6 +60,20 @@ type Model struct {
 	// jump is set when the user picked something. main focuses it and exits,
 	// which is the whole of jumping: no close call and no delay.
 	jump string
+
+	// composing is the i input, open on the orchestrator strip. It is a mode
+	// for the same reason filtering is: every printable key is text while it is
+	// open.
+	composing bool
+	compose   string
+
+	// notice is what just happened, shown on the strip. A full-screen overlay
+	// has nowhere else to report that a send worked or failed.
+	notice string
+
+	// prompt sends a message to an agent. Injected so the model stays testable
+	// without a socket, and so a test can never prompt a real agent.
+	prompt func(paneID, text string) error
 
 	// sort is how the grid is ordered, and moves is the manual arrangement
 	// layered on top of it.

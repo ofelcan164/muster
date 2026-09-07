@@ -3,6 +3,8 @@
 
 package ui
 
+import "strconv"
+
 // target is something the selection can land on.
 //
 // A repo with no agents is still a target. Selection used to cover agents only,
@@ -13,10 +15,25 @@ type target struct {
 	paneID string
 	// repoKey identifies the card the target sits in.
 	repoKey string
-	// column is the grid column, used for left and right. Ribbon rows are -1.
+	// column is the grid column, used for left and right. Rows outside the grid
+	// are -1.
 	column int
-	ribbon bool
+	kind   targetKind
 }
+
+// targetKind is which block of the screen a target lives in.
+//
+// The same agent can be in more than one: an agent in the ribbon is also in the
+// grid, and the orchestrator is in the grid and on its own strip. So a lookup
+// by key has to say which block it means, or a click on a card resolves to the
+// ribbon row above it and lights up the wrong thing.
+type targetKind int
+
+const (
+	kindGrid targetKind = iota
+	kindRibbon
+	kindStrip
+)
 
 // rebuild recomputes the selectable targets after anything changes.
 func (m *Model) rebuild() {
@@ -25,7 +42,7 @@ func (m *Model) rebuild() {
 
 	if !m.filtering && m.filter == "" {
 		for _, a := range m.ribbonRows() {
-			m.targets = append(m.targets, target{paneID: a.PaneID, column: -1, ribbon: true})
+			m.targets = append(m.targets, target{paneID: a.PaneID, column: -1, kind: kindRibbon})
 		}
 	}
 
@@ -54,12 +71,14 @@ func (m *Model) rebuild() {
 		}
 	}
 
+	m.appendStripTarget()
+
 	// Keep the cursor on whatever it was pointing at, so filtering and resizing
 	// do not move the selection out from under you.
 	m.cursor = 0
 	if prev != "" {
 		for i, t := range m.targets {
-			if m.keyOf(t) == prev {
+			if m.qualifiedKey(t) == prev {
 				m.cursor = i
 				break
 			}
@@ -69,16 +88,22 @@ func (m *Model) rebuild() {
 }
 
 // selectedKey identifies the current selection for restoring it after a
-// rebuild, whether it is an agent or a bare repo card.
+// rebuild, whether it is an agent, a bare repo card or the strip.
 func (m *Model) selectedKey() string {
 	if m.cursor < 0 || m.cursor >= len(m.targets) {
 		return ""
 	}
-	t := m.targets[m.cursor]
-	if t.paneID != "" {
-		return "pane:" + t.paneID
-	}
-	return "repo:" + t.repoKey
+	return m.qualifiedKey(m.targets[m.cursor])
+}
+
+// qualifiedKey names a target uniquely across the whole screen.
+//
+// keyOf alone is not enough: the orchestrator holds a grid target and a strip
+// target under one pane, and a ribbon agent holds two. Restoring by the bare
+// key would land the cursor in whichever block came first, so a refresh could
+// move the selection from the card you were on to the ribbon row above it.
+func (m *Model) qualifiedKey(t target) string {
+	return strconv.Itoa(int(t.kind)) + ":" + m.keyOf(t)
 }
 
 func (m *Model) keyOf(t target) string {
@@ -118,18 +143,38 @@ func (m *Model) clampCursor() {
 
 // targetIndex finds the cursor position for a drawn item.
 //
-// An agent in the ribbon is also in the grid, so it has two targets. Which one
-// a rendered line should point at depends on where the line is: a grid card must
-// not resolve to the ribbon row above it, or clicking the card would move the
-// cursor into the ribbon and light up the wrong thing.
-func (m *Model) targetIndex(key string) int { return m.findTarget(key, false) }
+// Which target a rendered line should point at depends on which block the line
+// is in, since one agent can hold a target in several.
+func (m *Model) targetIndex(key string) int { return m.findTarget(key, kindGrid) }
 
 // ribbonTargetIndex finds the ribbon row for an item.
-func (m *Model) ribbonTargetIndex(key string) int { return m.findTarget(key, true) }
+func (m *Model) ribbonTargetIndex(key string) int { return m.findTarget(key, kindRibbon) }
 
-func (m *Model) findTarget(key string, ribbon bool) int {
+// stripTargetIndex finds the orchestrator strip's target, or -1. There is only
+// ever one, so it is found by kind rather than by key.
+func (m *Model) stripTargetIndex() int {
 	for i, t := range m.targets {
-		if t.ribbon == ribbon && m.keyOf(t) == key {
+		if t.kind == kindStrip {
+			return i
+		}
+	}
+	return -1
+}
+
+// appendStripTarget puts the orchestrator strip last, after the grid, which is
+// where it is drawn. It carries no repoKey: selecting the strip must not also
+// highlight the card the orchestrator happens to live in.
+func (m *Model) appendStripTarget() {
+	if m.filter != "" || !m.snap.Orch.Found {
+		return
+	}
+	m.targets = append(m.targets,
+		target{paneID: m.snap.Orch.PaneID, column: -1, kind: kindStrip})
+}
+
+func (m *Model) findTarget(key string, kind targetKind) int {
+	for i, t := range m.targets {
+		if t.kind == kind && m.keyOf(t) == key {
 			return i
 		}
 	}
@@ -159,8 +204,13 @@ func (m *Model) TargetPane(i int) string {
 }
 
 // IsRibbonTarget reports whether a target is a ribbon row, for tests.
-func (m *Model) IsRibbonTarget(i int) bool {
-	return i >= 0 && i < len(m.targets) && m.targets[i].ribbon
+func (m *Model) IsRibbonTarget(i int) bool { return m.isKind(i, kindRibbon) }
+
+// IsStripTarget reports whether a target is the orchestrator strip, for tests.
+func (m *Model) IsStripTarget(i int) bool { return m.isKind(i, kindStrip) }
+
+func (m *Model) isKind(i int, kind targetKind) bool {
+	return i >= 0 && i < len(m.targets) && m.targets[i].kind == kind
 }
 
 // Cursor is the keyboard selection, exposed for tests.

@@ -8,6 +8,13 @@ import (
 )
 
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.composing {
+		return m.handleCompose(msg)
+	}
+	// Any key that is not the input itself clears the last notice, so a report
+	// of what just happened does not sit there through the next thing you do.
+	m.notice = ""
+
 	// Filter mode owns every printable key, which is exactly why it has to be a
 	// mode: hjkl are literal text while you are typing.
 	if m.filtering {
@@ -80,6 +87,19 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.moveColumn(1)
 		return m, nil
 
+	case "i":
+		// Talk to the orchestrator. Only worth opening when there is one.
+		if m.snap.Orch.Found {
+			m.composing, m.compose = true, ""
+		} else {
+			m.notice = "no orchestrator marked, so there is nobody to tell"
+		}
+		return m, nil
+
+	case "t":
+		// The repair key. This is the whole reason gate detection exists.
+		return m.repair()
+
 	case "s":
 		// Cycle the sort. First seen is the default and where it returns to.
 		m.sort = m.sort.Next()
@@ -146,11 +166,11 @@ func (m *Model) moveColumn(delta int) {
 		return
 	}
 	cur := m.targets[m.cursor]
-	if cur.ribbon {
-		// Left and right do nothing useful in a one-per-line ribbon, so they
-		// drop you into the grid instead.
+	if cur.kind != kindGrid {
+		// Left and right do nothing useful in a one-per-line ribbon or on the
+		// strip, so they drop you into the grid instead.
 		for i, t := range m.targets {
-			if !t.ribbon {
+			if t.kind == kindGrid {
 				m.cursor = i
 				return
 			}
@@ -168,7 +188,7 @@ func (m *Model) moveColumn(delta int) {
 	// is, which keeps sideways movement feeling like it stays on the same row.
 	best, bestDist := -1, 1<<30
 	for i, t := range m.targets {
-		if t.ribbon || t.column != want {
+		if t.kind != kindGrid || t.column != want {
 			continue
 		}
 		d := i - m.cursor

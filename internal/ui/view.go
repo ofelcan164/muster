@@ -22,6 +22,10 @@ func (m *Model) View() string {
 	lines = append(lines, strings.TrimRight(m.header(), "\n"), "")
 	lines = append(lines, m.ribbonLines(len(lines))...)
 	lines = append(lines, m.repoLines(len(lines))...)
+	if strip := m.stripLines(len(lines) + 1); len(strip) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, strip...)
+	}
 
 	if m.filtering || m.filter != "" {
 		lines = append(lines, "", m.viewFilterBar())

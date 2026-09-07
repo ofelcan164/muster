@@ -22,7 +22,7 @@ func drawnRepoKeys(m *Model) []string {
 func walkedRepoKeys(m *Model) []string {
 	var out []string
 	for _, t := range m.targets {
-		if t.ribbon || t.repoKey == "" {
+		if t.kind != kindGrid || t.repoKey == "" {
 			continue
 		}
 		if len(out) == 0 || out[len(out)-1] != t.repoKey {
@@ -74,7 +74,7 @@ func TestTargetColumnMatchesDrawnColumn(t *testing.T) {
 		want[key] = i % cols
 	}
 	for _, tg := range m.targets {
-		if tg.ribbon {
+		if tg.kind != kindGrid {
 			continue
 		}
 		if got := tg.column; got != want[tg.repoKey] {
