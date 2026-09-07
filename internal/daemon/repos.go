@@ -1,11 +1,13 @@
 package daemon
 
 import (
+	"sort"
+	"strings"
+	"time"
+
 	"github.com/ofelcan/muster/internal/herdr"
 	"github.com/ofelcan/muster/internal/identity"
 	"github.com/ofelcan/muster/internal/model"
-	"sort"
-	"strings"
 )
 
 // buildRepos groups agents and non-agent panes under the repo their workspace
@@ -89,11 +91,17 @@ func (d *Daemon) buildRepos(snap *herdr.Snapshot, agents map[string]model.Agent,
 	for _, p := range snap.Panes {
 		live[p.PaneID] = true
 	}
-	d.detectStoppedProcesses(procs, live)
+	d.detectStoppedProcesses(procs, live, time.Now())
 
 	for _, p := range snap.Panes {
 		r := repoForWorkspace[p.WorkspaceID]
 		if r == nil {
+			continue
+		}
+		if isOverlayPane(p) {
+			// Muster's own overlay is a pane like any other, so without this it
+			// shows up in the footer of whatever workspace you opened it from,
+			// and closing it reads as a process that stopped.
 			continue
 		}
 		if a, isAgent := agents[p.PaneID]; isAgent {
@@ -181,6 +189,15 @@ func shortName(name string) string {
 	return name
 }
 
+// overlayTitle is the [[panes]] title from the manifest, which herdr reports as
+// the pane label.
+const overlayTitle = "Muster"
+
+// isOverlayPane reports whether a pane is one of Muster's own overlays.
+func isOverlayPane(p herdr.Pane) bool {
+	return strings.TrimSpace(p.Label) == overlayTitle
+}
+
 // paneLabel produces something short enough for a one-line footer. A raw
 // terminal title is usually "user@host:/long/path", which tells you nothing you
 // did not already know and crowds out the panes that matter.
@@ -254,6 +271,9 @@ func (d *Daemon) foregroundProcesses(snap *herdr.Snapshot, agents map[string]mod
 	}
 	for _, p := range snap.Panes {
 		if _, isAgent := agents[p.PaneID]; isAgent {
+			continue
+		}
+		if isOverlayPane(p) {
 			continue
 		}
 		name, err := d.client.PaneForegroundProcess(p.PaneID)

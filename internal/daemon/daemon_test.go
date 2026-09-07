@@ -22,6 +22,10 @@ func pane(id, ws, cwd string) herdr.Pane {
 	return herdr.Pane{PaneID: id, WorkspaceID: ws, TabID: ws + ":t1", Cwd: cwd}
 }
 
+func herdrPane(id, label string) herdr.Pane {
+	return herdr.Pane{PaneID: id, Label: label}
+}
+
 func agentPane(id, ws, cwd, status string) herdr.Agent {
 	return herdr.Agent{
 		PaneID: id, WorkspaceID: ws, TabID: ws + ":t1",

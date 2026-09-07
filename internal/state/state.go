@@ -96,9 +96,9 @@ type Persisted struct {
 	// error.
 	LastProcess map[string]string `json:"last_process"`
 
-	// Stopped records panes whose process went away, and what it was. Held
-	// until something non-trivial runs in the pane again.
-	Stopped map[string]string `json:"stopped"`
+	// Stopped records panes whose process went away, what it was, and when.
+	// Held until something runs in the pane again, or until it ages out.
+	Stopped map[string]StoppedStamp `json:"stopped"`
 
 	// TaskSeenAt records when the daemon first observed a given task token
 	// value on a pane. herdr does not timestamp metadata tokens, so this is the
@@ -113,6 +113,12 @@ type Persisted struct {
 type TaskStamp struct {
 	Value string    `json:"value"`
 	Since time.Time `json:"since"`
+}
+
+// StoppedStamp is a process that went away and when it did.
+type StoppedStamp struct {
+	Process string    `json:"process"`
+	At      time.Time `json:"at"`
 }
 
 type StatusStamp struct {
@@ -135,7 +141,7 @@ func LoadPersisted() *Persisted {
 		LastProcess:  map[string]string{},
 		EverWorked:   map[string]bool{},
 		EverHadAgent: map[string]bool{},
-		Stopped:      map[string]string{},
+		Stopped:      map[string]StoppedStamp{},
 	}
 	b, err := os.ReadFile(PersistPath())
 	if err != nil {
@@ -166,7 +172,7 @@ func LoadPersisted() *Persisted {
 		p.EverHadAgent = map[string]bool{}
 	}
 	if p.Stopped == nil {
-		p.Stopped = map[string]string{}
+		p.Stopped = map[string]StoppedStamp{}
 	}
 	return p
 }

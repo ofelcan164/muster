@@ -2,10 +2,15 @@ package daemon
 
 import (
 	"strings"
+	"time"
 
 	"github.com/ofelcan/muster/internal/herdr"
 	"github.com/ofelcan/muster/internal/model"
+	"github.com/ofelcan/muster/internal/state"
 )
+
+// stoppedTTL is how long a stopped process stays in the ribbon.
+const stoppedTTL = 15 * time.Minute
 
 // shells are the processes that mean "this pane is sitting at a prompt".
 // Anything else is treated as work in progress.
@@ -29,7 +34,7 @@ func isShell(name string) bool { return name == "" || shells[strings.ToLower(nam
 // It cannot tell a crash from a deliberate Ctrl-C. It reports that the thing
 // stopped, which is the part you cannot currently see without opening the
 // workspace.
-func (d *Daemon) detectStoppedProcesses(procs map[string]string, live map[string]bool) {
+func (d *Daemon) detectStoppedProcesses(procs map[string]string, live map[string]bool, now time.Time) {
 	for paneID, current := range procs {
 		previous := d.persist.LastProcess[paneID]
 		switch {
@@ -38,9 +43,18 @@ func (d *Daemon) detectStoppedProcesses(procs map[string]string, live map[string
 			delete(d.persist.Stopped, paneID)
 		case !isShell(previous):
 			// It was running and now it is not.
-			d.persist.Stopped[paneID] = previous
+			d.persist.Stopped[paneID] = state.StoppedStamp{Process: previous, At: now}
 		}
 		d.persist.LastProcess[paneID] = current
+	}
+
+	// A stop is news for a while and then it is not. Without this, Ctrl-C on a
+	// one-off command would sit in the ribbon forever, since nothing else is
+	// ever going to run in that pane to clear it.
+	for paneID, st := range d.persist.Stopped {
+		if now.Sub(st.At) > stoppedTTL {
+			delete(d.persist.Stopped, paneID)
+		}
 	}
 
 	// Panes that are gone entirely are not "stopped", they are closed.
@@ -70,20 +84,20 @@ func (d *Daemon) stoppedRows(snap *herdr.Snapshot, repoForPane map[string]*model
 		}
 	}
 	out := make([]model.Stopped, 0, len(d.persist.Stopped))
-	for paneID, proc := range d.persist.Stopped {
+	for paneID, st := range d.persist.Stopped {
 		r := repoForPane[paneID]
 		if r == nil {
 			continue
 		}
 		label := labels[paneID]
 		if label == paneID {
-			label = proc
+			label = st.Process
 		}
 		out = append(out, model.Stopped{
 			PaneID:  paneID,
 			RepoKey: r.Key,
 			Label:   label,
-			Process: proc,
+			Process: st.Process,
 		})
 	}
 	return out
