@@ -15,10 +15,10 @@ type target struct {
 	paneID string
 	// repoKey identifies the card the target sits in.
 	repoKey string
-	// column is the grid column, used for left and right. Rows outside the grid
-	// are -1.
-	column int
-	kind   targetKind
+	// column and row are the grid cell the target is drawn in, used for
+	// left/right and up/down. Rows outside the grid are -1.
+	column, row int
+	kind        targetKind
 }
 
 // targetKind is which block of the screen a target lives in.
@@ -42,7 +42,8 @@ func (m *Model) rebuild() {
 
 	if !m.filtering && m.filter == "" {
 		for _, a := range m.ribbonRows() {
-			m.targets = append(m.targets, target{paneID: a.PaneID, column: -1, kind: kindRibbon})
+			m.targets = append(m.targets,
+				target{paneID: a.PaneID, column: -1, row: -1, kind: kindRibbon})
 		}
 	}
 
@@ -56,27 +57,30 @@ func (m *Model) rebuild() {
 		cols = 1 // filtering always collapses to one list
 	}
 	for i, r := range repos {
-		col := 0
+		col, row := 0, i
 		if cols > 1 {
-			col = i % cols
+			col, row = i%cols, i/cols
 		}
 		if len(r.Agents) == 0 {
 			// The card itself. Selecting it does not jump anywhere, but it keeps
 			// every repo reachable and the grid navigable.
-			m.targets = append(m.targets, target{repoKey: r.Key, column: col})
+			m.targets = append(m.targets, target{repoKey: r.Key, column: col, row: row})
 			continue
 		}
 		for _, a := range r.Agents {
-			m.targets = append(m.targets, target{paneID: a.PaneID, repoKey: r.Key, column: col})
+			m.targets = append(m.targets,
+				target{paneID: a.PaneID, repoKey: r.Key, column: col, row: row})
 		}
 	}
 
 	m.appendStripTarget()
 
 	// Keep the cursor on whatever it was pointing at, so filtering and resizing
-	// do not move the selection out from under you.
-	m.cursor = 0
+	// do not move the selection out from under you. Nothing selected stays
+	// nothing selected: the overlay opens with no card claimed.
+	m.cursor = noSelection
 	if prev != "" {
+		m.cursor = 0
 		for i, t := range m.targets {
 			if m.qualifiedKey(t) == prev {
 				m.cursor = i
@@ -129,17 +133,19 @@ func (m *Model) selectedPane() string {
 }
 
 func (m *Model) clampCursor() {
-	if len(m.targets) == 0 {
-		m.cursor = 0
+	if len(m.targets) == 0 || m.cursor < 0 {
+		m.cursor = noSelection
 		return
-	}
-	if m.cursor < 0 {
-		m.cursor = 0
 	}
 	if m.cursor >= len(m.targets) {
 		m.cursor = len(m.targets) - 1
 	}
 }
+
+// noSelection is the cursor before anyone has moved it. The overlay opens with
+// nothing highlighted, so the first thing that lights up is the thing you
+// pointed at or arrowed to, rather than whatever happened to sort first.
+const noSelection = -1
 
 // targetIndex finds the cursor position for a drawn item.
 //
@@ -169,7 +175,7 @@ func (m *Model) appendStripTarget() {
 		return
 	}
 	m.targets = append(m.targets,
-		target{paneID: m.snap.Orch.PaneID, column: -1, kind: kindStrip})
+		target{paneID: m.snap.Orch.PaneID, column: -1, row: -1, kind: kindStrip})
 }
 
 func (m *Model) findTarget(key string, kind targetKind) int {

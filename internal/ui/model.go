@@ -46,7 +46,12 @@ type Model struct {
 
 	width, height int
 	cursor        int
-	targets       []target
+
+	// laneCol is the grid column up and down stay in, remembered across the
+	// full-width blocks that have no column of their own.
+	laneCol int
+
+	targets []target
 
 	// filtering is entered with "/", following herdr's own convention.
 	//
@@ -93,7 +98,8 @@ type Model struct {
 }
 
 func New(snap *model.Snapshot, warning string) *Model {
-	m := &Model{snap: snap, warning: warning, width: 80, height: 24, hover: -1}
+	m := &Model{snap: snap, warning: warning, width: 80, height: 24,
+		hover: noSelection, cursor: noSelection}
 	m.rebuild()
 	return m
 }

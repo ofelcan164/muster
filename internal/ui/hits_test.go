@@ -118,3 +118,25 @@ func TestRibbonAndGridNeverShareALine(t *testing.T) {
 		}
 	}
 }
+
+// One click opens. A card with no agents still sits over panes, so clicking it
+// must jump to one of them rather than only moving the selection.
+func TestOneClickOpensAgentlessCard(t *testing.T) {
+	m, _ := rendered(t, 143)
+	ti := m.targetIndex("repo:acme/infra")
+	if ti < 0 {
+		t.Fatal("the agentless repo is not a target")
+	}
+	var hit Hit
+	for _, h := range m.Hits() {
+		if h.Target == ti {
+			hit = h
+			break
+		}
+	}
+	m.Update(tea.MouseMsg{X: hit.X0 + 1, Y: hit.Y,
+		Action: tea.MouseActionRelease, Button: tea.MouseButtonLeft})
+	if got := m.Jump(); got != "acme/infra:p9" {
+		t.Fatalf("one click on an agentless card jumped to %q, want its pane", got)
+	}
+}

@@ -185,17 +185,77 @@ func TestEnterJumpsToTheSelection(t *testing.T) {
 	}
 }
 
-func TestSelectionWraps(t *testing.T) {
+// Down wraps within its own column, never sideways into the next one: that is
+// what left and right are for.
+func TestSelectionWrapsInsideItsColumn(t *testing.T) {
 	m := newSized(143)
-	n := len(m.targets)
-	if n == 0 {
+	if len(m.targets) == 0 {
 		t.Fatal("no targets")
 	}
+	// Start inside the grid: the lane is a column, which is what wrapping has
+	// to respect.
+	m.cursor = m.targetIndex("pane:w3:p1") // the only card in the last column
+	start := m.cursor
+	n := len(m.lane())
+	cols := map[int]bool{}
 	for i := 0; i < n; i++ {
 		key(m, "j")
+		if tg := m.targets[m.cursor]; tg.kind == kindGrid {
+			cols[tg.column] = true
+		}
 	}
-	if m.cursor != 0 {
-		t.Errorf("selection should wrap to the top, got %d", m.cursor)
+	if m.cursor != start {
+		t.Errorf("a full lap should come back to %d, got %d", start, m.cursor)
+	}
+	if len(cols) > 1 {
+		t.Errorf("down wandered across columns %v", cols)
+	}
+}
+
+// The overlay opens with nothing highlighted. A card lit up before you touched
+// anything reads as a claim about which one matters, which it is not.
+func TestNothingIsSelectedUntilYouMove(t *testing.T) {
+	m := newSized(143)
+	if m.cursor != noSelection {
+		t.Fatalf("opened with target %d selected", m.cursor)
+	}
+	order := m.lane()
+	key(m, "k")
+	if want := order[len(order)-1]; m.cursor != want {
+		t.Errorf("the first up should land on the bottom target %d, got %d", want, m.cursor)
+	}
+	m.cursor = noSelection
+	key(m, "j")
+	if want := order[0]; m.cursor != want {
+		t.Errorf("the first down should land on the top target %d, got %d", want, m.cursor)
+	}
+}
+
+// Down means the card below. The grid is filled row-major, so stepping to the
+// next target in the list moved sideways instead.
+func TestDownMovesDownTheColumn(t *testing.T) {
+	m := newSized(143)
+	if columnsFor(m.width) < 2 {
+		t.Skip("one column: down and next are the same move")
+	}
+	start := -1
+	for i, tg := range m.targets {
+		if tg.kind == kindGrid && tg.column == 0 && tg.row == 0 {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		t.Fatal("no card in the top-left cell")
+	}
+	m.cursor = start
+	// Walk out of the card: its own agents come first, which is right.
+	for m.targets[m.cursor].repoKey == m.targets[start].repoKey {
+		key(m, "j")
+	}
+	if got := m.targets[m.cursor]; got.column != 0 || got.row != 1 {
+		t.Errorf("down from the top-left card landed in column %d row %d, want 0,1",
+			got.column, got.row)
 	}
 }
 
@@ -361,14 +421,38 @@ func TestEveryRepoIsReachable(t *testing.T) {
 	}
 }
 
-func TestAgentlessRepoIsSelectableButDoesNotJump(t *testing.T) {
+// A repo card with no agents opens the pane behind it, and opens nothing when
+// there is no pane behind it either.
+func TestAgentlessRepoOpensItsPane(t *testing.T) {
 	m := newSized(143)
+	for i := range m.targets {
+		if m.targets[i].paneID != "" {
+			continue
+		}
+		repoKey := m.targets[i].repoKey
+		m.cursor = i
+		key(m, "enter")
+		if want := repoKey + ":p9"; m.Jump() != want {
+			t.Errorf("enter on %s jumped to %q, want %q", repoKey, m.Jump(), want)
+		}
+		return
+	}
+	t.Fatal("no agent-less repo target found")
+}
+
+func TestAgentlessRepoWithNoPanesDoesNotJump(t *testing.T) {
+	snap := testSnapshot()
+	for i := range snap.Repos {
+		snap.Repos[i].OtherPanes = nil
+	}
+	m := New(snap, "")
+	m.Update(tea.WindowSizeMsg{Width: 143, Height: 40})
 	for i := range m.targets {
 		if m.targets[i].paneID == "" {
 			m.cursor = i
 			key(m, "enter")
 			if m.Jump() != "" {
-				t.Error("a repo card with no agents has nowhere to jump to")
+				t.Errorf("nowhere to jump, got %q", m.Jump())
 			}
 			return
 		}
@@ -453,27 +537,6 @@ func TestMouseClickSelectsThenJumps(t *testing.T) {
 	if m.Jump() != m.TargetPane(want) {
 		t.Errorf("a single click should jump to %q, got %q", m.TargetPane(want), m.Jump())
 	}
-}
-
-// Clicking a repo card with no agents selects it without jumping, because there
-// is nowhere to go.
-func TestClickingAnAgentlessCardDoesNotJump(t *testing.T) {
-	m := newSized(143)
-	m.View()
-	for _, h := range m.Hits() {
-		if m.TargetPane(h.Target) == "" {
-			m.Update(tea.MouseMsg{X: h.X0, Y: h.Y,
-				Action: tea.MouseActionRelease, Button: tea.MouseButtonLeft})
-			if m.Jump() != "" {
-				t.Errorf("nowhere to jump, got %q", m.Jump())
-			}
-			if m.Cursor() != h.Target {
-				t.Errorf("the click should still select the card")
-			}
-			return
-		}
-	}
-	t.Skip("no agent-less card in the fixture")
 }
 
 func TestMouseWheelMovesSelection(t *testing.T) {
