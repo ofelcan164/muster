@@ -137,3 +137,20 @@ func repoStyle(r model.Repo) lipgloss.Style {
 	}
 	return lipgloss.NewStyle().Foreground(lipgloss.Color(identity.Color(r.ColorIndex)))
 }
+
+// paint lays a background across a line that already carries its own colours.
+// lipgloss ends every inner style with a full reset, so wrapping styled text in
+// a background style loses that background from the first inner reset onward:
+// the card would light up in stripes. Re-arming the background after each reset
+// is what makes a hovered card highlight as one block.
+func paint(line string, style lipgloss.Style) string {
+	probe := style.Render("x")
+	i := strings.Index(probe, "x")
+	if i <= 0 {
+		return line // no colour profile, nothing to re-arm
+	}
+	seq := probe[:i]
+	return seq + strings.ReplaceAll(line, reset, reset+seq) + reset
+}
+
+const reset = "\x1b[0m"

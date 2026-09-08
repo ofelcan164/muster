@@ -795,3 +795,14 @@ func TestRefreshSurvivesAMissingSnapshot(t *testing.T) {
 		t.Error("the view did not survive a failed reload")
 	}
 }
+
+// A hovered card must highlight as one block: every inner reset in the line has
+// to re-arm the background, or the card lights up in stripes.
+func TestPaintSurvivesInnerResets(t *testing.T) {
+	line := paint(styFaint.Render("no agents")+"   ", stySel)
+	for _, seg := range strings.Split(line, reset)[1:] {
+		if seg != "" && !strings.HasPrefix(seg, "\x1b[") {
+			t.Fatalf("background dropped after a reset: %q", line)
+		}
+	}
+}

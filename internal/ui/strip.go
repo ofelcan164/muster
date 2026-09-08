@@ -76,7 +76,7 @@ func (m *Model) stripLines(startY int) []string {
 		}
 		if m.isActive(ti) {
 			for k := 1; k < len(out); k++ {
-				out[k] = stySel.Render(out[k])
+				out[k] = paint(out[k], stySel)
 			}
 		}
 	}

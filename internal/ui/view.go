@@ -104,15 +104,15 @@ func (m *Model) ribbonLines(startY int) []string {
 		for _, line := range rowLines {
 			switch {
 			case selected:
-				line = stySel.Render(line)
+				line = paint(line, stySel)
 			case a.Rank <= 2:
 				// The top two ranks keep a warm background even unselected, so
 				// the thing that most needs you reads before you do.
-				line = styHot.Render(line)
+				line = paint(line, styHot)
 			default:
 				// The rest still get a panel so the ribbon reads as one block
 				// rather than trailing off into the background.
-				line = styPanel.Render(line)
+				line = paint(line, styPanel)
 			}
 			out = append(out, line)
 		}
@@ -239,7 +239,7 @@ func (m *Model) cardLines(r model.Repo, width, startY, x0 int) []string {
 		m.claim(startY+i, x0, width, rw.target)
 		line := fitLine(rw.text, width)
 		if m.isActive(rw.target) {
-			line = stySel.Render(line)
+			line = paint(line, stySel)
 		}
 		out = append(out, line)
 	}
