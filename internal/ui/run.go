@@ -115,9 +115,45 @@ func load() (*model.Snapshot, string) {
 // Jump focuses an agent and returns. That is the whole of jumping: the overlay
 // tears down on process exit and leaves focus where it was put, with no close
 // call and no detached helper.
+//
+// Not every target is an agent. A repo card with no agents jumps to whatever
+// else is open there, a shell or an editor, and agent.focus cannot see one of
+// those: it answers agent_not_found and focus never moves. The overlay still
+// exits, so picking a result looked like it closed the screen for no reason.
+// Searching is where that bites, since a repo with no agents matching by name
+// is exactly the case the filter was widened to find.
 func Jump(paneID string) error {
 	c := herdr.NewClient("")
-	return c.Call("agent.focus", map[string]any{"target": paneID}, nil)
+	err := c.Call("agent.focus", map[string]any{"target": paneID}, nil)
+	if err == nil {
+		return nil
+	}
+	// Not an agent, or not reachable. herdr has no focus-by-pane-id, so the
+	// tab it lives in is as close as the API gets.
+	snap, serr := c.SessionSnapshot()
+	if serr != nil {
+		return err
+	}
+	tab := tabOf(snap.Panes, paneID)
+	if tab == "" {
+		return err
+	}
+	// ponytail: the tab, not the pane. A tab split between a shell and an
+	// editor lands on whichever herdr had active there, which is exact for the
+	// one-pane case and close enough otherwise. Landing on the pane itself
+	// means walking pane.neighbor from the tab's active pane, which is a search
+	// for a case nobody has hit yet.
+	return c.Call("tab.focus", map[string]any{"tab_id": tab}, nil)
+}
+
+// tabOf is the tab a pane lives in, or "" when the pane is gone.
+func tabOf(panes []herdr.Pane, paneID string) string {
+	for _, p := range panes {
+		if p.PaneID == paneID {
+			return p.TabID
+		}
+	}
+	return ""
 }
 
 // TogglePane opens the overlay, or closes it if it is already open.
