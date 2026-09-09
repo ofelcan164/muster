@@ -37,6 +37,14 @@ func (s SortMode) Next() SortMode { return (s + 1) % sortModeCount }
 
 // orderedRepos applies the current sort, then the user's manual moves.
 func (m *Model) orderedRepos(repos []model.Repo) []model.Repo {
+	// While filtering the order is the match ranking and nothing else. A sort or
+	// an arrangement made for the full grid on top of it would push a worse
+	// match above a better one, and position in a filtered list carries no
+	// meaning to preserve.
+	if m.filter != "" {
+		return repos
+	}
+
 	out := append([]model.Repo(nil), repos...)
 
 	switch m.sort {

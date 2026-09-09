@@ -893,3 +893,72 @@ func TestEnterWithoutSelectionOrSearchDoesNothing(t *testing.T) {
 		t.Errorf("enter with no selection jumped to %q", m.Jump())
 	}
 }
+
+// Plain substring matching over each field independently missed two things a
+// search is expected to do.
+func TestSearchMatchesFuzzily(t *testing.T) {
+	// A subsequence: the letters in order, not together.
+	m := newSized(143)
+	key(m, "slash")
+	for _, r := range "cnt" {
+		key(m, string(r))
+	}
+	repos := m.visibleRepos()
+	if len(repos) == 0 || repos[0].Display != "contracts" {
+		t.Errorf("cnt should find contracts first, got %v", displaysOf(repos))
+	}
+
+	// Two terms spread across a repo and one of its agents. Neither field set
+	// holds both, so a single literal query could never match this.
+	m = newSized(143)
+	key(m, "slash")
+	for _, r := range "web checkout" {
+		key(m, string(r))
+	}
+	repos = m.visibleRepos()
+	if len(repos) != 1 || repos[0].Key != "acme/web" {
+		t.Fatalf("web checkout matched %v, want just web", displaysOf(repos))
+	}
+	if len(repos[0].Agents) != 1 || repos[0].Agents[0].Name != "checkout-ui" {
+		t.Errorf("kept the wrong agents: %+v", repos[0].Agents)
+	}
+}
+
+// Every term has to hit something. Otherwise a second word only ever widens the
+// search, which is the opposite of what typing more means.
+func TestEverySearchTermMustMatch(t *testing.T) {
+	m := newSized(143)
+	key(m, "slash")
+	for _, r := range "web zzzznope" {
+		key(m, string(r))
+	}
+	if got := m.visibleRepos(); len(got) != 0 {
+		t.Errorf("a term that matches nothing should empty the results, got %v", displaysOf(got))
+	}
+}
+
+// The best match sorts first, and neither the grid's sort nor the rule that
+// puts repos with agents first gets to reorder it underneath. infra matches on
+// its own name and has no agents, so both of those would bury it.
+func TestSearchRanksTheBestMatchFirst(t *testing.T) {
+	for _, mode := range []SortMode{SortFirstSeen, SortAlphabetical, SortAttention} {
+		m := newSized(143)
+		m.sort = mode
+		key(m, "slash")
+		for _, r := range "in" {
+			key(m, string(r))
+		}
+		got := m.orderedRepos(m.visibleRepos())
+		if len(got) == 0 || got[0].Key != "acme/infra" {
+			t.Errorf("sort %v: prefix match should rank first, got %v", mode, displaysOf(got))
+		}
+	}
+}
+
+func displaysOf(repos []model.Repo) []string {
+	var out []string
+	for _, r := range repos {
+		out = append(out, r.Display)
+	}
+	return out
+}
