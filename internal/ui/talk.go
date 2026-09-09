@@ -16,6 +16,9 @@ import (
 // the same way the reloader is, so nothing here touches the socket in a test.
 func (m *Model) SetPrompter(f func(paneID, text string) error) { m.prompt = f }
 
+// SetMarker supplies the function that marks an agent as the orchestrator.
+func (m *Model) SetMarker(f func(paneID string) error) { m.mark = f }
+
 // repairTarget is the finished agent the t key would report, or nil.
 //
 // The selection wins when it is sitting on a gate row, so t always acts on what

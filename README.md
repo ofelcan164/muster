@@ -38,7 +38,7 @@ your Claude directory, so it stays a separate opt-in.
 
 In the overlay: arrows or `hjkl` move, `enter` jumps, `/` searches, `s` cycles
 sort, `J`/`K` rearrange, `g`/`G` jump to the ends, digits jump to a ribbon row,
-`q` closes.
+`x` dismisses one, `o` marks the selected agent as the orchestrator, `q` closes.
 
 ## How it works
 

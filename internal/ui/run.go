@@ -53,6 +53,9 @@ func Run() (string, error) {
 	// How i and t reach the orchestrator. agent.prompt is the same call the
 	// orchestrator's own tooling uses, so a message from Muster is not a
 	// special case at the other end.
+	m.SetMarker(func(paneID string) error {
+		return markOrchestratorPane(paneID, markedOrchestratorPane())
+	})
 	m.SetPrompter(func(paneID, text string) error {
 		return herdr.NewClient("").Call("agent.prompt",
 			map[string]any{"target": paneID, "text": text}, nil)

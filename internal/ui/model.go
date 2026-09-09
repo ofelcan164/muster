@@ -80,6 +80,10 @@ type Model struct {
 	// without a socket, and so a test can never prompt a real agent.
 	prompt func(paneID, text string) error
 
+	// mark tags an agent as the orchestrator, injected for the same reason: a
+	// test must never rename one of the user's agents.
+	mark func(paneID string) error
+
 	// sort is how the grid is ordered, and moves is the manual arrangement
 	// layered on top of it.
 	sort  SortMode

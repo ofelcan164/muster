@@ -106,6 +106,11 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Acknowledge a ribbon row you have already dealt with.
 		return m.dismissSelected()
 
+	case "o":
+		// Marking used to mean finding the orchestrator's pane and running an
+		// action on it. The overlay already lists every agent.
+		return m.markSelected()
+
 	case "s":
 		// Cycle the sort. First seen is the default and where it returns to.
 		m.sort = m.sort.Next()
@@ -197,6 +202,32 @@ func (m *Model) dismissSelected() (tea.Model, tea.Cmd) {
 		}
 		break
 	}
+	return m, nil
+}
+
+// markSelected makes the selected agent the orchestrator.
+func (m *Model) markSelected() (tea.Model, tea.Cmd) {
+	pane := m.selectedPane()
+	if _, _, ok := m.agentByPane(pane); !ok {
+		// A bare repo card, or a ribbon row for a stopped process, which points
+		// at a pane with no agent in it to rename.
+		m.notice = "o marks an agent as the orchestrator: select one first"
+		return m, nil
+	}
+	if m.snap.Orch.Found && m.snap.Orch.PaneID == pane {
+		m.notice = "already the orchestrator"
+		return m, nil
+	}
+	if m.mark == nil {
+		return m, nil
+	}
+	if err := m.mark(pane); err != nil {
+		m.notice = "could not mark: " + err.Error()
+		return m, nil
+	}
+	// The strip cannot show the mark until the daemon reconciles, a few seconds
+	// away, so say it happened rather than leaving the screen looking unchanged.
+	m.notice = "marked as the orchestrator"
 	return m, nil
 }
 

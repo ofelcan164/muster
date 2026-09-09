@@ -28,7 +28,7 @@ func (m *Model) stripLines(startY int) []string {
 		return []string{
 			m.sectionRule("orchestrator"),
 			styFaint.Render(fitLine(
-				"  none marked · run the mark-orchestrator action on its pane", m.width)),
+				"  none marked · press o on the agent in charge", m.width)),
 		}
 	}
 

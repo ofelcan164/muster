@@ -298,3 +298,60 @@ func TestStripNeverExceedsTheWidth(t *testing.T) {
 		}
 	}
 }
+
+// Marking used to mean finding the orchestrator's pane and running an action on
+// it, while the overlay was already showing every agent on the screen.
+func TestMarkingTheOrchestratorFromTheOverlay(t *testing.T) {
+	m := withSnapshot(t, testSnapshot(), 143)
+	var marked []string
+	m.SetMarker(func(pane string) error {
+		marked = append(marked, pane)
+		return nil
+	})
+
+	m.cursor = m.targetIndex("pane:w2:p1")
+	key(m, "o")
+	if len(marked) != 1 || marked[0] != "w2:p1" {
+		t.Fatalf("o marked %v, want just w2:p1", marked)
+	}
+	if m.notice == "" {
+		t.Error("the daemon takes a few seconds to catch up, so o should report")
+	}
+
+	// The strip says which key does it, so it is discoverable from the screen
+	// that tells you nothing is marked.
+	if out := plain(m.View()); !strings.Contains(out, "press o") {
+		t.Errorf("the strip should name the key:\n%s", out)
+	}
+}
+
+// A repo card has no agent to rename, and neither does a stopped-process row.
+func TestMarkingSomethingThatIsNotAnAgent(t *testing.T) {
+	m := withSnapshot(t, testSnapshot(), 143)
+	m.SetMarker(func(string) error {
+		t.Error("marked something that is not an agent")
+		return nil
+	})
+	m.cursor = m.targetIndex("repo:acme/infra")
+	key(m, "o")
+	if m.notice == "" {
+		t.Error("o on an empty card should say what o is for")
+	}
+}
+
+// Marking the one already marked is a no-op, not a second rename.
+func TestMarkingTheOrchestratorAgain(t *testing.T) {
+	s := withOrch()
+	// Put the orchestrator on an agent the grid actually shows.
+	s.Orch.PaneID = "w1:p1"
+	m := withSnapshot(t, s, 143)
+	m.SetMarker(func(string) error {
+		t.Error("re-marked the current orchestrator")
+		return nil
+	})
+	m.cursor = m.targetIndex("pane:w1:p1")
+	key(m, "o")
+	if !strings.Contains(m.notice, "already") {
+		t.Errorf("notice = %q, want it to say it is already the orchestrator", m.notice)
+	}
+}
