@@ -106,6 +106,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Cycle the sort. First seen is the default and where it returns to.
 		m.sort = m.sort.Next()
 		m.rebuild()
+		if m.saveSort != nil {
+			m.saveSort(m.sort)
+		}
 		return m, nil
 
 	case "K":

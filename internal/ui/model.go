@@ -85,6 +85,9 @@ type Model struct {
 	sort  SortMode
 	moves []string
 
+	// saveSort persists the sort mode, injected the same way saveOrder is.
+	saveSort func(SortMode)
+
 	// saveOrder persists the manual arrangement. Injected the same way reload
 	// is, so the model never touches the filesystem itself.
 	saveOrder func([]string)
@@ -141,6 +144,23 @@ func (m *Model) SetManualOrder(order []string) {
 
 // SetOrderSaver supplies the function that persists the manual arrangement.
 func (m *Model) SetOrderSaver(f func([]string)) { m.saveOrder = f }
+
+// SetSort restores the sort mode chosen in an earlier session. A value from a
+// file that no longer means anything falls back to the default rather than
+// leaving the cycle stuck outside its range.
+func (m *Model) SetSort(s SortMode) {
+	if s < 0 || s >= sortModeCount {
+		s = SortFirstSeen
+	}
+	m.sort = s
+	m.rebuild()
+}
+
+// SetSortSaver supplies the function that persists the sort mode.
+func (m *Model) SetSortSaver(f func(SortMode)) { m.saveSort = f }
+
+// Sort is the current sort mode, exposed for tests.
+func (m *Model) Sort() SortMode { return m.sort }
 
 // ManualOrder is the current arrangement, exposed for tests.
 func (m *Model) ManualOrder() []string { return m.moves }

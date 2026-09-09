@@ -40,6 +40,11 @@ func Run() (string, error) {
 		// there is nowhere to report it from inside a full-screen overlay.
 		_ = ui.Save()
 	})
+	m.SetSort(SortMode(ui.Sort))
+	m.SetSortSaver(func(s SortMode) {
+		ui.Sort = int(s)
+		_ = ui.Save()
+	})
 	// How i and t reach the orchestrator. agent.prompt is the same call the
 	// orchestrator's own tooling uses, so a message from Muster is not a
 	// special case at the other end.

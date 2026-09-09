@@ -262,6 +262,10 @@ type UIState struct {
 	// so a repo you rearranged and then closed keeps its place if it comes back.
 	RepoOrder []string `json:"repo_order"`
 
+	// Sort is the mode cycled with s. The client is short-lived, so without
+	// this every opening started over at first-seen.
+	Sort int `json:"sort"`
+
 	lastWritten []byte
 }
 

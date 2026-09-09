@@ -147,3 +147,44 @@ func TestFilteringBlocksManualMoves(t *testing.T) {
 		t.Errorf("filtering recorded an arrangement: %v", m.moves)
 	}
 }
+
+// The sort mode has to survive the overlay closing too. The client is
+// short-lived, so a mode held only in the model lasted one keypress.
+func TestSortModeRoundTrips(t *testing.T) {
+	state.SetDir(t.TempDir())
+	t.Cleanup(func() { state.SetDir("") })
+
+	m := sized(t, 143)
+	saved := state.LoadUI()
+	m.SetSortSaver(func(s SortMode) {
+		saved.Sort = int(s)
+		if err := saved.Save(); err != nil {
+			t.Errorf("save: %v", err)
+		}
+	})
+
+	key(m, "s")
+	key(m, "s")
+	want := m.Sort()
+	if want != SortAttention {
+		t.Fatalf("two presses of s gave %v, want attention", want)
+	}
+
+	next := sized(t, 143)
+	next.SetSort(SortMode(state.LoadUI().Sort))
+	if got := next.Sort(); got != want {
+		t.Errorf("reopened with sort %v, want %v", got, want)
+	}
+}
+
+// A mode from a file that no longer means anything must not leave the cycle
+// stuck outside its range.
+func TestRestoredSortModeIsClamped(t *testing.T) {
+	for _, bad := range []SortMode{-1, sortModeCount, 99} {
+		m := sized(t, 143)
+		m.SetSort(bad)
+		if got := m.Sort(); got != SortFirstSeen {
+			t.Errorf("SetSort(%d) kept %v, want first seen", bad, got)
+		}
+	}
+}
