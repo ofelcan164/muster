@@ -87,11 +87,17 @@ func (d *Daemon) buildRepos(snap *herdr.Snapshot, agents map[string]model.Agent,
 
 	procs := d.foregroundProcesses(snap, agents)
 
-	live := make(map[string]bool, len(snap.Panes))
+	// The panes a stop can be recorded against: live, and not running an agent.
+	// An agent starting in a pane drops it out of this set, which is what clears
+	// a stop left over from before it started.
+	tracked := make(map[string]bool, len(snap.Panes))
 	for _, p := range snap.Panes {
-		live[p.PaneID] = true
+		if _, isAgent := agents[p.PaneID]; isAgent {
+			continue
+		}
+		tracked[p.PaneID] = true
 	}
-	d.detectStoppedProcesses(procs, live, time.Now())
+	d.detectStoppedProcesses(procs, tracked, time.Now())
 
 	for _, p := range snap.Panes {
 		r := repoForWorkspace[p.WorkspaceID]

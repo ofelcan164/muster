@@ -34,7 +34,7 @@ func isShell(name string) bool { return name == "" || shells[strings.ToLower(nam
 // It cannot tell a crash from a deliberate Ctrl-C. It reports that the thing
 // stopped, which is the part you cannot currently see without opening the
 // workspace.
-func (d *Daemon) detectStoppedProcesses(procs map[string]string, live map[string]bool, now time.Time) {
+func (d *Daemon) detectStoppedProcesses(procs map[string]string, tracked map[string]bool, now time.Time) {
 	for paneID, current := range procs {
 		previous := d.persist.LastProcess[paneID]
 		switch {
@@ -57,15 +57,20 @@ func (d *Daemon) detectStoppedProcesses(procs map[string]string, live map[string
 		}
 	}
 
-	// Panes that are gone entirely are not "stopped", they are closed.
+	// Panes this no longer tracks: closed, or taken over by an agent. Neither is
+	// a stop. A closed pane is something the user deliberately got rid of, and a
+	// pane running an agent is reported by the agent's own status, so a stop
+	// recorded before it started has to go. Only non-agent panes are read for a
+	// foreground process, so nothing above can clear that entry: the row sat for
+	// the full TTL, outranking the real state of the agent working underneath.
 	for paneID := range d.persist.LastProcess {
-		if !live[paneID] {
+		if !tracked[paneID] {
 			delete(d.persist.LastProcess, paneID)
 			delete(d.persist.Stopped, paneID)
 		}
 	}
 	for paneID := range d.persist.Stopped {
-		if !live[paneID] {
+		if !tracked[paneID] {
 			delete(d.persist.Stopped, paneID)
 		}
 	}

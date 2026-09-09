@@ -394,3 +394,37 @@ func TestScratchWorkspaceGetsACard(t *testing.T) {
 		t.Error("a scratch workspace is not a git repo")
 	}
 }
+
+// The bug: a stop recorded in a pane stayed there once an agent started in it.
+// Only non-agent panes are read for a foreground process, so nothing could
+// clear the entry, and at rank 3 it outranked the agent's own rows for the full
+// fifteen-minute TTL, hiding what the agent was actually doing.
+func TestStopClearsWhenAnAgentTakesThePaneOver(t *testing.T) {
+	d := newTestDaemon(t)
+	api := gitRepo(t, filepath.Join(t.TempDir(), "api"), "git@github.com:acme/api.git", "main")
+
+	// A dev server in a plain pane, then back at a prompt: a stop.
+	tracked := map[string]bool{"w1:p1": true}
+	d.detectStoppedProcesses(map[string]string{"w1:p1": "vite"}, tracked, time.Now())
+	d.detectStoppedProcesses(map[string]string{"w1:p1": "bash"}, tracked, time.Now())
+	if len(d.persist.Stopped) != 1 {
+		t.Fatalf("expected a recorded stop, got %v", d.persist.Stopped)
+	}
+
+	// The same pane now runs an agent.
+	snap := &herdr.Snapshot{
+		Workspaces: []herdr.Workspace{{WorkspaceID: "w1", Number: 1}},
+		Panes:      []herdr.Pane{pane("w1:p1", "w1", api)},
+		Agents:     []herdr.Agent{agentPane("w1:p1", "w1", api, "working")},
+	}
+	d.buildRepos(snap, d.buildAgents(snap, time.Now()), model.Orchestrator{})
+
+	if len(d.persist.Stopped) != 0 {
+		t.Errorf("an agent running in the pane should clear the stop, got %v", d.persist.Stopped)
+	}
+	if len(d.persist.LastProcess) != 0 {
+		// Otherwise the agent exiting back to a shell reports the long-dead
+		// process as having only just stopped.
+		t.Errorf("stale process state left behind: %v", d.persist.LastProcess)
+	}
+}
