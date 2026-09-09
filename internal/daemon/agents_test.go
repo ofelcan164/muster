@@ -249,3 +249,25 @@ func TestAgeKnownSurvivesARestart(t *testing.T) {
 		t.Errorf("StatusSince = %v, want the original transition time", got.StatusSince)
 	}
 }
+
+// The strip labels this line "told", so only a message someone actually sent
+// belongs on it. The task ladder's lower rungs are the pane's terminal title,
+// which for a Claude pane is the words "Claude Code" forever.
+func TestToldIsOnlyWhatSomeoneSaid(t *testing.T) {
+	d := newTestDaemon(t)
+	a := herdr.Agent{PaneID: "w1:p1", Name: "orchestrator"}
+
+	agents := map[string]model.Agent{"w1:p1": {
+		Task: "Claude Code", TaskSource: model.TaskFromTerminalTitle,
+	}}
+	if got := d.orchFrom(&a, agents, "token").LastMessage; got != "" {
+		t.Errorf("terminal title reached the told line as %q", got)
+	}
+
+	agents["w1:p1"] = model.Agent{
+		Task: "ship the api", TaskSource: model.TaskFromOrchestrator,
+	}
+	if got := d.orchFrom(&a, agents, "token").LastMessage; got != "ship the api" {
+		t.Errorf("got %q, want the message that was sent", got)
+	}
+}

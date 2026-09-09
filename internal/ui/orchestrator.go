@@ -94,3 +94,19 @@ func contextPaneID() string {
 	}
 	return os.Getenv("HERDR_PANE_ID")
 }
+
+// recordTold writes what Muster just sent onto the orchestrator's pane as its
+// task token, so the strip's "told" line is the message that was actually sent
+// rather than a terminal title nobody wrote.
+//
+// The i and t keys are the only channel that tells the orchestrator anything,
+// and the client exits between keypresses, so herdr is where the fact has to
+// live. Best effort: the message has already been delivered, and failing here
+// would report a send that worked as a send that did not.
+func recordTold(pane, text string) {
+	_ = herdr.NewClient("").Call("pane.report_metadata", map[string]any{
+		"pane_id": pane,
+		"source":  "muster",
+		"tokens":  map[string]string{"task": truncate(text, 200)},
+	}, nil)
+}

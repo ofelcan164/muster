@@ -204,7 +204,14 @@ func (d *Daemon) orchFrom(a *herdr.Agent, agents map[string]model.Agent, how str
 	}
 	if m, ok := agents[a.PaneID]; ok {
 		o.StatusSince = m.StatusSince
-		o.LastMessage = m.Task
+		// Only the top of the task ladder. The lower rungs are the pane's
+		// terminal title, which nobody said to the orchestrator: under a label
+		// reading "told" it is a sentence that never changes and was never
+		// true. An empty line saying so is the honest version.
+		if m.TaskSource == model.TaskFromOrchestrator ||
+			m.TaskSource == model.TaskFromOrchestratorStale {
+			o.LastMessage = m.Task
+		}
 	}
 	return o
 }

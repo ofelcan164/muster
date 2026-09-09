@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/ofelcan/muster/internal/model"
@@ -38,9 +39,12 @@ func (d *Daemon) orchSay(paneID string) string {
 // wantSaid reports whether the pane is worth reading, and claims the read so
 // two reconciles in the same second do not both fire one.
 //
-// The key is the pane and the status it settled into. A status change is what
-// makes the last message new, and it is the only signal available: herdr has no
-// "the agent replied" event.
+// The key is the pane, the status it settled into, and herdr's state_change_seq
+// at that moment. The seq is what makes consecutive turns distinct: an
+// orchestrator that answers, works, and settles back into idle lands on the
+// same pane and the same status as last time, and without the seq the read
+// would never fire again. herdr has no "the agent replied" event, so a state
+// change is the only signal there is.
 func (d *Daemon) wantSaid(key string) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -158,8 +162,10 @@ func clip(s string, max int) string {
 }
 
 // attachSaid fills in what the orchestrator last said and asks for a read when
-// that could have changed. Working is skipped deliberately: it is mid-sentence.
-func (d *Daemon) attachSaid(orch *model.Orchestrator) {
+// that could have changed. seq is the pane's state_change_seq, which is what
+// tells one turn from the next. Working is skipped deliberately: it is
+// mid-sentence.
+func (d *Daemon) attachSaid(orch *model.Orchestrator, seq uint64) {
 	if !orch.Found {
 		return
 	}
@@ -167,7 +173,7 @@ func (d *Daemon) attachSaid(orch *model.Orchestrator) {
 	if d.client == nil || orch.Status == model.StatusWorking {
 		return
 	}
-	key := orch.PaneID + "|" + string(orch.Status)
+	key := fmt.Sprintf("%s|%s|%d", orch.PaneID, orch.Status, seq)
 	if d.wantSaid(key) {
 		go d.fetchSaid(context.Background(), orch.PaneID, key)
 	}

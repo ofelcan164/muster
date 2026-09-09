@@ -57,8 +57,12 @@ func Run() (string, error) {
 		return markOrchestratorPane(paneID, markedOrchestratorPane())
 	})
 	m.SetPrompter(func(paneID, text string) error {
-		return herdr.NewClient("").Call("agent.prompt",
-			map[string]any{"target": paneID, "text": text}, nil)
+		if err := herdr.NewClient("").Call("agent.prompt",
+			map[string]any{"target": paneID, "text": text}, nil); err != nil {
+			return err
+		}
+		recordTold(paneID, text)
+		return nil
 	})
 	// Keep it live. The daemon rewrites the snapshot every few seconds, and an
 	// overlay left open should follow rather than freeze on whatever was true

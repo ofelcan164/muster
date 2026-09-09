@@ -64,24 +64,37 @@ func TestSaidIsCapped(t *testing.T) {
 	}
 }
 
-// A pane.read costs 350ms, so the same pane in the same status is read once.
-// A status change is what makes the last message new.
-func TestThePaneIsReadOncePerStatus(t *testing.T) {
+// A pane.read costs 350ms, so the same pane in the same state is read once.
+// A state change is what makes the last message new.
+func TestThePaneIsReadOncePerState(t *testing.T) {
 	d := newTestDaemon(t)
-	if !d.wantSaid("w1:p1|idle") {
+	if !d.wantSaid("w1:p1|idle|4") {
 		t.Fatal("the first read should be wanted")
 	}
-	if d.wantSaid("w1:p1|idle") {
+	if d.wantSaid("w1:p1|idle|4") {
 		t.Error("a read already in flight should not fire a second")
 	}
 
 	// The read lands.
-	d.saidKey, d.saidPending = "w1:p1|idle", ""
-	if d.wantSaid("w1:p1|idle") {
+	d.saidKey, d.saidPending = "w1:p1|idle|4", ""
+	if d.wantSaid("w1:p1|idle|4") {
 		t.Error("nothing has changed, so nothing needs reading")
 	}
-	if !d.wantSaid("w1:p1|blocked") {
+	if !d.wantSaid("w1:p1|blocked|5") {
 		t.Error("a status change makes the last message new again")
+	}
+}
+
+// The turn is the unit, not the status. An orchestrator that answers, works,
+// and settles back into idle lands on the pane and status it started from, and
+// what it said in between is exactly what the strip exists to show.
+func TestASecondTurnEndingInTheSameStatusIsReadAgain(t *testing.T) {
+	d := newTestDaemon(t)
+	d.saidKey = "w1:p1|idle|4"
+
+	// Working is never read: mid-turn the tail of the pane is half a sentence.
+	if !d.wantSaid("w1:p1|idle|6") {
+		t.Error("a new turn settling back into idle is a new thing said")
 	}
 }
 

@@ -191,7 +191,7 @@ func (d *Daemon) reconcile() bool {
 
 	// The other half of the orchestrator strip: what it said back, as opposed to
 	// what it was told, which is all the task ladder can report.
-	d.attachSaid(&orch)
+	d.attachSaid(&orch, agents[orch.PaneID].StateChangeSeq)
 
 	everDone := make(map[string]bool, len(d.persist.LastDoneSeq))
 	for pane := range d.persist.LastDoneSeq {
