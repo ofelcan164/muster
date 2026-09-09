@@ -10,8 +10,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
-	"github.com/ofelcan/muster/internal/model"
-	"github.com/ofelcan/muster/internal/state"
+	"github.com/ofelcan164/muster/internal/model"
+	"github.com/ofelcan164/muster/internal/state"
 )
 
 var ansi = regexp.MustCompile(`\x1b\[[0-9;]*m`)

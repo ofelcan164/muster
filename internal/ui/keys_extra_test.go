@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ofelcan/muster/internal/model"
+	"github.com/ofelcan164/muster/internal/model"
 )
 
 // A card with one pane behind it has an obvious answer. A card with nine does

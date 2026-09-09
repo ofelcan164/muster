@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ofelcan/muster/internal/chain"
-	"github.com/ofelcan/muster/internal/model"
+	"github.com/ofelcan164/muster/internal/chain"
+	"github.com/ofelcan164/muster/internal/model"
 )
 
 // RibbonMax caps the ranked ribbon. The plan holds it to four rows so it stays

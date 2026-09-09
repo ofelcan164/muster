@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ofelcan/muster/internal/model"
+	"github.com/ofelcan164/muster/internal/model"
 )
 
 // visibleRepos applies the filter, best match first. Filtering collapses the

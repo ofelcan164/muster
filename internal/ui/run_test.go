@@ -3,7 +3,7 @@ package ui
 import (
 	"testing"
 
-	"github.com/ofelcan/muster/internal/herdr"
+	"github.com/ofelcan164/muster/internal/herdr"
 )
 
 // The bug: the toggle closed any overlay it found anywhere, so pressing the key

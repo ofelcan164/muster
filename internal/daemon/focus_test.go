@@ -3,7 +3,7 @@ package daemon
 import (
 	"testing"
 
-	"github.com/ofelcan/muster/internal/model"
+	"github.com/ofelcan164/muster/internal/model"
 )
 
 func agents(panes ...string) map[string]model.Agent {

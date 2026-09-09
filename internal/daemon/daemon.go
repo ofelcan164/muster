@@ -15,12 +15,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ofelcan/muster/internal/chain"
-	"github.com/ofelcan/muster/internal/discover"
-	"github.com/ofelcan/muster/internal/herdr"
-	"github.com/ofelcan/muster/internal/model"
-	"github.com/ofelcan/muster/internal/state"
-	"github.com/ofelcan/muster/internal/triage"
+	"github.com/ofelcan164/muster/internal/chain"
+	"github.com/ofelcan164/muster/internal/discover"
+	"github.com/ofelcan164/muster/internal/herdr"
+	"github.com/ofelcan164/muster/internal/model"
+	"github.com/ofelcan164/muster/internal/state"
+	"github.com/ofelcan164/muster/internal/triage"
 )
 
 const (

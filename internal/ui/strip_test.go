@@ -7,7 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/ofelcan/muster/internal/model"
+	"github.com/ofelcan164/muster/internal/model"
 )
 
 // withOrch is the test snapshot plus a marked orchestrator, and optionally an

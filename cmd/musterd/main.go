@@ -21,9 +21,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ofelcan/muster/internal/daemon"
-	"github.com/ofelcan/muster/internal/herdr"
-	"github.com/ofelcan/muster/internal/state"
+	"github.com/ofelcan164/muster/internal/daemon"
+	"github.com/ofelcan164/muster/internal/herdr"
+	"github.com/ofelcan164/muster/internal/state"
 )
 
 func main() {

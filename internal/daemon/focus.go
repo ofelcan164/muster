@@ -1,6 +1,6 @@
 package daemon
 
-import "github.com/ofelcan/muster/internal/model"
+import "github.com/ofelcan164/muster/internal/model"
 
 // trackFocus maintains the agent focus history behind the back key.
 //

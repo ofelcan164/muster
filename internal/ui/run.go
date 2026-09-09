@@ -7,11 +7,11 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/ofelcan/muster/internal/daemon"
-	"github.com/ofelcan/muster/internal/herdr"
-	"github.com/ofelcan/muster/internal/install"
-	"github.com/ofelcan/muster/internal/model"
-	"github.com/ofelcan/muster/internal/state"
+	"github.com/ofelcan164/muster/internal/daemon"
+	"github.com/ofelcan164/muster/internal/herdr"
+	"github.com/ofelcan164/muster/internal/install"
+	"github.com/ofelcan164/muster/internal/model"
+	"github.com/ofelcan164/muster/internal/state"
 )
 
 // staleAfter is when a snapshot stops being trustworthy. The daemon rewrites

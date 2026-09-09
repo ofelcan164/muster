@@ -10,8 +10,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/ofelcan/muster/internal/identity"
-	"github.com/ofelcan/muster/internal/model"
+	"github.com/ofelcan164/muster/internal/identity"
+	"github.com/ofelcan164/muster/internal/model"
 )
 
 // Gruvbox, matching the design. Read from the herdr theme later; hardcoded now

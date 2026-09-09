@@ -9,7 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/ofelcan/muster/internal/model"
+	"github.com/ofelcan164/muster/internal/model"
 )
 
 // SetPrompter supplies the function that sends a message to an agent. Injected

@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/ofelcan/muster/internal/model"
+	"github.com/ofelcan164/muster/internal/model"
 )
 
 // The question a blocked agent is waiting on exists only in the pane's visible

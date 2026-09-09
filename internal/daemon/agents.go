@@ -1,9 +1,9 @@
 package daemon
 
 import (
-	"github.com/ofelcan/muster/internal/herdr"
-	"github.com/ofelcan/muster/internal/model"
-	"github.com/ofelcan/muster/internal/state"
+	"github.com/ofelcan164/muster/internal/herdr"
+	"github.com/ofelcan164/muster/internal/model"
+	"github.com/ofelcan164/muster/internal/state"
 	"strings"
 	"time"
 )

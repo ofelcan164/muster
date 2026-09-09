@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ofelcan/muster/internal/model"
-	"github.com/ofelcan/muster/internal/state"
+	"github.com/ofelcan164/muster/internal/model"
+	"github.com/ofelcan164/muster/internal/state"
 )
 
 // ReadSnapshot loads the snapshot the daemon maintains. This is the whole of

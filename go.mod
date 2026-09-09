@@ -1,4 +1,4 @@
-module github.com/ofelcan/muster
+module github.com/ofelcan164/muster
 
 go 1.24.0
 

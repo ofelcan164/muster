@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ofelcan/muster/internal/model"
+	"github.com/ofelcan164/muster/internal/model"
 )
 
 // What the orchestrator last said exists only in its pane. The task ladder

@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ofelcan/muster/internal/state"
+	"github.com/ofelcan164/muster/internal/state"
 )
 
 // Ensure starts a daemon if one is not already running, and returns

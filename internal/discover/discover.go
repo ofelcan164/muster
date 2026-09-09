@@ -17,7 +17,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ofelcan/muster/internal/herdr"
+	"github.com/ofelcan164/muster/internal/herdr"
 )
 
 // Info is the resolved identity of a working directory.

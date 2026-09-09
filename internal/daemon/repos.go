@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ofelcan/muster/internal/herdr"
-	"github.com/ofelcan/muster/internal/identity"
-	"github.com/ofelcan/muster/internal/model"
+	"github.com/ofelcan164/muster/internal/herdr"
+	"github.com/ofelcan164/muster/internal/identity"
+	"github.com/ofelcan164/muster/internal/model"
 )
 
 // buildRepos groups agents and non-agent panes under the repo their workspace

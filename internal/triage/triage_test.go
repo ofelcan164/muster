@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ofelcan/muster/internal/chain"
-	"github.com/ofelcan/muster/internal/model"
+	"github.com/ofelcan164/muster/internal/chain"
+	"github.com/ofelcan164/muster/internal/model"
 )
 
 // linear is the shape that actually occurs: contracts, then api, then web and

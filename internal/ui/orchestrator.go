@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ofelcan/muster/internal/daemon"
-	"github.com/ofelcan/muster/internal/herdr"
+	"github.com/ofelcan164/muster/internal/daemon"
+	"github.com/ofelcan164/muster/internal/herdr"
 )
 
 // MarkOrchestrator names the pane an action was invoked on as the orchestrator.

@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ofelcan/muster/internal/model"
+	"github.com/ofelcan164/muster/internal/model"
 )
 
 // SortMode is how the repo grid is ordered.

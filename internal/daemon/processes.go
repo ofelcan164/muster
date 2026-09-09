@@ -4,9 +4,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ofelcan/muster/internal/herdr"
-	"github.com/ofelcan/muster/internal/model"
-	"github.com/ofelcan/muster/internal/state"
+	"github.com/ofelcan164/muster/internal/herdr"
+	"github.com/ofelcan164/muster/internal/model"
+	"github.com/ofelcan164/muster/internal/state"
 )
 
 // stoppedTTL is how long a stopped process stays in the ribbon.

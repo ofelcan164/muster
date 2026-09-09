@@ -11,12 +11,12 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ofelcan/muster/internal/chain"
-	"github.com/ofelcan/muster/internal/daemon"
-	"github.com/ofelcan/muster/internal/herdr"
-	"github.com/ofelcan/muster/internal/install"
-	"github.com/ofelcan/muster/internal/state"
-	"github.com/ofelcan/muster/internal/ui"
+	"github.com/ofelcan164/muster/internal/chain"
+	"github.com/ofelcan164/muster/internal/daemon"
+	"github.com/ofelcan164/muster/internal/herdr"
+	"github.com/ofelcan164/muster/internal/install"
+	"github.com/ofelcan164/muster/internal/state"
+	"github.com/ofelcan164/muster/internal/ui"
 )
 
 func main() {

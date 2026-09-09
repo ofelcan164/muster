@@ -5,7 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/ofelcan/muster/internal/state"
+	"github.com/ofelcan164/muster/internal/state"
 )
 
 // drawnRepoKeys is the repo order the view actually paints.
