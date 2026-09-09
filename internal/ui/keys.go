@@ -4,6 +4,7 @@
 package ui
 
 import (
+	"fmt"
 	"sort"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -164,10 +165,20 @@ func (m *Model) activate() (tea.Model, tea.Cmd) {
 	p := m.selectedPane()
 	if p == "" {
 		// A repo card with no agents still has panes behind it: a shell, an
-		// editor, whatever is open there. Jumping to the first one is what makes
-		// every tile openable, rather than a click landing on a dead card.
-		if r := m.repoByKey(m.selectedRepo()); len(r.OtherPanes) > 0 {
+		// editor, whatever is open there. One of those is an obvious answer and
+		// keeps every tile openable. Nine of them is not an answer at all:
+		// jumping to the first of nine shells spread across nine workspaces
+		// takes the screen somewhere nobody asked to go. The t key already
+		// refuses to guess between several gates for the same reason.
+		r := m.repoByKey(m.selectedRepo())
+		switch len(r.OtherPanes) {
+		case 0:
+			m.notice = shortRepo(r) + " has nothing open to jump to"
+		case 1:
 			p = r.OtherPanes[0].PaneID
+		default:
+			m.notice = fmt.Sprintf("%s has no agent, and %s with nothing to choose between them",
+				shortRepo(r), plural(len(r.OtherPanes), "pane"))
 		}
 	}
 	if p == "" {
