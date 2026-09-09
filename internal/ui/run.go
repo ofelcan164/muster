@@ -123,37 +123,55 @@ func Jump(paneID string) error {
 // opening twice stacks two overlays on top of each other. Finding an existing
 // one by its manifest title is how the overlay locates itself, since the pane
 // list reports that title as the label.
+//
+// A label outlives the plugin pane it named. When the overlay process in a pane
+// exits, herdr keeps the pane, keeps the label, and stops tracking it as a
+// plugin pane, so closing it returns plugin_pane_not_found. That pane then
+// matched every press and failed every time, and since this key is the only way
+// in, the overlay became permanently unreachable. Whatever it is now, it is not
+// an overlay, so open one.
 func TogglePane() error {
-	if pane := findOverlayPane(); pane != "" {
-		return herdr.NewClient("").Call("plugin.pane.close",
-			map[string]any{"pane_id": pane}, nil)
+	c := herdr.NewClient("")
+	for _, pane := range findOverlayPanes() {
+		err := c.Call("plugin.pane.close", map[string]any{"pane_id": pane}, nil)
+		if herdr.Code(err) == "plugin_pane_not_found" {
+			// Not an overlay, whatever the label says. Try the next match: a
+			// corpse alongside a real overlay must not mean the real one never
+			// closes and a third opens on every press.
+			continue
+		}
+		return err
 	}
 	return OpenPane()
 }
 
-// findOverlayPane returns an open Muster overlay in the focused workspace, or
-// "".
+// findOverlayPanes returns the panes in the focused workspace that carry the
+// overlay's label, most likely candidate first.
 //
 // The workspace check is the whole point: the toggle closes whatever this
 // finds, so an overlay left open in another workspace made prefix+m close that
 // one, and from where you were sitting the key did nothing. session.snapshot
 // carries the plugin panes and the focused workspace together, so scoping it
 // costs no extra call.
-func findOverlayPane() string {
+//
+// It returns every match rather than the first because the label is not proof:
+// a pane keeps it after the overlay process in it has gone.
+func findOverlayPanes() []string {
 	snap, err := herdr.NewClient("").SessionSnapshot()
 	if err != nil {
-		return ""
+		return nil
 	}
-	return overlayPaneIn(snap.Panes, snap.FocusedWorkspaceID)
+	return overlayPanesIn(snap.Panes, snap.FocusedWorkspaceID)
 }
 
-func overlayPaneIn(panes []herdr.Pane, workspace string) string {
+func overlayPanesIn(panes []herdr.Pane, workspace string) []string {
+	var out []string
 	for _, p := range panes {
 		if p.Label == overlayTitle && p.WorkspaceID == workspace {
-			return p.PaneID
+			out = append(out, p.PaneID)
 		}
 	}
-	return ""
+	return out
 }
 
 // overlayTitle is the [[panes]] title from the manifest, which is what shows up
