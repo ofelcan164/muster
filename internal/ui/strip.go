@@ -39,11 +39,11 @@ func (m *Model) stripLines(startY int) []string {
 	if name == "" {
 		name = "orchestrator"
 	}
-	st := statusStyle(o.Status)
+	st := statusStyle(o.Status, m.frame)
 	head := fmt.Sprintf(" %s %s %s %s",
 		styTitle.Render("⌂"),
 		styFG.Bold(true).Render(strings.ToUpper(name)),
-		st.Render(statusIcon(o.Status)+" "+string(o.Status)),
+		st.Render(statusIcon(o.Status, m.frame)+" "+string(o.Status)),
 		styMeta.Render(ageText(orchAge(o), !o.StatusSince.IsZero())))
 
 	// The jump hint is the first thing to go when the pane is narrow. Who the

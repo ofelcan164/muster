@@ -267,14 +267,14 @@ func (m *Model) isActive(target int) bool {
 // agentLines renders one agent. Selection styling is applied by the caller, so
 // that a whole card highlights as a block rather than a single row.
 func (m *Model) agentLines(a model.Agent, width int) []string {
-	st := statusStyle(a.Status)
+	st := statusStyle(a.Status, m.frame)
 
 	marker := " "
 	if a.IsOrchestrator {
 		marker = "⌂"
 	}
 	line := fmt.Sprintf("  %s%s %s %s",
-		marker, st.Render(statusIcon(a.Status)),
+		marker, st.Render(statusIcon(a.Status, m.frame)),
 		styFG.Render(truncate(a.Name, 14)),
 		styMeta.Render(ageText(a.Age(time.Now()), a.AgeKnown)))
 

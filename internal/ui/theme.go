@@ -22,6 +22,7 @@ var (
 	colDim    = lipgloss.Color("#928374")
 	colFaint  = lipgloss.Color("#665c54")
 	colRed    = lipgloss.Color("#fb4934")
+	colRedDim = lipgloss.Color("#cc241d") // the pulse's other half
 	colGreen  = lipgloss.Color("#b8bb26")
 	colYellow = lipgloss.Color("#fabd2f")
 	colBlue   = lipgloss.Color("#83a598")
@@ -46,10 +47,24 @@ var (
 	styMatch   = lipgloss.NewStyle().Foreground(colYellow).Bold(true)
 )
 
+// Animation. Working spins and blocked pulses, and nothing else moves: motion
+// everywhere is motion nowhere. frame 0 is the resting frame, so a screen that
+// is not animating looks exactly as it did before any of this existed.
+//
+// The spinner stays in the family of the ◐ it replaces. The pulse is four
+// frames of each red, a little under a second either way, so blocked breathes
+// rather than blinks.
+var spinner = []string{"◐", "◓", "◑", "◒"}
+
+const pulseFrames = 4
+
 // statusStyle colours an agent by what it needs from you, not by what it is.
-func statusStyle(s model.Status) lipgloss.Style {
+func statusStyle(s model.Status, frame int) lipgloss.Style {
 	switch s {
 	case model.StatusBlocked:
+		if (frame/pulseFrames)%2 == 1 {
+			return lipgloss.NewStyle().Foreground(colRedDim)
+		}
 		return lipgloss.NewStyle().Foreground(colRed)
 	case model.StatusDone:
 		return lipgloss.NewStyle().Foreground(colGreen)
@@ -62,14 +77,14 @@ func statusStyle(s model.Status) lipgloss.Style {
 	}
 }
 
-func statusIcon(s model.Status) string {
+func statusIcon(s model.Status, frame int) string {
 	switch s {
 	case model.StatusBlocked:
 		return "▲"
 	case model.StatusDone:
 		return "●"
 	case model.StatusWorking:
-		return "◐"
+		return spinner[frame%len(spinner)]
 	case model.StatusIdle:
 		return "○"
 	default:

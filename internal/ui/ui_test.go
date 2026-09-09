@@ -1050,3 +1050,79 @@ func TestDismissalsAreDroppedOnceTheRowIsGone(t *testing.T) {
 		t.Errorf("stale dismissal kept: %v", m.dismissed)
 	}
 }
+
+// Working and blocked read as static text otherwise, which is the wrong thing
+// for the two states where something is happening or something is waiting.
+func TestWorkingSpinsAndBlockedPulses(t *testing.T) {
+	m := newSized(143)
+	first := plain(m.View())
+
+	// A working agent's icon changes from frame to frame.
+	spun := false
+	for i := 0; i < len(spinner); i++ {
+		m.Update(animMsg{})
+		if strings.Contains(plain(m.View()), spinner[m.frame%len(spinner)]) {
+			spun = true
+		}
+	}
+	if !spun {
+		t.Error("the working icon never moved")
+	}
+
+	// Blocked keeps its shape and changes colour, so the pulse is not a shape
+	// the eye has to re-read.
+	m.frame = 0
+	rest := m.View()
+	m.frame = pulseFrames
+	if pulsed := m.View(); pulsed == rest {
+		t.Error("blocked did not pulse")
+	}
+	if !strings.Contains(plain(m.View()), "▲") {
+		t.Error("the pulse should change the colour, not the icon")
+	}
+
+	// Frame zero is the resting frame: a still screen looks the way it always
+	// did.
+	m.frame = 0
+	if plain(m.View()) != first {
+		t.Error("frame zero should render exactly as an unanimated screen")
+	}
+}
+
+// An overlay left open on a screen of idle agents should cost nothing.
+func TestAnimationStopsWhenNothingMoves(t *testing.T) {
+	m := newSized(143)
+	if !m.animated() {
+		t.Fatal("the test snapshot has a working agent and a blocked one")
+	}
+	if cmd := m.startAnimation(); cmd == nil {
+		t.Error("something is moving, so the frame loop should start")
+	}
+	if cmd := m.startAnimation(); cmd != nil {
+		t.Error("a second loop started while one was already running")
+	}
+
+	// Everything settles.
+	snap := testSnapshot()
+	for i := range snap.Repos {
+		for j := range snap.Repos[i].Agents {
+			snap.Repos[i].Agents[j].Status = model.StatusIdle
+		}
+	}
+	m.SetSnapshot(snap)
+	if m.animated() {
+		t.Fatal("nothing is working or blocked any more")
+	}
+	if _, cmd := m.Update(animMsg{}); cmd != nil {
+		t.Error("the frame loop should stop when the screen goes still")
+	}
+	if m.ticking {
+		t.Error("ticking should be cleared so the loop can start again later")
+	}
+
+	// And it starts again when something picks up.
+	m.SetSnapshot(testSnapshot())
+	if cmd := m.startAnimation(); cmd == nil {
+		t.Error("an agent starting work should restart the frame loop")
+	}
+}

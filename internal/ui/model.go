@@ -105,6 +105,12 @@ type Model struct {
 	// without touching the filesystem.
 	reload func() *model.Snapshot
 
+	// frame advances the animations. ticking says whether a tick is in flight,
+	// so the loop can stop when nothing is moving and start again when
+	// something is, without ever running two at once.
+	frame   int
+	ticking bool
+
 	warning string
 	quit    bool
 }
@@ -131,7 +137,45 @@ func refreshTick() tea.Cmd {
 	return tea.Tick(refreshInterval, func(time.Time) tea.Msg { return refreshMsg{} })
 }
 
-func (m *Model) Init() tea.Cmd { return refreshTick() }
+func (m *Model) Init() tea.Cmd { return tea.Batch(refreshTick(), m.startAnimation()) }
+
+// animInterval is the animation frame rate. The refresh tick at 700ms is far
+// too slow to spin, and a frame is only a re-render, so the two run separately
+// rather than one being sped up to serve both.
+const animInterval = 120 * time.Millisecond
+
+type animMsg struct{}
+
+func animTick() tea.Cmd {
+	return tea.Tick(animInterval, func(time.Time) tea.Msg { return animMsg{} })
+}
+
+// startAnimation begins the frame loop, if anything is moving and one is not
+// already running.
+func (m *Model) startAnimation() tea.Cmd {
+	if m.ticking || !m.animated() {
+		return nil
+	}
+	m.ticking = true
+	return animTick()
+}
+
+// animated reports whether anything on the screen moves. An overlay showing
+// nothing but idle agents redraws never, which is what a pane left open all day
+// should cost.
+func (m *Model) animated() bool {
+	moving := func(s model.Status) bool {
+		return s == model.StatusWorking || s == model.StatusBlocked
+	}
+	for _, r := range m.snap.Repos {
+		for _, a := range r.Agents {
+			if moving(a.Status) {
+				return true
+			}
+		}
+	}
+	return m.snap.Orch.Found && moving(m.snap.Orch.Status)
+}
 
 // SetSnapshot swaps in fresh data, keeping the selection where it was.
 func (m *Model) SetSnapshot(s *model.Snapshot) {
@@ -244,7 +288,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.reload != nil {
 			m.SetSnapshot(m.reload())
 		}
-		return m, refreshTick()
+		// An agent that has just started working restarts the frame loop, which
+		// stopped itself when the screen went still.
+		return m, tea.Batch(refreshTick(), m.startAnimation())
+
+	case animMsg:
+		m.frame++
+		if !m.animated() {
+			m.ticking = false
+			return m, nil
+		}
+		return m, animTick()
 	}
 	return m, nil
 }
