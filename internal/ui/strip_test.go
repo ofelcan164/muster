@@ -48,8 +48,8 @@ func TestStripShowsTheOrchestratorAndItsLastMessage(t *testing.T) {
 	m := withSnapshot(t, withOrch(), 143)
 	out := plain(m.View())
 
-	for _, want := range []string{"ORCHESTRATOR", "contracts#412 is merged",
-		"Told api to pick up", "told", "said", "press i to tell it something"} {
+	for _, want := range []string{"ORCHESTRATOR",
+		"Told api to pick up", "press i to tell it something"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the strip does not mention %q:\n%s", want, out)
 		}
@@ -358,20 +358,39 @@ func TestMarkingTheOrchestratorAgain(t *testing.T) {
 	}
 }
 
-// The strip used to show only what the orchestrator was told, which is the half
-// that cannot tell you whether it answered.
-func TestStripShowsBothHalvesOfTheConversation(t *testing.T) {
+// The strip shows the reply and not the prompt. What you told it is the half
+// you already know, and silence still has to say it is silence: empty space
+// here reads as a bug.
+func TestStripShowsTheReplyAndNotThePrompt(t *testing.T) {
 	s := withOrch()
-	s.Orch.LastSaid = ""
 	m := withSnapshot(t, s, 143)
 	out := plain(m.View())
 
+	if strings.Contains(out, "contracts#412 is merged") {
+		t.Errorf("the prompt is back on the strip:\n%s", out)
+	}
+
+	s.Orch.LastSaid = ""
+	out = plain(withSnapshot(t, s, 143).View())
 	if !strings.Contains(out, "nothing said yet") {
 		t.Errorf("an orchestrator that has not replied should say so:\n%s", out)
 	}
-	// The prompt is still there either way, so the reply has something to be
-	// read against.
-	if !strings.Contains(out, "contracts#412 is merged") {
-		t.Errorf("the strip dropped what it was told:\n%s", out)
+}
+
+// The age is half the point of the line. A sentence with no clock on it cannot
+// be told from one that has been sitting there since this morning.
+func TestSaidCarriesItsAge(t *testing.T) {
+	s := withOrch()
+	s.Orch.SaidAt = time.Now().Add(-90 * time.Second)
+	out := plain(withSnapshot(t, s, 143).View())
+
+	if !strings.Contains(out, "1m") {
+		t.Errorf("the reply lost its age:\n%s", out)
+	}
+
+	// Nothing read yet means no age to show, not a zero-time age of years.
+	s.Orch.SaidAt = time.Time{}
+	if out := plain(withSnapshot(t, s, 143).View()); strings.Contains(out, "y ") {
+		t.Errorf("an unread reply invented an age:\n%s", out)
 	}
 }

@@ -168,6 +168,10 @@ type Orchestrator struct {
 	// prompt alone cannot tell you whether it answered.
 	LastMessage string `json:"last_message,omitempty"`
 	LastSaid    string `json:"last_said,omitempty"`
+	// SaidAt is when the daemon read LastSaid, not when the agent typed it.
+	// The read fires as soon as the status settles, so the two are a second or
+	// so apart, and a message with no age on it cannot be told from a stale one.
+	SaidAt time.Time `json:"said_at,omitempty"`
 	// DetectedBy is "token" or "name"; the token wins because it survives a
 	// rename and can carry more than a string later.
 	DetectedBy  string    `json:"detected_by,omitempty"`

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/ofelcan/muster/internal/model"
 )
@@ -26,14 +27,15 @@ const (
 	saidMax   = 200
 )
 
-// orchSay is what the orchestrator last said, if it was read from this pane.
-func (d *Daemon) orchSay(paneID string) string {
+// orchSay is what the orchestrator last said, and when that was read, if it
+// came from this pane.
+func (d *Daemon) orchSay(paneID string) (string, time.Time) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.saidPane != paneID {
-		return ""
+		return "", time.Time{}
 	}
-	return d.said
+	return d.said, d.saidAt
 }
 
 // wantSaid reports whether the pane is worth reading, and claims the read so
@@ -84,7 +86,7 @@ func (d *Daemon) fetchSaid(ctx context.Context, paneID, key string) {
 	// better than a blank strip.
 	d.saidKey, d.saidPending = key, ""
 	if said != "" {
-		d.said, d.saidPane = said, paneID
+		d.said, d.saidPane, d.saidAt = said, paneID, time.Now()
 	}
 	changed := said != ""
 	d.mu.Unlock()
@@ -169,7 +171,7 @@ func (d *Daemon) attachSaid(orch *model.Orchestrator, seq uint64) {
 	if !orch.Found {
 		return
 	}
-	orch.LastSaid = d.orchSay(orch.PaneID)
+	orch.LastSaid, orch.SaidAt = d.orchSay(orch.PaneID)
 	if d.client == nil || orch.Status == model.StatusWorking {
 		return
 	}

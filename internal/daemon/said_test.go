@@ -1,6 +1,9 @@
 package daemon
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 // Built from the same rendering the captured prompt in question_test.go shows:
 // the agent's own lines start with "●", the user's with "❯", and wrapped text
@@ -101,11 +104,19 @@ func TestASecondTurnEndingInTheSameStatusIsReadAgain(t *testing.T) {
 // Text read from one orchestrator must not be shown under the next one.
 func TestSaidBelongsToThePaneItCameFrom(t *testing.T) {
 	d := newTestDaemon(t)
-	d.said, d.saidPane = "dispatched api", "w1:p1"
-	if got := d.orchSay("w1:p1"); got != "dispatched api" {
+	d.said, d.saidPane, d.saidAt = "dispatched api", "w1:p1", time.Now()
+	got, at := d.orchSay("w1:p1")
+	if got != "dispatched api" {
 		t.Errorf("got %q", got)
 	}
-	if got := d.orchSay("w2:p1"); got != "" {
+	if at.IsZero() {
+		t.Error("the message came back without the time it was read")
+	}
+	got, at = d.orchSay("w2:p1")
+	if got != "" {
 		t.Errorf("another pane's message leaked: %q", got)
+	}
+	if !at.IsZero() {
+		t.Error("another pane's read time leaked")
 	}
 }

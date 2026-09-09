@@ -25,11 +25,18 @@ func (m *Model) stripLines(startY int) []string {
 	}
 	o := m.snap.Orch
 	if !o.Found {
-		return []string{
+		out := []string{
 			m.sectionRule("orchestrator"),
 			styFaint.Render(fitLine(
 				"  none marked · press o on the agent in charge", m.width)),
 		}
+		// Without this the strip has nowhere to report from when no
+		// orchestrator is marked, and every notice raised in that state is
+		// written to a line that is never drawn.
+		if m.notice != "" {
+			out = append(out, fitLine(" "+styWarn.Render("· "+m.notice), m.width))
+		}
+		return out
 	}
 
 	ti := m.stripTargetIndex()
@@ -55,12 +62,7 @@ func (m *Model) stripLines(startY int) []string {
 	}
 	out = append(out, fitLine(head, m.width))
 
-	// Both halves of the conversation, each on its own line. What it was told is
-	// all the task ladder can report, and on its own it cannot tell you whether
-	// the orchestrator answered or dispatched anything.
-	out = append(out,
-		m.messageLine("told", o.LastMessage, "nothing assigned"),
-		m.messageLine("said", o.LastSaid, "nothing said yet"))
+	out = append(out, m.saidLine(o))
 
 	out = append(out, fitLine(m.stripFooter(), m.width))
 
@@ -79,15 +81,31 @@ func (m *Model) stripLines(startY int) []string {
 	return out
 }
 
-// messageLine is one of the strip's two message lines. The text gets the bright
-// foreground because it is the whole reason to look here; the label stays dim so
-// the eye goes to the sentence rather than the word in front of it.
-func (m *Model) messageLine(label, text, empty string) string {
-	if text == "" {
-		return styFaint.Render(fitLine("   "+label+"  "+empty, m.width))
+// saidLine is the strip's one message line: what the orchestrator last said,
+// and how long ago that was.
+//
+// Only the reply. What it was told is the half you already know, because you
+// are the one who typed it, and it is still on the orchestrator's own card and
+// in musterd dump for the times you want it. The age is the point of the line
+// as much as the text is: a sentence with no clock on it cannot be told from
+// one that has been sitting there since this morning.
+func (m *Model) saidLine(o model.Orchestrator) string {
+	if o.LastSaid == "" {
+		return styFaint.Render(fitLine("   ↓ nothing said yet", m.width))
 	}
-	line := styMeta.Render("   "+label+"  ") +
-		styFG.Render("\""+truncate(text, max(10, m.width-12))+"\"")
+
+	age := ""
+	if !o.SaidAt.IsZero() {
+		age = styMeta.Render(ageText(time.Since(o.SaidAt), true) + " ")
+	}
+	// The arrow and the age both hold their columns, so the sentence gets
+	// whatever is left rather than pushing the clock off the end of the line.
+	head := styMeta.Render("   ↓ ")
+	room := m.width - lipgloss.Width(head) - lipgloss.Width(age) - 1
+	line := head + styFG.Render(truncate(o.LastSaid, max(10, room)))
+	if gap := m.width - lipgloss.Width(line) - lipgloss.Width(age); gap > 0 {
+		line += strings.Repeat(" ", gap) + age
+	}
 	return fitLine(line, m.width)
 }
 

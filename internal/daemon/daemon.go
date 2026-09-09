@@ -58,6 +58,7 @@ type Daemon struct {
 	// the pane-and-status it was read at. One pane is ever read this way, so
 	// these are fields rather than a map. saidPending is the read in flight.
 	said        string
+	saidAt      time.Time
 	saidPane    string
 	saidKey     string
 	saidPending string
