@@ -19,6 +19,7 @@ func withOrch(gates ...model.Attention) *model.Snapshot {
 		Status: model.StatusIdle, DetectedBy: "token",
 		StatusSince: time.Now().Add(-3 * time.Minute),
 		LastMessage: "contracts#412 is merged. api is picking up the schema change.",
+		LastSaid:    "Told api to pick up the schema change.",
 	}
 	s.Attention = append(s.Attention, gates...)
 	return s
@@ -47,7 +48,8 @@ func TestStripShowsTheOrchestratorAndItsLastMessage(t *testing.T) {
 	m := withSnapshot(t, withOrch(), 143)
 	out := plain(m.View())
 
-	for _, want := range []string{"ORCHESTRATOR", "contracts#412 is merged", "press i to tell it something"} {
+	for _, want := range []string{"ORCHESTRATOR", "contracts#412 is merged",
+		"Told api to pick up", "told", "said", "press i to tell it something"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the strip does not mention %q:\n%s", want, out)
 		}
@@ -353,5 +355,23 @@ func TestMarkingTheOrchestratorAgain(t *testing.T) {
 	key(m, "o")
 	if !strings.Contains(m.notice, "already") {
 		t.Errorf("notice = %q, want it to say it is already the orchestrator", m.notice)
+	}
+}
+
+// The strip used to show only what the orchestrator was told, which is the half
+// that cannot tell you whether it answered.
+func TestStripShowsBothHalvesOfTheConversation(t *testing.T) {
+	s := withOrch()
+	s.Orch.LastSaid = ""
+	m := withSnapshot(t, s, 143)
+	out := plain(m.View())
+
+	if !strings.Contains(out, "nothing said yet") {
+		t.Errorf("an orchestrator that has not replied should say so:\n%s", out)
+	}
+	// The prompt is still there either way, so the reply has something to be
+	// read against.
+	if !strings.Contains(out, "contracts#412 is merged") {
+		t.Errorf("the strip dropped what it was told:\n%s", out)
 	}
 }

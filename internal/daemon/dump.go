@@ -128,7 +128,10 @@ func Dump(w io.Writer, s *model.Snapshot, now time.Time) {
 			s.Orch.Name, s.Orch.Status, compactDur(now.Sub(s.Orch.StatusSince)),
 			s.Orch.DetectedBy, s.Orch.PaneID)
 		if s.Orch.LastMessage != "" {
-			fmt.Fprintf(w, "    \"%s\"\n", s.Orch.LastMessage)
+			fmt.Fprintf(w, "    told  \"%s\"\n", s.Orch.LastMessage)
+		}
+		if s.Orch.LastSaid != "" {
+			fmt.Fprintf(w, "    said  \"%s\"\n", s.Orch.LastSaid)
 		}
 	}
 }

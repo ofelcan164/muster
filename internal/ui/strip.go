@@ -55,16 +55,12 @@ func (m *Model) stripLines(startY int) []string {
 	}
 	out = append(out, fitLine(head, m.width))
 
-	// The last message is the whole reason to look here, so it gets the bright
-	// foreground and a whole line to itself.
-	msg := o.LastMessage
-	if msg == "" {
-		msg = "nothing said yet"
-		out = append(out, styFaint.Render(fitLine("   "+msg, m.width)))
-	} else {
-		out = append(out, styFG.Render(fitLine(
-			"   \""+truncate(msg, max(10, m.width-6))+"\"", m.width)))
-	}
+	// Both halves of the conversation, each on its own line. What it was told is
+	// all the task ladder can report, and on its own it cannot tell you whether
+	// the orchestrator answered or dispatched anything.
+	out = append(out,
+		m.messageLine("told", o.LastMessage, "nothing assigned"),
+		m.messageLine("said", o.LastSaid, "nothing said yet"))
 
 	out = append(out, fitLine(m.stripFooter(), m.width))
 
@@ -81,6 +77,18 @@ func (m *Model) stripLines(startY int) []string {
 		}
 	}
 	return out
+}
+
+// messageLine is one of the strip's two message lines. The text gets the bright
+// foreground because it is the whole reason to look here; the label stays dim so
+// the eye goes to the sentence rather than the word in front of it.
+func (m *Model) messageLine(label, text, empty string) string {
+	if text == "" {
+		return styFaint.Render(fitLine("   "+label+"  "+empty, m.width))
+	}
+	line := styMeta.Render("   "+label+"  ") +
+		styFG.Render("\""+truncate(text, max(10, m.width-12))+"\"")
+	return fitLine(line, m.width)
 }
 
 // stripFooter is the last line of the strip: the input while it is open, then

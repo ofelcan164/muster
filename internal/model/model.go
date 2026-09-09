@@ -159,11 +159,15 @@ type Stopped struct {
 }
 
 type Orchestrator struct {
-	Found       bool   `json:"found"`
-	PaneID      string `json:"pane_id,omitempty"`
-	Name        string `json:"name,omitempty"`
-	Status      Status `json:"status,omitempty"`
+	Found  bool   `json:"found"`
+	PaneID string `json:"pane_id,omitempty"`
+	Name   string `json:"name,omitempty"`
+	Status Status `json:"status,omitempty"`
+	// LastMessage is what the orchestrator was told to do, off the task ladder.
+	// LastSaid is what it last said back, read from its pane. Both, because the
+	// prompt alone cannot tell you whether it answered.
 	LastMessage string `json:"last_message,omitempty"`
+	LastSaid    string `json:"last_said,omitempty"`
 	// DetectedBy is "token" or "name"; the token wins because it survives a
 	// rename and can carry more than a string later.
 	DetectedBy  string    `json:"detected_by,omitempty"`

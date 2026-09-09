@@ -54,6 +54,14 @@ type Daemon struct {
 	mu        sync.Mutex
 	questions map[string]string
 
+	// said is the orchestrator's last message, the pane it was read from, and
+	// the pane-and-status it was read at. One pane is ever read this way, so
+	// these are fields rather than a map. saidPending is the read in flight.
+	said        string
+	saidPane    string
+	saidKey     string
+	saidPending string
+
 	// rescan asks the reconcile loop to run again after the fetcher learns
 	// something the last snapshot did not have.
 	rescan chan struct{}
@@ -180,6 +188,10 @@ func (d *Daemon) reconcile() bool {
 	if want := d.blockedNeedingQuestion(agents); len(want) > 0 && d.client != nil {
 		go d.fetchQuestions(context.Background(), want)
 	}
+
+	// The other half of the orchestrator strip: what it said back, as opposed to
+	// what it was told, which is all the task ladder can report.
+	d.attachSaid(&orch)
 
 	everDone := make(map[string]bool, len(d.persist.LastDoneSeq))
 	for pane := range d.persist.LastDoneSeq {
