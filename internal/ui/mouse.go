@@ -43,6 +43,11 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
+	if m.isKind(idx, kindBanner) {
+		// The banner is not a selection, so clicking it must not move the
+		// cursor off whatever the keyboard was on.
+		return m.runSkillInstall()
+	}
 	// One click goes. Requiring a click to select and another to commit makes
 	// the mouse slower than the keyboard, which defeats the point of having it.
 	m.cursor = idx

@@ -33,8 +33,9 @@ const (
 	kindGrid targetKind = iota
 	kindRibbon
 	kindStrip
-	// kindBanner is the one target that does not point at a pane. Selecting it
-	// runs something instead of going somewhere.
+	// kindBanner is the one target that does not point at a pane, and the one
+	// the cursor never lands on. It exists so a click has something to resolve
+	// against; the keyboard reaches it through its own key instead.
 	kindBanner
 )
 
@@ -43,8 +44,8 @@ func (m *Model) rebuild() {
 	prev := m.selectedKey()
 	m.targets = nil
 
-	// First, because it is the first thing on screen and the first thing the
-	// keyboard should reach.
+	// First, because it is the first thing on screen. It is skipped by the
+	// walk in verticalOrder, so this only gives the click somewhere to land.
 	if m.showBanner() {
 		m.targets = append(m.targets,
 			target{column: -1, row: -1, kind: kindBanner})
@@ -224,15 +225,6 @@ func (m *Model) IsRibbonTarget(i int) bool { return m.isKind(i, kindRibbon) }
 
 // IsStripTarget reports whether a target is the orchestrator strip, for tests.
 func (m *Model) IsStripTarget(i int) bool { return m.isKind(i, kindStrip) }
-
-// selectedKind is which block the cursor is in, so an action can tell a target
-// that goes somewhere from the one that does something.
-func (m *Model) selectedKind() targetKind {
-	if m.cursor < 0 || m.cursor >= len(m.targets) {
-		return kindGrid
-	}
-	return m.targets[m.cursor].kind
-}
 
 // IsBannerTarget reports whether a target is the banner, for tests.
 func (m *Model) IsBannerTarget(i int) bool { return m.isKind(i, kindBanner) }

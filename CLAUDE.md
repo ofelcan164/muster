@@ -68,7 +68,8 @@ jumps to the orchestrator, `prefix+ctrl+m` goes back.
 In the overlay: arrows or `hjkl` move, `enter` jumps, `/` searches, `s` cycles
 sort, `J`/`K` rearrange, `g`/`G` jump to the ends, digits jump to a ribbon row,
 `x` dismisses one, `o` marks the selected agent as the orchestrator, `i`
-messages it, `t` reports a finished agent to it, `q` closes.
+messages it, `t` reports a finished agent to it, `S` installs the reporting
+skill when it is missing, `q` closes.
 
 ## Driving it while you work
 

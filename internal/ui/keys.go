@@ -103,6 +103,12 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// The repair key. This is the whole reason gate detection exists.
 		return m.repair()
 
+	case "S":
+		// Install the reporting skill. Its own key rather than enter on the
+		// banner: enter means go to the thing you picked, everywhere else on
+		// this screen, and writing a file into someone's home is not that.
+		return m.runSkillInstall()
+
 	case "x":
 		// Acknowledge a ribbon row you have already dealt with.
 		return m.dismissSelected()
@@ -162,9 +168,6 @@ func (m *Model) activate() (tea.Model, tea.Cmd) {
 	if m.cursor == noSelection && m.filter != "" && len(m.targets) > 0 {
 		m.cursor = 0
 	}
-	if m.selectedKind() == kindBanner {
-		return m.runSkillInstall()
-	}
 	p := m.selectedPane()
 	if p == "" {
 		// A repo card with no agents still has panes behind it: a shell, an
@@ -195,7 +198,9 @@ func (m *Model) activate() (tea.Model, tea.Cmd) {
 // screen, which is the whole of dismissing it: the banner reports a condition,
 // so fixing the condition is what makes it go.
 func (m *Model) runSkillInstall() (tea.Model, tea.Cmd) {
-	if m.installSkill == nil {
+	if !m.showBanner() {
+		// No offer on screen means no key. A letter that silently reinstalls a
+		// skill already in place is a keystroke nobody can predict.
 		return m, nil
 	}
 	path, err := m.installSkill()
@@ -311,9 +316,15 @@ func (m *Model) lane() []int {
 // column from top to bottom, then the strip. Within one card its agents come in
 // the order they are drawn, so down steps through a card before leaving it.
 func (m *Model) verticalOrder() []int {
-	order := make([]int, len(m.targets))
-	for i := range order {
-		order[i] = i
+	order := make([]int, 0, len(m.targets))
+	for i := range m.targets {
+		// The banner is clickable but is not a stop on the walk. It runs
+		// something rather than going somewhere, so arrowing onto it would
+		// offer a selection that enter cannot act on.
+		if m.targets[i].kind == kindBanner {
+			continue
+		}
+		order = append(order, i)
 	}
 	sort.SliceStable(order, func(a, b int) bool {
 		x, y := m.targets[order[a]], m.targets[order[b]]
@@ -332,8 +343,6 @@ func (m *Model) verticalOrder() []int {
 // are declared in.
 func blockRank(k targetKind) int {
 	switch k {
-	case kindBanner:
-		return -1
 	case kindRibbon:
 		return 0
 	case kindGrid:

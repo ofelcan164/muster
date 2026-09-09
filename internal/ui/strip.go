@@ -30,6 +30,9 @@ func (m *Model) stripLines(startY int) []string {
 			styFaint.Render(fitLine(
 				"  none marked · press o on the agent in charge", m.width)),
 		}
+		if offer, ok := m.skillOffer(startY + len(out)); ok {
+			out = append(out, offer)
+		}
 		// Without this the strip has nowhere to report from when no
 		// orchestrator is marked, and every notice raised in that state is
 		// written to a line that is never drawn.
@@ -60,21 +63,61 @@ func (m *Model) stripLines(startY int) []string {
 
 	out = append(out, m.saidLine(o))
 
+	// The offer is its own click target, so it is drawn after the lines that
+	// belong to the orchestrator and skipped by the region loop below. A click
+	// on it must install the skill rather than jump.
+	offerAt := -1
+	if offer, ok := m.skillOffer(startY + len(out)); ok {
+		offerAt = len(out)
+		out = append(out, offer)
+	}
+
 	out = append(out, fitLine(m.stripFooter(), m.width))
 
 	if ti >= 0 {
-		// The whole strip is one click region, the way a card is: clicking any
-		// part of it jumps to the orchestrator.
+		// The rest of the strip is one click region, the way a card is:
+		// clicking any part of it jumps to the orchestrator.
 		for k := 1; k < len(out); k++ {
+			if k == offerAt {
+				continue
+			}
 			m.noteRegion(startY+k, 0, m.width-1, ti)
 		}
 		if m.isActive(ti) {
 			for k := 1; k < len(out); k++ {
+				if k == offerAt {
+					continue
+				}
 				out[k] = paint(out[k], stySel)
 			}
 		}
 	}
 	return out
+}
+
+// skillOffer is the line offering to install the reporting skill, and the
+// region that makes it clickable.
+//
+// It lives on this strip because the skill is the orchestrator's to run, and
+// because it is the sibling of "none marked": both are the coordination layer
+// telling you it is not set up yet. The consequence is elsewhere, on every card
+// whose task line is really just a terminal title, but the fix belongs here.
+func (m *Model) skillOffer(y int) (string, bool) {
+	if !m.showBanner() {
+		return "", false
+	}
+	line := fitLine(" "+styWarn.Render("⚑")+" "+
+		styFG.Render("agents have no task lines")+" "+
+		styMeta.Render("· the reporting skill is not installed")+" "+
+		styHint.Render("· S installs it"), m.width)
+
+	if ti := m.findTarget("repo:", kindBanner); ti >= 0 {
+		m.noteRegion(y, 0, m.width-1, ti)
+		if m.isActive(ti) {
+			line = paint(line, stySel)
+		}
+	}
+	return line, true
 }
 
 // orchWho names the orchestrator by the repo it is working in, drawn the way
