@@ -145,14 +145,17 @@ func TogglePane() error {
 	return OpenPane()
 }
 
-// findOverlayPanes returns the panes in the focused workspace that carry the
-// overlay's label, most likely candidate first.
+// findOverlayPanes returns the panes in the focused tab that carry the overlay's
+// label, most likely candidate first.
 //
-// The workspace check is the whole point: the toggle closes whatever this
-// finds, so an overlay left open in another workspace made prefix+m close that
-// one, and from where you were sitting the key did nothing. session.snapshot
-// carries the plugin panes and the focused workspace together, so scoping it
-// costs no extra call.
+// Scoping is the whole point: the toggle closes whatever this finds, so an
+// overlay open somewhere you cannot see means the key closes that one and from
+// where you are sitting it did nothing, with the next press finally opening one.
+//
+// The scope is the tab, not the workspace. An overlay is a pane in one tab's
+// split tree, zoomed inside that tab, and only one tab of a workspace is on
+// screen at a time. Scoping to the workspace still spent a press closing an
+// overlay sitting in the tab next door.
 //
 // It returns every match rather than the first because the label is not proof:
 // a pane keeps it after the overlay process in it has gone.
@@ -161,13 +164,13 @@ func findOverlayPanes() []string {
 	if err != nil {
 		return nil
 	}
-	return overlayPanesIn(snap.Panes, snap.FocusedWorkspaceID)
+	return overlayPanesIn(snap.Panes, snap.FocusedTabID)
 }
 
-func overlayPanesIn(panes []herdr.Pane, workspace string) []string {
+func overlayPanesIn(panes []herdr.Pane, tab string) []string {
 	var out []string
 	for _, p := range panes {
-		if p.Label == overlayTitle && p.WorkspaceID == workspace {
+		if p.Label == overlayTitle && p.TabID == tab {
 			out = append(out, p.PaneID)
 		}
 	}
