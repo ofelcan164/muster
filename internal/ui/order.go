@@ -69,7 +69,17 @@ func (m *Model) orderedRepos(repos []model.Repo) []model.Repo {
 	return applyMoves(out, m.moves)
 }
 
-// repoRanks is the best ribbon rank each repo holds, or a large number.
+// Ranks below these come from the ribbon, which uses 1 to 5. Work sits under
+// all of them and above silence: an agent doing its job never reaches the
+// ribbon, so without a rank of its own a repo with three agents mid-work sorted
+// level with an empty one.
+const (
+	rankWorking = 50
+	rankQuiet   = 99
+)
+
+// repoRanks is the best ribbon rank each repo holds, or where it falls without
+// one: needs you, then working, then everything else.
 func (m *Model) repoRanks() map[string]int {
 	rank := map[string]int{}
 	for _, a := range m.snap.Attention {
@@ -78,8 +88,15 @@ func (m *Model) repoRanks() map[string]int {
 		}
 	}
 	for _, r := range m.snap.Repos {
-		if _, ok := rank[r.Key]; !ok {
-			rank[r.Key] = 99
+		if _, ok := rank[r.Key]; ok {
+			continue
+		}
+		rank[r.Key] = rankQuiet
+		for _, a := range r.Agents {
+			if a.Status == model.StatusWorking {
+				rank[r.Key] = rankWorking
+				break
+			}
 		}
 	}
 	return rank

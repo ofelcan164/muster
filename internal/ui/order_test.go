@@ -188,3 +188,21 @@ func TestRestoredSortModeIsClamped(t *testing.T) {
 		}
 	}
 }
+
+// Working agents never reach the ribbon, so the attention sort used to weigh a
+// repo with work in it exactly the same as a silent one.
+func TestAttentionSortPutsWorkAboveSilence(t *testing.T) {
+	m := sized(t, 143)
+	m.sort = SortAttention
+	m.rebuild()
+
+	got := drawnRepoKeys(m)
+	pos := map[string]int{}
+	for i, k := range got {
+		pos[k] = i
+	}
+	// api holds the blocked agent, web is working, contracts is only idle.
+	if !(pos["acme/api"] < pos["acme/web"] && pos["acme/web"] < pos["acme/contracts"]) {
+		t.Errorf("attention order %v, want api before web before contracts", got)
+	}
+}
