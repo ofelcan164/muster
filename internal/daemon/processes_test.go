@@ -1,8 +1,13 @@
 package daemon
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/ofelcan/muster/internal/herdr"
+	"github.com/ofelcan/muster/internal/model"
+	"github.com/ofelcan/muster/internal/state"
 )
 
 var now = time.Now()
@@ -108,5 +113,46 @@ func TestOverlayPaneIsNotTracked(t *testing.T) {
 	}
 	if isOverlayPane(herdrPane("w1:p1", "")) {
 		t.Error("an unlabelled pane was mistaken for the overlay")
+	}
+}
+
+// The stop and the agent were two readings of one pane, and the stop won.
+//
+// A dev server dies in a pane, which records a stop. Then an agent is started
+// in that same pane. Only non-agent panes are read for a foreground process, so
+// nothing left could ever resolve that stop, and a rank 3 stopped row outranks
+// the agent's own done or stalled row. The pane sat in the ribbon as a dead
+// dev server for the full TTL while the agent underneath it was waiting on you.
+//
+// buildRepos is the fix: an agent pane is not a pane a stop can be held
+// against, so taking one over drops the row on the next reconcile.
+func TestAnAgentTakingOverAPaneClearsItsStop(t *testing.T) {
+	d := newTestDaemon(t)
+	dir := gitRepo(t, filepath.Join(t.TempDir(), "api"), "git@github.com:acme/api.git", "main")
+	snap := &herdr.Snapshot{
+		Workspaces: []herdr.Workspace{{WorkspaceID: "w1", Number: 1}},
+		Panes:      []herdr.Pane{pane("w1:p1", "w1", dir)},
+	}
+	stop := func() {
+		d.persist.Stopped["w1:p1"] = state.StoppedStamp{Process: "vite", At: now}
+		d.persist.LastProcess["w1:p1"] = "bash"
+	}
+
+	// No agent in the pane: the stop is this pane's to hold, and it stays.
+	stop()
+	d.buildRepos(snap, map[string]model.Agent{}, model.Orchestrator{})
+	if _, held := d.persist.Stopped["w1:p1"]; !held {
+		t.Fatal("a stop on a plain pane was dropped")
+	}
+
+	// An agent starts in the same pane. Its own status is the only reading now.
+	stop()
+	snap.Agents = []herdr.Agent{agentPane("w1:p1", "w1", dir, "blocked")}
+	d.buildRepos(snap, d.buildAgents(snap, now), model.Orchestrator{})
+	if _, held := d.persist.Stopped["w1:p1"]; held {
+		t.Errorf("the stop outlived the takeover: %v", d.persist.Stopped)
+	}
+	if _, held := d.persist.LastProcess["w1:p1"]; held {
+		t.Errorf("process state left behind for an agent pane: %v", d.persist.LastProcess)
 	}
 }
