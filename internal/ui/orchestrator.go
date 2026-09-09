@@ -108,5 +108,13 @@ func recordTold(pane, text string) {
 		"pane_id": pane,
 		"source":  "muster",
 		"tokens":  map[string]string{"task": truncate(text, 200)},
+		// The same day the reporting skill tells every other agent to use, and
+		// herdr's ceiling for the field. A message you sent last week outliving
+		// the work it was about is the exact thing the skill sets a TTL to
+		// stop, and the orchestrator's own pane is not an exception to it.
+		"ttl_ms": toldTTLMillis,
 	}, nil)
 }
+
+// toldTTLMillis is one day, matching the --ttl-ms in the muster-report skill.
+const toldTTLMillis = 86_400_000

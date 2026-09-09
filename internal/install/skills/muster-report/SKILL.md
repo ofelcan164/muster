@@ -35,6 +35,11 @@ herdr pane report-metadata <pane-id> --source muster \
 Set `--ttl-ms 86400000` so a line expires after a day rather than outliving the
 work by a week.
 
+Your own pane is the one exception to the `task` token. Muster writes that one
+itself: the `i` and `t` keys in the overlay record the message they just sent
+you, so the strip can show what you were last told. Writing over it costs you
+nothing, but it will be replaced the next time someone types into the overlay.
+
 ## Rewrite it when the work changes
 
 Re-run the command with the new `task`. Muster times how long a value has been
