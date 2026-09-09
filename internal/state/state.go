@@ -266,6 +266,11 @@ type UIState struct {
 	// this every opening started over at first-seen.
 	Sort int `json:"sort"`
 
+	// Dismissed is the ribbon rows already acknowledged, as pane id to the
+	// status the row was dismissed at. Keyed on the status because a status
+	// change is what makes a row news again.
+	Dismissed map[string]string `json:"dismissed,omitempty"`
+
 	lastWritten []byte
 }
 

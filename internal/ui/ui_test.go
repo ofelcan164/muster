@@ -11,6 +11,7 @@ import (
 	"github.com/muesli/termenv"
 
 	"github.com/ofelcan/muster/internal/model"
+	"github.com/ofelcan/muster/internal/state"
 )
 
 var ansi = regexp.MustCompile(`\x1b\[[0-9;]*m`)
@@ -961,4 +962,91 @@ func displaysOf(repos []model.Repo) []string {
 		out = append(out, r.Display)
 	}
 	return out
+}
+
+// A row you have dealt with used to sit in the ribbon until the underlying
+// state changed, or for a quarter of an hour in the case of a stopped process,
+// taking one of only four slots.
+func TestDismissHidesARibbonRowUntilTheStatusChanges(t *testing.T) {
+	state.SetDir(t.TempDir())
+	t.Cleanup(func() { state.SetDir("") })
+
+	m := newSized(143)
+	saved := state.LoadUI()
+	m.SetDismissedSaver(func(d map[string]string) {
+		saved.Dismissed = d
+		if err := saved.Save(); err != nil {
+			t.Errorf("save: %v", err)
+		}
+	})
+
+	before := len(m.ribbonRows())
+	m.cursor = m.ribbonTargetIndex("pane:w2:p1")
+	key(m, "x")
+
+	if got := len(m.ribbonRows()); got != before-1 {
+		t.Fatalf("dismissing left %d rows, want %d", got, before-1)
+	}
+	for _, a := range m.ribbonRows() {
+		if a.PaneID == "w2:p1" {
+			t.Error("the dismissed row is still in the ribbon")
+		}
+	}
+	// The header counts what the ribbon shows, not what the daemon counted.
+	if out := m.View(); strings.Contains(out, "2 need you") {
+		t.Error("header still counts the dismissed row")
+	}
+
+	// A fresh overlay reads it back: still dismissed.
+	next := newSized(143)
+	next.SetDismissed(state.LoadUI().Dismissed)
+	for _, a := range next.ribbonRows() {
+		if a.PaneID == "w2:p1" {
+			t.Error("dismissal did not survive the overlay closing")
+		}
+	}
+
+	// The agent moves on. That makes it news again.
+	snap := testSnapshot()
+	snap.Attention[0].Status = model.StatusDone
+	next.SetSnapshot(snap)
+	found := false
+	for _, a := range next.ribbonRows() {
+		found = found || a.PaneID == "w2:p1"
+	}
+	if !found {
+		t.Error("a status change should bring the row back")
+	}
+}
+
+// Nothing else on the screen is dismissible, and pressing x on a card should
+// say so rather than silently doing nothing.
+func TestDismissOnlyAppliesToRibbonRows(t *testing.T) {
+	m := newSized(143)
+	m.cursor = m.targetIndex("pane:w2:p1")
+	key(m, "x")
+	if len(m.dismissed) != 0 {
+		t.Errorf("x on a grid card dismissed %v", m.dismissed)
+	}
+	if m.notice == "" {
+		t.Error("x on a grid card should say what x is for")
+	}
+}
+
+// Entries would otherwise pile up in the file forever, one per row ever
+// dismissed. A row that has left the ribbon is news again if it comes back.
+func TestDismissalsAreDroppedOnceTheRowIsGone(t *testing.T) {
+	m := newSized(143)
+	m.cursor = m.ribbonTargetIndex("pane:w2:p1")
+	key(m, "x")
+	if len(m.dismissed) != 1 {
+		t.Fatalf("expected one dismissal, got %v", m.dismissed)
+	}
+
+	snap := testSnapshot()
+	snap.Attention = snap.Attention[1:] // the row resolved itself
+	m.SetSnapshot(snap)
+	if len(m.dismissed) != 0 {
+		t.Errorf("stale dismissal kept: %v", m.dismissed)
+	}
 }

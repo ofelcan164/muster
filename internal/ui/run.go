@@ -45,6 +45,11 @@ func Run() (string, error) {
 		ui.Sort = int(s)
 		_ = ui.Save()
 	})
+	m.SetDismissed(ui.Dismissed)
+	m.SetDismissedSaver(func(d map[string]string) {
+		ui.Dismissed = d
+		_ = ui.Save()
+	})
 	// How i and t reach the orchestrator. agent.prompt is the same call the
 	// orchestrator's own tooling uses, so a message from Muster is not a
 	// special case at the other end.

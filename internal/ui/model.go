@@ -88,6 +88,11 @@ type Model struct {
 	// saveSort persists the sort mode, injected the same way saveOrder is.
 	saveSort func(SortMode)
 
+	// dismissed is the acknowledged ribbon rows, pane id to the status each was
+	// dismissed at, with saveDismissed persisting them.
+	dismissed     map[string]string
+	saveDismissed func(map[string]string)
+
 	// saveOrder persists the manual arrangement. Injected the same way reload
 	// is, so the model never touches the filesystem itself.
 	saveOrder func([]string)
@@ -130,6 +135,7 @@ func (m *Model) SetSnapshot(s *model.Snapshot) {
 		return
 	}
 	m.snap = s
+	m.pruneDismissed()
 	m.rebuild()
 }
 
@@ -159,6 +165,16 @@ func (m *Model) SetSort(s SortMode) {
 // SetSortSaver supplies the function that persists the sort mode.
 func (m *Model) SetSortSaver(f func(SortMode)) { m.saveSort = f }
 
+// SetDismissed restores the ribbon rows acknowledged in an earlier session.
+func (m *Model) SetDismissed(d map[string]string) {
+	m.dismissed = d
+	m.pruneDismissed()
+	m.rebuild()
+}
+
+// SetDismissedSaver supplies the function that persists them.
+func (m *Model) SetDismissedSaver(f func(map[string]string)) { m.saveDismissed = f }
+
 // Sort is the current sort mode, exposed for tests.
 func (m *Model) Sort() SortMode { return m.sort }
 
@@ -169,9 +185,42 @@ func (m *Model) ManualOrder() []string { return m.moves }
 func (m *Model) Jump() string { return m.jump }
 
 // ribbonRows is the ranked ribbon, capped by the daemon and never more than
-// four. It disappears entirely when nothing needs you, which is the point.
+// four, less anything you have already acknowledged. It disappears entirely
+// when nothing needs you, which is the point.
+//
+// ponytail: the cap is applied by the daemon before this filters, so dismissing
+// a row leaves a gap rather than promoting the fifth thing that needs you. Move
+// the cap to the client if that gap ever matters.
 func (m *Model) ribbonRows() []model.Attention {
-	return m.snap.Attention
+	if len(m.dismissed) == 0 {
+		return m.snap.Attention
+	}
+	out := make([]model.Attention, 0, len(m.snap.Attention))
+	for _, a := range m.snap.Attention {
+		if m.dismissed[a.PaneID] == string(a.Status) {
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
+}
+
+// pruneDismissed drops entries whose row has left the ribbon entirely. The
+// state that made it news is gone, so if it comes back it is news again, and
+// nothing else would ever clear an entry out of the file.
+func (m *Model) pruneDismissed() {
+	if len(m.dismissed) == 0 {
+		return
+	}
+	shown := make(map[string]bool, len(m.snap.Attention))
+	for _, a := range m.snap.Attention {
+		shown[a.PaneID] = true
+	}
+	for pane := range m.dismissed {
+		if !shown[pane] {
+			delete(m.dismissed, pane)
+		}
+	}
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {

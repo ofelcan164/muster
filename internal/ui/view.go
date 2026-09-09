@@ -37,9 +37,11 @@ func (m *Model) header() string {
 	c := m.snap.Counts
 	left := styTitle.Render("MUSTER") + "  " +
 		styMeta.Render(fmt.Sprintf("%s · %s", plural(c.Repos, "repo"), plural(c.Agents, "agent")))
-	if c.NeedsYou > 0 {
+	// The ribbon rather than the daemon's count, which does not know what you
+	// have dismissed. They are the same number until you dismiss something.
+	if n := len(m.ribbonRows()); n > 0 {
 		left += "  " + lipgloss.NewStyle().Foreground(colRed).Render(
-			fmt.Sprintf("%d need you", c.NeedsYou))
+			fmt.Sprintf("%d need you", n))
 	}
 
 	right := styHint.Render("/ search · s sort:" + m.sort.String() + " · prefix+m closes")

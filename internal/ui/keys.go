@@ -102,6 +102,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// The repair key. This is the whole reason gate detection exists.
 		return m.repair()
 
+	case "x":
+		// Acknowledge a ribbon row you have already dealt with.
+		return m.dismissSelected()
+
 	case "s":
 		// Cycle the sort. First seen is the default and where it returns to.
 		m.sort = m.sort.Next()
@@ -166,6 +170,34 @@ func (m *Model) activate() (tea.Model, tea.Cmd) {
 	}
 	m.jump = p
 	return m, tea.Quit
+}
+
+// dismissSelected takes the selected ribbon row off the ribbon until that
+// agent's status changes again. Rows otherwise leave only when the underlying
+// state does, or after the stopped-process TTL, so something you have already
+// handled sits in a ribbon that only holds four things.
+func (m *Model) dismissSelected() (tea.Model, tea.Cmd) {
+	if m.cursor < 0 || m.cursor >= len(m.targets) || m.targets[m.cursor].kind != kindRibbon {
+		m.notice = "x dismisses a row that needs you: select one first"
+		return m, nil
+	}
+	pane := m.targets[m.cursor].paneID
+	for _, a := range m.ribbonRows() {
+		if a.PaneID != pane {
+			continue
+		}
+		if m.dismissed == nil {
+			m.dismissed = map[string]string{}
+		}
+		m.dismissed[pane] = string(a.Status)
+		m.pruneDismissed()
+		m.rebuild()
+		if m.saveDismissed != nil {
+			m.saveDismissed(m.dismissed)
+		}
+		break
+	}
+	return m, nil
 }
 
 // move steps up or down the screen, not along the target list. The grid is
