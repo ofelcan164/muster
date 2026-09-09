@@ -77,3 +77,7 @@ the herdr TUI from an agent session will hang it, so drive it from the CLI.
 
 `docs/herdr-api-notes.md` has the verified herdr 0.8.2 mechanics the daemon is
 built on, including why events are a hint and never a log.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
