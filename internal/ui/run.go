@@ -123,19 +123,25 @@ func TogglePane() error {
 	return OpenPane()
 }
 
-// findOverlayPane returns an open Muster overlay, or "".
+// findOverlayPane returns an open Muster overlay in the focused workspace, or
+// "".
+//
+// The workspace check is the whole point: the toggle closes whatever this
+// finds, so an overlay left open in another workspace made prefix+m close that
+// one, and from where you were sitting the key did nothing. session.snapshot
+// carries the plugin panes and the focused workspace together, so scoping it
+// costs no extra call.
 func findOverlayPane() string {
-	var out struct {
-		Panes []struct {
-			PaneID string `json:"pane_id"`
-			Label  string `json:"label"`
-		} `json:"panes"`
-	}
-	if err := herdr.NewClient("").Call("pane.list", struct{}{}, &out); err != nil {
+	snap, err := herdr.NewClient("").SessionSnapshot()
+	if err != nil {
 		return ""
 	}
-	for _, p := range out.Panes {
-		if p.Label == overlayTitle {
+	return overlayPaneIn(snap.Panes, snap.FocusedWorkspaceID)
+}
+
+func overlayPaneIn(panes []herdr.Pane, workspace string) string {
+	for _, p := range panes {
+		if p.Label == overlayTitle && p.WorkspaceID == workspace {
 			return p.PaneID
 		}
 	}
