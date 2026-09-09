@@ -42,14 +42,10 @@ func (m *Model) stripLines(startY int) []string {
 	ti := m.stripTargetIndex()
 	out := []string{m.sectionRule("orchestrator")}
 
-	name := o.Name
-	if name == "" {
-		name = "orchestrator"
-	}
 	st := statusStyle(o.Status, m.frame)
 	head := fmt.Sprintf(" %s %s %s %s",
 		styTitle.Render("⌂"),
-		styFG.Bold(true).Render(strings.ToUpper(name)),
+		m.orchWho(o),
 		st.Render(statusIcon(o.Status, m.frame)+" "+string(o.Status)),
 		styMeta.Render(ageText(orchAge(o), !o.StatusSince.IsZero())))
 
@@ -79,6 +75,26 @@ func (m *Model) stripLines(startY int) []string {
 		}
 	}
 	return out
+}
+
+// orchWho names the orchestrator by the repo it is working in, drawn the way
+// that repo's card head is drawn, so the strip and the tile read as the same
+// thing and the strip finally says where the orchestrator lives.
+//
+// Its own name is the fallback rather than the first choice. Marking renames
+// the agent to "orchestrator", so the name repeated the section rule directly
+// above it and spent a line saying nothing. A pane in no repo Muster knows
+// about is the one case where the name is the only fact there is.
+func (m *Model) orchWho(o model.Orchestrator) string {
+	if r, _, ok := m.agentByPane(o.PaneID); ok {
+		return repoStyle(r).Bold(true).
+			Render(r.Sigil + " " + strings.ToUpper(shortRepo(r)))
+	}
+	name := o.Name
+	if name == "" {
+		name = "orchestrator"
+	}
+	return styFG.Bold(true).Render(strings.ToUpper(name))
 }
 
 // saidLine is the strip's one message line: what the orchestrator last said,

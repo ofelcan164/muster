@@ -394,3 +394,30 @@ func TestSaidCarriesItsAge(t *testing.T) {
 		t.Errorf("an unread reply invented an age:\n%s", out)
 	}
 }
+
+// Marking renames the agent to "orchestrator", so the head line was echoing
+// the section rule directly above it. The repo it works in is the fact that
+// line did not have.
+func TestStripHeadNamesTheRepoNotTheBlock(t *testing.T) {
+	s := testSnapshot()
+	repo := s.Repos[0]
+	s.Orch = model.Orchestrator{
+		Found: true, PaneID: repo.Agents[0].PaneID, Name: "orchestrator",
+		Status: model.StatusIdle, StatusSince: time.Now().Add(-time.Minute),
+	}
+	out := plain(withSnapshot(t, s, 143).View())
+
+	if !strings.Contains(out, repo.Sigil+" "+strings.ToUpper(repo.Display)) {
+		t.Errorf("the head does not name the orchestrator's repo:\n%s", out)
+	}
+	if strings.Count(out, "ORCHESTRATOR") != 1 {
+		t.Errorf("ORCHESTRATOR appears %d times, want once:\n%s",
+			strings.Count(out, "ORCHESTRATOR"), out)
+	}
+
+	// A pane in no repo Muster knows about has nothing but its name.
+	s.Orch.PaneID, s.Orch.Name = "zz:p9", "lead"
+	if out := plain(withSnapshot(t, s, 143).View()); !strings.Contains(out, "LEAD") {
+		t.Errorf("an orchestrator outside every repo lost its name:\n%s", out)
+	}
+}
