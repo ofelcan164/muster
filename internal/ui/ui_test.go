@@ -869,3 +869,27 @@ func TestPaintSurvivesInnerResets(t *testing.T) {
 		}
 	}
 }
+
+// The bug: every keystroke of a query rebuilds the targets and a rebuild with
+// nothing selected selects nothing, so enter after searching did nothing.
+func TestEnterAfterSearchJumpsToTheFirstMatch(t *testing.T) {
+	m := newSized(143)
+	key(m, "slash")
+	for _, r := range "checkout" {
+		key(m, string(r))
+	}
+	key(m, "enter")
+	if m.Jump() != "w3:p1" {
+		t.Errorf("enter after searching jumped to %q, want w3:p1", m.Jump())
+	}
+}
+
+// Enter with nothing selected and no query stays inert: the overlay opens with
+// nothing claimed and enter must not invent a selection.
+func TestEnterWithoutSelectionOrSearchDoesNothing(t *testing.T) {
+	m := newSized(143)
+	key(m, "enter")
+	if m.Jump() != "" {
+		t.Errorf("enter with no selection jumped to %q", m.Jump())
+	}
+}

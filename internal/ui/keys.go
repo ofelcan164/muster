@@ -142,6 +142,13 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) activate() (tea.Model, tea.Cmd) {
+	// Every keystroke of a query rebuilds the targets, and a rebuild with
+	// nothing previously selected selects nothing, so enter after typing had no
+	// target at all and did nothing. Searching is the one mode with an obvious
+	// first result to mean.
+	if m.cursor == noSelection && m.filter != "" && len(m.targets) > 0 {
+		m.cursor = 0
+	}
 	p := m.selectedPane()
 	if p == "" {
 		// A repo card with no agents still has panes behind it: a shell, an
