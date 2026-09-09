@@ -76,6 +76,13 @@ type Model struct {
 	// has nowhere else to report that a send worked or failed.
 	notice string
 
+	// skillMissing drives the banner: the reporting skill is what writes every
+	// task line on the screen, and without it every card falls back to a
+	// terminal title. installSkill puts it there, injected the same way the
+	// prompter is so a test never writes into anyone's home directory.
+	skillMissing bool
+	installSkill func() (string, error)
+
 	// prompt sends a message to an agent. Injected so the model stays testable
 	// without a socket, and so a test can never prompt a real agent.
 	prompt func(paneID, text string) error
@@ -222,6 +229,21 @@ func (m *Model) SetDismissed(d map[string]string) {
 
 // SetDismissedSaver supplies the function that persists them.
 func (m *Model) SetDismissedSaver(f func(map[string]string)) { m.saveDismissed = f }
+
+// SetSkillPrompt says whether the reporting skill is missing, and supplies the
+// function that installs it. Both at once, because offering an install with no
+// way to run it is worse than not offering one.
+func (m *Model) SetSkillPrompt(missing bool, f func() (string, error)) {
+	m.skillMissing, m.installSkill = missing, f
+	m.rebuild()
+}
+
+// showBanner reports whether the offer is on screen. It goes while filtering
+// for the same reason the ribbon does: a query collapses the screen to its
+// results, and a standing offer is not one of them.
+func (m *Model) showBanner() bool {
+	return m.skillMissing && m.installSkill != nil && !m.filtering && m.filter == ""
+}
 
 // Sort is the current sort mode, exposed for tests.
 func (m *Model) Sort() SortMode { return m.sort }

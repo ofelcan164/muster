@@ -162,6 +162,9 @@ func (m *Model) activate() (tea.Model, tea.Cmd) {
 	if m.cursor == noSelection && m.filter != "" && len(m.targets) > 0 {
 		m.cursor = 0
 	}
+	if m.selectedKind() == kindBanner {
+		return m.runSkillInstall()
+	}
 	p := m.selectedPane()
 	if p == "" {
 		// A repo card with no agents still has panes behind it: a shell, an
@@ -186,6 +189,24 @@ func (m *Model) activate() (tea.Model, tea.Cmd) {
 	}
 	m.jump = p
 	return m, tea.Quit
+}
+
+// runSkillInstall puts the reporting skill in place and takes the offer off the
+// screen, which is the whole of dismissing it: the banner reports a condition,
+// so fixing the condition is what makes it go.
+func (m *Model) runSkillInstall() (tea.Model, tea.Cmd) {
+	if m.installSkill == nil {
+		return m, nil
+	}
+	path, err := m.installSkill()
+	if err != nil {
+		m.notice = "could not install the skill: " + err.Error()
+		return m, nil
+	}
+	m.skillMissing = false
+	m.rebuild()
+	m.notice = "installed the reporting skill to " + path
+	return m, nil
 }
 
 // dismissSelected takes the selected ribbon row off the ribbon until that
@@ -311,6 +332,8 @@ func (m *Model) verticalOrder() []int {
 // are declared in.
 func blockRank(k targetKind) int {
 	switch k {
+	case kindBanner:
+		return -1
 	case kindRibbon:
 		return 0
 	case kindGrid:

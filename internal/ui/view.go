@@ -20,6 +20,7 @@ func (m *Model) View() string {
 
 	var lines []string
 	lines = append(lines, strings.TrimRight(m.header(), "\n"), "")
+	lines = append(lines, m.bannerLines(len(lines))...)
 	lines = append(lines, m.ribbonLines(len(lines))...)
 	lines = append(lines, m.repoLines(len(lines))...)
 	if strip := m.stripLines(len(lines) + 1); len(strip) > 0 {
@@ -54,6 +55,35 @@ func (m *Model) header() string {
 		return left + "\n"
 	}
 	return left + strings.Repeat(" ", gap) + right + "\n"
+}
+
+// bannerLines is the offer to install the reporting skill.
+//
+// Without the skill nothing writes a task token, so every card on the screen
+// falls back to its terminal title and the overlay quietly shows guesses. That
+// is worth one line at the top, and worth being able to fix from here: the
+// alternative is knowing to run a command nobody told you about.
+//
+// It is a target like any other, so it is where the keyboard walk starts and a
+// click lands on it the same way a click lands on a card.
+func (m *Model) bannerLines(startY int) []string {
+	if !m.showBanner() {
+		return nil
+	}
+	ti := m.findTarget("repo:", kindBanner)
+
+	line := " " + styWarn.Render("⚑") + " " +
+		styFG.Render("agents have no task lines") + " " +
+		styMeta.Render("· the reporting skill is not installed") + " " +
+		styHint.Render("· enter installs it")
+	line = fitLine(line, m.width)
+	if ti >= 0 {
+		m.noteRegion(startY, 0, m.width-1, ti)
+		if m.isActive(ti) {
+			line = paint(line, stySel)
+		}
+	}
+	return []string{line, ""}
 }
 
 // ribbonLines renders the ranked ribbon, recording which screen line each row

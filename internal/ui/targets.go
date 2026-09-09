@@ -33,12 +33,22 @@ const (
 	kindGrid targetKind = iota
 	kindRibbon
 	kindStrip
+	// kindBanner is the one target that does not point at a pane. Selecting it
+	// runs something instead of going somewhere.
+	kindBanner
 )
 
 // rebuild recomputes the selectable targets after anything changes.
 func (m *Model) rebuild() {
 	prev := m.selectedKey()
 	m.targets = nil
+
+	// First, because it is the first thing on screen and the first thing the
+	// keyboard should reach.
+	if m.showBanner() {
+		m.targets = append(m.targets,
+			target{column: -1, row: -1, kind: kindBanner})
+	}
 
 	if !m.filtering && m.filter == "" {
 		for _, a := range m.ribbonRows() {
@@ -214,6 +224,18 @@ func (m *Model) IsRibbonTarget(i int) bool { return m.isKind(i, kindRibbon) }
 
 // IsStripTarget reports whether a target is the orchestrator strip, for tests.
 func (m *Model) IsStripTarget(i int) bool { return m.isKind(i, kindStrip) }
+
+// selectedKind is which block the cursor is in, so an action can tell a target
+// that goes somewhere from the one that does something.
+func (m *Model) selectedKind() targetKind {
+	if m.cursor < 0 || m.cursor >= len(m.targets) {
+		return kindGrid
+	}
+	return m.targets[m.cursor].kind
+}
+
+// IsBannerTarget reports whether a target is the banner, for tests.
+func (m *Model) IsBannerTarget(i int) bool { return m.isKind(i, kindBanner) }
 
 func (m *Model) isKind(i int, kind targetKind) bool {
 	return i >= 0 && i < len(m.targets) && m.targets[i].kind == kind

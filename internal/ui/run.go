@@ -9,6 +9,7 @@ import (
 
 	"github.com/ofelcan/muster/internal/daemon"
 	"github.com/ofelcan/muster/internal/herdr"
+	"github.com/ofelcan/muster/internal/install"
 	"github.com/ofelcan/muster/internal/model"
 	"github.com/ofelcan/muster/internal/state"
 )
@@ -49,6 +50,16 @@ func Run() (string, error) {
 	m.SetDismissedSaver(func(d map[string]string) {
 		ui.Dismissed = d
 		_ = ui.Save()
+	})
+	// The skill is what writes every task line on the screen. Without it the
+	// grid is a wall of terminal titles, and the only way to learn that is to
+	// know about a command nobody mentioned.
+	m.SetSkillPrompt(!install.SkillInstalled(), func() (string, error) {
+		res, err := install.Skill()
+		if err != nil {
+			return "", err
+		}
+		return res.Path, nil
 	})
 	// How i and t reach the orchestrator. agent.prompt is the same call the
 	// orchestrator's own tooling uses, so a message from Muster is not a

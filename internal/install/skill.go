@@ -134,3 +134,17 @@ func SkillDescription() string {
 	}
 	return ""
 }
+
+// SkillInstalled reports whether the reporting skill is already in place.
+//
+// A path this cannot work out counts as installed. The only thing this answer
+// drives is whether to offer the install, and offering it where it could not
+// run is worse than staying quiet.
+func SkillInstalled() bool {
+	path := SkillPath()
+	if path == "" {
+		return true
+	}
+	_, err := os.Stat(path)
+	return err == nil
+}
