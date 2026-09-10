@@ -350,16 +350,28 @@ func cmdUninstall(args []string) int {
 	purge := fs.Bool("purge", false, "also delete Muster's learned state")
 	_ = fs.Parse(args)
 
+	// A config this cannot read must not stop the rest. The reporting skill
+	// lives in the user's Claude directory, nowhere near herdr's config, and
+	// abandoning it because config.toml is unreadable is how an uninstall
+	// strands a file the user has no obvious way to find. Do everything that
+	// still can be done, then fail.
+	code := 0
 	res, err := install.Uninstall()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "muster uninstall: %v\n", err)
-		return 1
-	}
-	if res.Changed {
+	switch {
+	case err != nil:
+		fmt.Fprintf(os.Stderr, "muster uninstall: config: %v\n", err)
+		code = 1
+	case res.Changed:
 		fmt.Printf("removed Muster's block from %s\n", res.Path)
 		fmt.Printf("backup: %s\n", res.Backup)
-	} else {
+	case res.Diagnostic == "":
 		fmt.Println("nothing of Muster's was in the config")
+	}
+	// An unpaired marker is the one thing uninstall cannot clean up on its own,
+	// and it is what makes the next install refuse. Saying nothing here would
+	// leave the user with a config that quietly will not take the bindings.
+	if err == nil && res.Diagnostic != "" {
+		fmt.Fprintf(os.Stderr, "muster uninstall: %s\n", res.Diagnostic)
 	}
 
 	if skill, err := install.RemoveSkill(); err != nil {
@@ -383,7 +395,7 @@ func cmdUninstall(args []string) int {
 
 	reloadConfig()
 	fmt.Println("\nunlink the plugin with: herdr plugin unlink muster")
-	return 0
+	return code
 }
 
 func ensure() {

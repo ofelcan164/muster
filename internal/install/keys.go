@@ -6,6 +6,7 @@
 package install
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -60,7 +61,28 @@ type Result struct {
 	Diagnostic string
 }
 
+// blockRE matches one complete managed block. Both markers are required.
+//
+// Matching a begin marker to the end of the file instead was tried and is
+// wrong. It reads "no end marker" as "our own write was cut short", which
+// writeAtomic has since made impossible: a rename either lands or it does not,
+// so Muster can no longer leave a half-written block on disk. What that
+// spelling actually did was delete everything after any line that happened to
+// carry our marker text, including a user's own settings.
 var blockRE = regexp.MustCompile(`(?s)\n*` + regexp.QuoteMeta(beginMarker) + `.*?` + regexp.QuoteMeta(endMarker) + `\n?`)
+
+// strayMarker reports a marker left over after every complete block has been
+// removed: a begin with no end, an end with no begin, or a marker the user
+// pasted somewhere themselves. The marker text invites that, since it says
+// "safe to delete".
+//
+// This has to be refused rather than cleaned up. A leftover begin marker makes
+// the next run's lazy match span from it to the end marker of the block we are
+// about to write, and everything the user had in between disappears. Refusing
+// costs one manual edit; guessing costs a config.
+func strayMarker(body string) bool {
+	return strings.Contains(body, beginMarker) || strings.Contains(body, endMarker)
+}
 
 // Keys writes the bindings, replacing any block a previous run left behind.
 //
@@ -69,7 +91,7 @@ var blockRE = regexp.MustCompile(`(?s)\n*` + regexp.QuoteMeta(beginMarker) + `.*
 func Keys(herdrBin string) (*Result, error) {
 	path := ConfigPath()
 	if path == "" {
-		return nil, fmt.Errorf("cannot locate herdr config")
+		return nil, errors.New("cannot locate herdr config")
 	}
 
 	existing, err := os.ReadFile(path)
@@ -78,26 +100,33 @@ func Keys(herdrBin string) (*Result, error) {
 	}
 	res := &Result{Path: path}
 
-	// Back up before touching it, and only when there is something to lose.
+	body := strings.TrimRight(blockRE.ReplaceAllString(string(existing), "\n"), "\n")
+	if strayMarker(body) {
+		return nil, fmt.Errorf("%s has an unpaired muster marker: remove the %q line by hand, then run this again", path, beginMarker)
+	}
+	updated := block() + "\n"
+	if body != "" {
+		updated = body + "\n\n" + updated
+	}
+	if string(existing) == updated {
+		return res, nil
+	}
+
+	// Back up only when there is something to lose and something is actually
+	// about to change. Backing up before the comparison meant every no-op run
+	// left another copy beside the user's config.
+	//
+	// The mode is read once and used for both writes: a config the user
+	// chmodded to 0600 must not come back world-readable, and neither must the
+	// backup sitting next to it.
+	mode := modeOf(path)
 	if len(existing) > 0 {
-		res.Backup = fmt.Sprintf("%s.muster-backup-%s", path, time.Now().Format("20060102-150405"))
-		if err := os.WriteFile(res.Backup, existing, 0o644); err != nil {
+		res.Backup = fmt.Sprintf("%s.muster-backup-%s", path, time.Now().Format("20060102-150405.000"))
+		if err := writeAtomic(res.Backup, existing, mode); err != nil {
 			return nil, fmt.Errorf("backup: %w", err)
 		}
 	}
-
-	body := blockRE.ReplaceAllString(string(existing), "\n")
-	body = strings.TrimRight(body, "\n")
-	updated := body + "\n\n" + block() + "\n"
-
-	if string(existing) == updated {
-		res.Changed = false
-		return res, nil
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, err
-	}
-	if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
+	if err := writeAtomic(path, []byte(updated), mode); err != nil {
 		return nil, err
 	}
 	res.Changed = true
@@ -139,20 +168,48 @@ func Uninstall() (*Result, error) { return Remove() }
 // Remove takes the managed block back out, for undoing an install.
 func Remove() (*Result, error) {
 	path := ConfigPath()
-	existing, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
+	if path == "" {
+		return nil, errors.New("cannot locate herdr config")
 	}
 	res := &Result{Path: path}
-	if !strings.Contains(string(existing), beginMarker) {
-		return res, nil
-	}
-	res.Backup = fmt.Sprintf("%s.muster-backup-%s", path, time.Now().Format("20060102-150405"))
-	if err := os.WriteFile(res.Backup, existing, 0o644); err != nil {
+
+	existing, err := os.ReadFile(path)
+	if err != nil {
+		// A config that is not there has nothing of ours in it. Returning the
+		// error aborted `muster uninstall` before it reached the reporting
+		// skill, so anyone who had not run `muster install` was left with the
+		// skill in their Claude directory and no way to remove it.
+		if os.IsNotExist(err) {
+			return res, nil
+		}
 		return nil, err
 	}
-	body := strings.TrimRight(blockRE.ReplaceAllString(string(existing), "\n"), "\n") + "\n"
-	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+
+	// What counts as a change is what the regex actually removed, not whether a
+	// marker is present. Testing for the begin marker alone reported a clean
+	// uninstall for a file the block was still in.
+	body := blockRE.ReplaceAllString(string(existing), "\n")
+
+	// Uninstall says what it could not do rather than refusing outright: the
+	// point of this command is to leave nothing of Muster's behind, so it
+	// removes every complete block and reports the leftover instead of
+	// stopping with the blocks still in place.
+	if strayMarker(body) {
+		res.Diagnostic = fmt.Sprintf("left an unpaired muster marker in %s: remove the %q line by hand", path, beginMarker)
+	}
+	if body == string(existing) {
+		return res, nil
+	}
+	if body = strings.TrimRight(body, "\n"); body != "" {
+		body += "\n"
+	}
+
+	mode := modeOf(path)
+	res.Backup = fmt.Sprintf("%s.muster-backup-%s", path, time.Now().Format("20060102-150405.000"))
+	if err := writeAtomic(res.Backup, existing, mode); err != nil {
+		return nil, fmt.Errorf("backup: %w", err)
+	}
+	if err := writeAtomic(path, []byte(body), mode); err != nil {
 		return nil, err
 	}
 	res.Changed = true

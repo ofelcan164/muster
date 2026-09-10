@@ -2,6 +2,7 @@ package install
 
 import (
 	"embed"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -66,7 +67,7 @@ func SkillPath() string {
 func Skill() (*Result, error) {
 	path := SkillPath()
 	if path == "" {
-		return nil, fmt.Errorf("cannot locate the skills directory")
+		return nil, errors.New("cannot locate the skills directory")
 	}
 	want, err := skillFS.ReadFile(skillSrc)
 	if err != nil {
@@ -77,10 +78,7 @@ func Skill() (*Result, error) {
 	if existing, err := os.ReadFile(path); err == nil && string(existing) == string(want) {
 		return res, nil
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, err
-	}
-	if err := os.WriteFile(path, want, 0o644); err != nil {
+	if err := writeAtomic(path, want, 0o644); err != nil {
 		return nil, err
 	}
 	res.Changed = true
@@ -96,7 +94,7 @@ func Skill() (*Result, error) {
 func RemoveSkill() (*Result, error) {
 	path := SkillPath()
 	if path == "" {
-		return nil, fmt.Errorf("cannot locate the skills directory")
+		return nil, errors.New("cannot locate the skills directory")
 	}
 	dir := filepath.Dir(path)
 
