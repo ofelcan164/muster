@@ -26,17 +26,17 @@ func rendered(t *testing.T, width int) (*Model, []string) {
 func TestHitRegionsNeverOverlap(t *testing.T) {
 	for _, w := range widths {
 		m, _ := rendered(t, w)
-		byLine := map[int][]Hit{}
-		for _, h := range m.Hits() {
-			byLine[h.Y] = append(byLine[h.Y], h)
+		byLine := map[int][]hitRegion{}
+		for _, h := range m.hits {
+			byLine[h.y] = append(byLine[h.y], h)
 		}
 		for y, hits := range byLine {
 			for i := range hits {
 				for j := i + 1; j < len(hits); j++ {
 					a, b := hits[i], hits[j]
-					if a.X0 <= b.X1 && b.X0 <= a.X1 {
+					if a.x0 <= b.x1 && b.x0 <= a.x1 {
 						t.Errorf("width %d line %d: targets %d (%d-%d) and %d (%d-%d) overlap",
-							w, y, a.Target, a.X0, a.X1, b.Target, b.X0, b.X1)
+							w, y, a.target, a.x0, a.x1, b.target, b.x0, b.x1)
 					}
 				}
 			}
@@ -49,14 +49,14 @@ func TestHitRegionsNeverOverlap(t *testing.T) {
 func TestHitRegionsStayInsideTheFrame(t *testing.T) {
 	for _, w := range widths {
 		m, lines := rendered(t, w)
-		for _, h := range m.Hits() {
-			if h.Y < 0 || h.Y >= len(lines) {
+		for _, h := range m.hits {
+			if h.y < 0 || h.y >= len(lines) {
 				t.Errorf("width %d: region for target %d is on line %d, of %d drawn",
-					w, h.Target, h.Y, len(lines))
+					w, h.target, h.y, len(lines))
 			}
-			if h.X0 < 0 || h.X1 > w-1 || h.X0 > h.X1 {
+			if h.x0 < 0 || h.x1 > w-1 || h.x0 > h.x1 {
 				t.Errorf("width %d: region for target %d spans %d-%d, outside 0-%d",
-					w, h.Target, h.X0, h.X1, w-1)
+					w, h.target, h.x0, h.x1, w-1)
 			}
 		}
 	}
@@ -69,13 +69,13 @@ func TestEveryTargetIsClickableAtEveryWidth(t *testing.T) {
 	for _, w := range widths {
 		m, _ := rendered(t, w)
 		reached := map[int]bool{}
-		for _, h := range m.Hits() {
-			reached[h.Target] = true
+		for _, h := range m.hits {
+			reached[h.target] = true
 		}
-		for i := 0; i < m.TargetCount(); i++ {
+		for i := 0; i < len(m.targets); i++ {
 			if !reached[i] {
 				t.Errorf("width %d: target %d (pane %q, ribbon %v) is drawn but has no click region",
-					w, i, m.TargetPane(i), m.IsRibbonTarget(i))
+					w, i, m.targetPane(i), m.isKind(i, kindRibbon))
 			}
 		}
 	}
@@ -87,16 +87,16 @@ func TestEveryTargetIsClickableAtEveryWidth(t *testing.T) {
 func TestEveryCellResolvesToItsOwnTarget(t *testing.T) {
 	for _, w := range widths {
 		m, _ := rendered(t, w)
-		for _, h := range m.Hits() {
-			for x := h.X0; x <= h.X1; x++ {
-				got, ok := m.targetAt(x, h.Y)
+		for _, h := range m.hits {
+			for x := h.x0; x <= h.x1; x++ {
+				got, ok := m.targetAt(x, h.y)
 				if !ok {
 					t.Fatalf("width %d: (%d,%d) is inside target %d's region but resolves to nothing",
-						w, x, h.Y, h.Target)
+						w, x, h.y, h.target)
 				}
-				if got != h.Target {
+				if got != h.target {
 					t.Fatalf("width %d: (%d,%d) belongs to target %d but resolves to %d",
-						w, x, h.Y, h.Target, got)
+						w, x, h.y, h.target, got)
 				}
 			}
 		}
@@ -109,12 +109,12 @@ func TestRibbonAndGridNeverShareALine(t *testing.T) {
 	for _, w := range widths {
 		m, _ := rendered(t, w)
 		kind := map[int]bool{}
-		for _, h := range m.Hits() {
-			ribbon := m.IsRibbonTarget(h.Target)
-			if prev, seen := kind[h.Y]; seen && prev != ribbon {
-				t.Errorf("width %d line %d carries both a ribbon row and a grid card", w, h.Y)
+		for _, h := range m.hits {
+			ribbon := m.isKind(h.target, kindRibbon)
+			if prev, seen := kind[h.y]; seen && prev != ribbon {
+				t.Errorf("width %d line %d carries both a ribbon row and a grid card", w, h.y)
 			}
-			kind[h.Y] = ribbon
+			kind[h.y] = ribbon
 		}
 	}
 }
@@ -127,14 +127,14 @@ func TestOneClickOpensAgentlessCard(t *testing.T) {
 	if ti < 0 {
 		t.Fatal("the agentless repo is not a target")
 	}
-	var hit Hit
-	for _, h := range m.Hits() {
-		if h.Target == ti {
+	var hit hitRegion
+	for _, h := range m.hits {
+		if h.target == ti {
 			hit = h
 			break
 		}
 	}
-	m.Update(tea.MouseMsg{X: hit.X0 + 1, Y: hit.Y,
+	m.Update(tea.MouseMsg{X: hit.x0 + 1, Y: hit.y,
 		Action: tea.MouseActionRelease, Button: tea.MouseButtonLeft})
 	if got := m.Jump(); got != "acme/infra:p9" {
 		t.Fatalf("one click on an agentless card jumped to %q, want its pane", got)

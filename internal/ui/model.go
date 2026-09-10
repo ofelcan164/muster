@@ -246,12 +246,6 @@ func (m *Model) showBanner() bool {
 	return m.skillMissing && m.installSkill != nil && !m.filtering && m.filter == ""
 }
 
-// Sort is the current sort mode, exposed for tests.
-func (m *Model) Sort() SortMode { return m.sort }
-
-// ManualOrder is the current arrangement, exposed for tests.
-func (m *Model) ManualOrder() []string { return m.moves }
-
 // Jump returns the pane the user chose, or "".
 func (m *Model) Jump() string { return m.jump }
 
@@ -306,6 +300,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.MouseMsg:
 		return m.handleMouse(msg)
+
+	case noticeMsg:
+		m.notice = string(msg)
+		return m, nil
 
 	case refreshMsg:
 		if m.reload != nil {

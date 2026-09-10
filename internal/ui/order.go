@@ -1,7 +1,8 @@
 package ui
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"strings"
 
 	"github.com/ofelcan164/muster/internal/model"
@@ -49,29 +50,27 @@ func (m *Model) orderedRepos(repos []model.Repo) []model.Repo {
 
 	switch m.sort {
 	case SortAlphabetical:
-		sort.SliceStable(out, func(i, j int) bool {
-			return strings.ToLower(out[i].Display) < strings.ToLower(out[j].Display)
+		slices.SortStableFunc(out, func(a, b model.Repo) int {
+			return cmp.Compare(strings.ToLower(a.Display), strings.ToLower(b.Display))
 		})
 	case SortAttention:
 		// Repos holding something that needs you come first, most urgent first.
 		rank := m.repoRanks()
-		sort.SliceStable(out, func(i, j int) bool {
-			ri, rj := rank[out[i].Key], rank[out[j].Key]
-			if ri != rj {
-				return ri < rj
-			}
-			return out[i].GridSlot < out[j].GridSlot
+		slices.SortStableFunc(out, func(a, b model.Repo) int {
+			return cmp.Or(cmp.Compare(rank[a.Key], rank[b.Key]), cmp.Compare(a.GridSlot, b.GridSlot))
 		})
 	default:
-		sort.SliceStable(out, func(i, j int) bool { return out[i].GridSlot < out[j].GridSlot })
+		slices.SortStableFunc(out, func(a, b model.Repo) int { return cmp.Compare(a.GridSlot, b.GridSlot) })
 	}
 
 	// Repos with agents always come first, whatever the sort. A quiet repo is
 	// still worth a card, but it should never sit between two you are working
 	// in. This runs after the sort so it never disturbs the order within each
 	// group, and before manual moves so you can still override it.
-	sort.SliceStable(out, func(i, j int) bool {
-		return len(out[i].Agents) > 0 && len(out[j].Agents) == 0
+	// A busy repo counts as 1 and a quiet one as 0, compared in reverse so the
+	// busy ones lead.
+	slices.SortStableFunc(out, func(a, b model.Repo) int {
+		return cmp.Compare(min(len(b.Agents), 1), min(len(a.Agents), 1))
 	})
 
 	return applyMoves(out, m.moves)

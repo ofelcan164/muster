@@ -4,8 +4,9 @@
 package ui
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -258,14 +259,19 @@ func (m *Model) markSelected() (tea.Model, tea.Cmd) {
 	if m.mark == nil {
 		return m, nil
 	}
-	if err := m.mark(pane); err != nil {
-		m.notice = "could not mark: " + err.Error()
-		return m, nil
+	// Off the Update goroutine for the same reason send is: a wedged socket
+	// must not stop the overlay reading keys.
+	m.notice = "marking…"
+	mark := m.mark
+	return m, func() tea.Msg {
+		if err := mark(pane); err != nil {
+			return noticeMsg("could not mark: " + err.Error())
+		}
+		// The strip cannot show the mark until the daemon reconciles, a few
+		// seconds away, so say it happened rather than leaving the screen
+		// looking unchanged.
+		return noticeMsg("marked as the orchestrator")
 	}
-	// The strip cannot show the mark until the daemon reconciles, a few seconds
-	// away, so say it happened rather than leaving the screen looking unchanged.
-	m.notice = "marked as the orchestrator"
-	return m, nil
 }
 
 // move steps up or down the screen, not along the target list. The grid is
@@ -326,15 +332,15 @@ func (m *Model) verticalOrder() []int {
 		}
 		order = append(order, i)
 	}
-	sort.SliceStable(order, func(a, b int) bool {
-		x, y := m.targets[order[a]], m.targets[order[b]]
+	slices.SortStableFunc(order, func(a, b int) int {
+		x, y := m.targets[a], m.targets[b]
 		if x.kind != y.kind {
-			return blockRank(x.kind) < blockRank(y.kind)
+			return cmp.Compare(blockRank(x.kind), blockRank(y.kind))
 		}
-		if x.kind != kindGrid || x.column == y.column {
-			return false // stable: keep the drawn order
+		if x.kind != kindGrid {
+			return 0 // stable: keep the drawn order
 		}
-		return x.column < y.column
+		return cmp.Compare(x.column, y.column)
 	})
 	return order
 }

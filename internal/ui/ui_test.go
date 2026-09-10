@@ -148,7 +148,11 @@ func key(m *Model, s string) {
 	default:
 		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
 	}
-	m.Update(msg)
+	// Run whatever the key handed off and feed the result back, the way the
+	// program would, so a send or a mark lands its notice before the test looks.
+	if _, cmd := m.Update(msg); cmd != nil {
+		m.Update(cmd())
+	}
 }
 
 func newSized(w int) *Model {
@@ -525,9 +529,9 @@ func TestMouseClickSelectsThenJumps(t *testing.T) {
 	// keyboard, which defeats the point of having it.
 	var row, col, want int
 	found := false
-	for _, h := range m.Hits() {
-		if m.TargetPane(h.Target) != "" && h.Target != m.cursor {
-			row, col, want, found = h.Y, h.X0, h.Target, true
+	for _, h := range m.hits {
+		if m.targetPane(h.target) != "" && h.target != m.cursor {
+			row, col, want, found = h.y, h.x0, h.target, true
 			break
 		}
 	}
@@ -535,8 +539,8 @@ func TestMouseClickSelectsThenJumps(t *testing.T) {
 		t.Skip("no clickable unselected agent row")
 	}
 	m.Update(tea.MouseMsg{X: col, Y: row, Action: tea.MouseActionRelease, Button: tea.MouseButtonLeft})
-	if m.Jump() != m.TargetPane(want) {
-		t.Errorf("a single click should jump to %q, got %q", m.TargetPane(want), m.Jump())
+	if m.Jump() != m.targetPane(want) {
+		t.Errorf("a single click should jump to %q, got %q", m.targetPane(want), m.Jump())
 	}
 }
 
@@ -556,12 +560,12 @@ func TestWholeCardIsClickable(t *testing.T) {
 	m.View()
 
 	byTarget := map[int]int{}
-	for _, h := range m.Hits() {
+	for _, h := range m.hits {
 		// Ribbon rows are legitimately one line; this is about grid cards.
-		if m.IsRibbonTarget(h.Target) {
+		if m.isKind(h.target, kindRibbon) {
 			continue
 		}
-		byTarget[h.Target]++
+		byTarget[h.target]++
 	}
 	if len(byTarget) == 0 {
 		t.Fatal("no grid card was made clickable")
@@ -579,8 +583,8 @@ func TestAllGridColumnsAreClickable(t *testing.T) {
 	m.View()
 
 	cols := map[int]bool{}
-	for _, h := range m.Hits() {
-		cols[h.X0] = true
+	for _, h := range m.hits {
+		cols[h.x0] = true
 	}
 	if len(cols) < 2 {
 		t.Errorf("hits landed in %d column offsets, expected several: %v", len(cols), cols)
@@ -590,25 +594,25 @@ func TestAllGridColumnsAreClickable(t *testing.T) {
 func TestHoverHighlightsWhatAClickWouldTake(t *testing.T) {
 	m := newSized(143)
 	m.View()
-	hits := m.Hits()
+	hits := m.hits
 	if len(hits) == 0 {
 		t.Skip("nothing clickable")
 	}
-	var h Hit
+	var h hitRegion
 	for _, c := range hits {
-		if c.Target != m.Cursor() {
+		if c.target != m.cursor {
 			h = c
 			break
 		}
 	}
-	m.Update(tea.MouseMsg{X: h.X0, Y: h.Y, Action: tea.MouseActionMotion})
-	if m.Hover() != h.Target {
-		t.Errorf("hover = %d, want %d", m.Hover(), h.Target)
+	m.Update(tea.MouseMsg{X: h.x0, Y: h.y, Action: tea.MouseActionMotion})
+	if m.hover != h.target {
+		t.Errorf("hover = %d, want %d", m.hover, h.target)
 	}
 	// Moving off everything clears it.
 	m.Update(tea.MouseMsg{X: 0, Y: 9999, Action: tea.MouseActionMotion})
-	if m.Hover() != -1 {
-		t.Errorf("hover should clear off-target, got %d", m.Hover())
+	if m.hover != -1 {
+		t.Errorf("hover should clear off-target, got %d", m.hover)
 	}
 }
 
@@ -661,35 +665,35 @@ func TestHoverCoversEveryClickableLineOfACard(t *testing.T) {
 	m.View()
 
 	// Pick a target and hover its first line.
-	hits := m.Hits()
+	hits := m.hits
 	if len(hits) == 0 {
 		t.Skip("nothing clickable")
 	}
 	target := -1
 	for _, h := range hits {
-		if !m.IsRibbonTarget(h.Target) {
-			target = h.Target
+		if !m.isKind(h.target, kindRibbon) {
+			target = h.target
 			break
 		}
 	}
 	if target < 0 {
 		t.Skip("no grid target")
 	}
-	var claimed []Hit
+	var claimed []hitRegion
 	for _, h := range hits {
-		if h.Target == target {
+		if h.target == target {
 			claimed = append(claimed, h)
 		}
 	}
 	if len(claimed) < 2 {
 		t.Skip("target claims a single line")
 	}
-	m.Update(tea.MouseMsg{X: claimed[0].X0, Y: claimed[0].Y, Action: tea.MouseActionMotion})
+	m.Update(tea.MouseMsg{X: claimed[0].x0, Y: claimed[0].y, Action: tea.MouseActionMotion})
 
 	lines := strings.Split(m.View(), "\n")
 	styled := 0
 	for _, h := range claimed {
-		if h.Y < len(lines) && strings.Contains(lines[h.Y], "\x1b[") {
+		if h.y < len(lines) && strings.Contains(lines[h.y], "\x1b[") {
 			styled++
 		}
 	}
@@ -707,17 +711,17 @@ func TestClickRegionsLineUpWithWhatWasDrawn(t *testing.T) {
 	out := m.View()
 	lines := strings.Split(out, "\n")
 
-	for _, h := range m.Hits() {
-		if h.Y >= len(lines) {
+	for _, h := range m.hits {
+		if h.y >= len(lines) {
 			t.Errorf("a click region at y=%d is past the end of a %d line render",
-				h.Y, len(lines))
+				h.y, len(lines))
 			continue
 		}
-		if m.IsRibbonTarget(h.Target) {
+		if m.isKind(h.target, kindRibbon) {
 			continue
 		}
 		// A grid target's own text must actually appear on the line it claims.
-		if pane := m.TargetPane(h.Target); pane != "" {
+		if pane := m.targetPane(h.target); pane != "" {
 			continue // agent rows vary; the header check below is the tight one
 		}
 	}
@@ -729,9 +733,9 @@ func TestClickRegionsLineUpWithWhatWasDrawn(t *testing.T) {
 			continue
 		}
 		var first = -1
-		for _, h := range m.Hits() {
-			if h.Target == ti && (first < 0 || h.Y < first) {
-				first = h.Y
+		for _, h := range m.hits {
+			if h.target == ti && (first < 0 || h.y < first) {
+				first = h.y
 			}
 		}
 		if first < 0 || first >= len(lines) {

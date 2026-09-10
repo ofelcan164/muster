@@ -79,20 +79,3 @@ func (m *Model) targetAt(x, y int) (int, bool) {
 	}
 	return -1, false
 }
-
-// Hit is a clickable region, exposed for tests.
-type Hit struct {
-	Y, X0, X1, Target int
-}
-
-// Hits reports the regions the last render made clickable.
-func (m *Model) Hits() []Hit {
-	out := make([]Hit, 0, len(m.hits))
-	for _, h := range m.hits {
-		out = append(out, Hit{Y: h.y, X0: h.x0, X1: h.x1, Target: h.target})
-	}
-	return out
-}
-
-// Hover is the target under the pointer, exposed for tests.
-func (m *Model) Hover() int { return m.hover }

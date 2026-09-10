@@ -79,24 +79,34 @@ func (m *Model) repair() (tea.Model, tea.Cmd) {
 		m.notice = "no orchestrator marked, so there is nobody to tell"
 		return m, nil
 	}
-	m.send(m.snap.Orch.PaneID, repairMessage(*a, m.repoByKey(a.RepoKey)),
+	return m, m.send(m.snap.Orch.PaneID, repairMessage(*a, m.repoByKey(a.RepoKey)),
 		fmt.Sprintf("told the orchestrator about %s/%s",
 			shortRepo(m.repoByKey(a.RepoKey)), a.Agent))
-	return m, nil
 }
+
+// noticeMsg is what a socket call running off the Update goroutine reports
+// back, to be shown as the notice.
+type noticeMsg string
 
 // send delivers a message and records what happened, since a full-screen
 // overlay has nowhere else to report an error to.
-func (m *Model) send(paneID, text, ok string) {
+//
+// The socket call runs as a command rather than here. Update is the goroutine
+// that reads the keyboard, so a wedged socket held there froze the overlay for
+// seconds with every key ignored, q included.
+func (m *Model) send(paneID, text, ok string) tea.Cmd {
 	if m.prompt == nil {
 		m.notice = "cannot send from here"
-		return
+		return nil
 	}
-	if err := m.prompt(paneID, text); err != nil {
-		m.notice = "send failed: " + err.Error()
-		return
+	m.notice = "sending…"
+	prompt := m.prompt
+	return func() tea.Msg {
+		if err := prompt(paneID, text); err != nil {
+			return noticeMsg("send failed: " + err.Error())
+		}
+		return noticeMsg(ok)
 	}
-	m.notice = ok
 }
 
 // handleCompose owns every key while the i input is open, the same way the
@@ -116,8 +126,7 @@ func (m *Model) handleCompose(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.notice = "no orchestrator marked, so there is nobody to tell"
 			return m, nil
 		}
-		m.send(m.snap.Orch.PaneID, text, "sent to the orchestrator")
-		return m, nil
+		return m, m.send(m.snap.Orch.PaneID, text, "sent to the orchestrator")
 	case tea.KeyBackspace:
 		if m.compose != "" {
 			m.compose = m.compose[:len(m.compose)-1]

@@ -76,10 +76,10 @@ func TestClickingTheStripJumpsToTheOrchestrator(t *testing.T) {
 		t.Fatal("no strip target was built")
 	}
 	var found bool
-	for _, h := range m.Hits() {
-		if h.Target == ti {
+	for _, h := range m.hits {
+		if h.target == ti {
 			found = true
-			m.Update(tea.MouseMsg{X: h.X0, Y: h.Y,
+			m.Update(tea.MouseMsg{X: h.x0, Y: h.y,
 				Action: tea.MouseActionRelease, Button: tea.MouseButtonLeft})
 			break
 		}
@@ -122,7 +122,7 @@ func TestInputSendsToTheOrchestrator(t *testing.T) {
 	if !strings.Contains(plain(m.View()), "ship it") {
 		t.Error("what is being typed is not shown")
 	}
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	key(m, "enter")
 
 	if m.composing {
 		t.Error("the input stayed open after enter")
@@ -137,12 +137,12 @@ func TestInputOwnsEveryKeyWhileOpen(t *testing.T) {
 	m := withSnapshot(t, withOrch(), 143)
 	m.SetPrompter(func(string, string) error { return nil })
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("i")})
-	before := m.Cursor()
+	before := m.cursor
 	for _, r := range "hjkl" {
 		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 	}
-	if m.Cursor() != before {
-		t.Errorf("typing moved the cursor from %d to %d", before, m.Cursor())
+	if m.cursor != before {
+		t.Errorf("typing moved the cursor from %d to %d", before, m.cursor)
 	}
 	if m.compose != "hjkl" {
 		t.Errorf("input holds %q, wanted %q", m.compose, "hjkl")
@@ -173,7 +173,7 @@ func TestRepairKeyReportsTheOpenGate(t *testing.T) {
 	var toPane, sent string
 	m.SetPrompter(func(pane, text string) error { toPane, sent = pane, text; return nil })
 
-	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")})
+	key(m, "t")
 
 	if toPane != "w4:p1" {
 		t.Fatalf("the report went to %q, wanted the orchestrator", toPane)
@@ -193,7 +193,7 @@ func TestRepairKeyStaysSilentWithNoGate(t *testing.T) {
 	sends := 0
 	m.SetPrompter(func(string, string) error { sends++; return nil })
 
-	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")})
+	key(m, "t")
 
 	if sends != 0 {
 		t.Errorf("t sent %d messages with no gate open", sends)
@@ -212,7 +212,7 @@ func TestRepairKeyRefusesToChooseBetweenGates(t *testing.T) {
 	m.SetPrompter(func(string, string) error { sends++; return nil })
 
 	m.cursor = 0 // the blocked row, not either gate
-	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")})
+	key(m, "t")
 
 	if sends != 0 {
 		t.Errorf("t picked one of two gates and sent %d messages", sends)
@@ -227,13 +227,13 @@ func TestRepairKeyFollowsTheSelection(t *testing.T) {
 	var sent string
 	m.SetPrompter(func(_, text string) error { sent = text; return nil })
 
-	for i := 0; i < m.TargetCount(); i++ {
-		if m.IsRibbonTarget(i) && m.TargetPane(i) == "w3:p1" {
+	for i := 0; i < len(m.targets); i++ {
+		if m.isKind(i, kindRibbon) && m.targetPane(i) == "w3:p1" {
 			m.cursor = i
 			break
 		}
 	}
-	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")})
+	key(m, "t")
 
 	if !strings.Contains(sent, "checkout-ui") {
 		t.Errorf("t reported %q, wanted the selected gate", sent)
@@ -245,10 +245,43 @@ func TestFailedSendIsReportedOnTheStrip(t *testing.T) {
 	m := withSnapshot(t, withOrch(gateRow()), 143)
 	m.SetPrompter(func(string, string) error { return errFake })
 
-	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")})
+	key(m, "t")
 
 	if out := plain(m.View()); !strings.Contains(out, "send failed") {
 		t.Errorf("a failed send is not shown:\n%s", out)
+	}
+}
+
+// A wedged socket must not freeze the overlay. The key hands the send off as a
+// command and returns at once, so q still works while the socket hangs.
+func TestSendDoesNotHoldUpTheKeyboard(t *testing.T) {
+	m := withSnapshot(t, withOrch(gateRow()), 143)
+	release := make(chan struct{})
+	m.SetPrompter(func(string, string) error { <-release; return nil })
+
+	got := make(chan tea.Cmd, 1)
+	go func() {
+		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")})
+		got <- cmd
+	}()
+	var cmd tea.Cmd
+	select {
+	case cmd = <-got:
+	case <-time.After(5 * time.Second):
+		close(release)
+		t.Fatal("t waited on the prompter instead of handing it off")
+	}
+	if cmd == nil {
+		t.Fatal("t returned no command, so nothing would ever be sent")
+	}
+	if !strings.Contains(m.notice, "sending") {
+		t.Errorf("notice = %q while in flight, want it to say it is sending", m.notice)
+	}
+
+	close(release)
+	m.Update(cmd())
+	if !strings.Contains(m.notice, "told the orchestrator") {
+		t.Errorf("notice = %q once the send returned", m.notice)
 	}
 }
 
@@ -264,7 +297,7 @@ func TestNoticeClearsOnTheNextKey(t *testing.T) {
 	m := withSnapshot(t, withOrch(gateRow()), 143)
 	m.SetPrompter(func(string, string) error { return nil })
 
-	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")})
+	key(m, "t")
 	if m.notice == "" {
 		t.Fatal("t recorded no notice")
 	}
@@ -283,7 +316,7 @@ func TestStripNeverExceedsTheWidth(t *testing.T) {
 		// Every state the last line can be in.
 		for _, step := range []func(){
 			func() {},
-			func() { m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")}) },
+			func() { key(m, "t") },
 			func() {
 				m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("i")})
 				for i := 0; i < 200; i++ {

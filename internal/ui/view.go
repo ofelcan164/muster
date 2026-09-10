@@ -418,10 +418,3 @@ func fitLine(s string, width int) string {
 	}
 	return pad(s, width)
 }
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}

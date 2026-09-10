@@ -31,7 +31,7 @@ func (m *Model) logMouse(msg tea.MouseMsg, target int, ok bool) {
 	what := "none"
 	if ok {
 		what = fmt.Sprintf("target=%d pane=%q ribbon=%v",
-			target, m.TargetPane(target), m.IsRibbonTarget(target))
+			target, m.targetPane(target), m.isKind(target, kindRibbon))
 	}
 	rows := 0
 	if len(m.hits) > 0 {

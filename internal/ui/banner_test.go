@@ -93,9 +93,9 @@ func TestSDoesNothingWithNoOfferOnScreen(t *testing.T) {
 // The cursor never lands on it: a selection enter cannot act on is a dead end.
 func TestTheOfferIsNotAStopOnTheWalk(t *testing.T) {
 	m := withOffer(t, okInstall)
-	for i := 0; i < m.TargetCount()+2; i++ {
+	for i := 0; i < len(m.targets)+2; i++ {
 		m.Update(tea.KeyMsg{Type: tea.KeyDown})
-		if m.IsBannerTarget(m.Cursor()) {
+		if m.isKind(m.cursor, kindBanner) {
 			t.Fatalf("the walk landed on the offer at step %d", i)
 		}
 	}
@@ -111,11 +111,11 @@ func TestClickingTheOfferInstalls(t *testing.T) {
 	// hold is the thing selected, not the number.
 	was := m.selectedPane()
 
-	for _, h := range m.Hits() {
-		if !m.IsBannerTarget(h.Target) {
+	for _, h := range m.hits {
+		if !m.isKind(h.target, kindBanner) {
 			continue
 		}
-		m.Update(tea.MouseMsg{X: h.X0 + 1, Y: h.Y,
+		m.Update(tea.MouseMsg{X: h.x0 + 1, Y: h.y,
 			Action: tea.MouseActionRelease, Button: tea.MouseButtonLeft})
 		if !strings.Contains(m.notice, "installed") {
 			t.Errorf("clicking the offer did nothing, notice = %q", m.notice)

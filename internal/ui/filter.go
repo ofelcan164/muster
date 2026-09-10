@@ -3,7 +3,8 @@
 package ui
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"strings"
 
 	"github.com/ofelcan164/muster/internal/model"
@@ -52,7 +53,7 @@ func (m *Model) visibleRepos() []model.Repo {
 			hits = append(hits, scored{r, best})
 		}
 	}
-	sort.SliceStable(hits, func(i, j int) bool { return hits[i].score > hits[j].score })
+	slices.SortStableFunc(hits, func(a, b scored) int { return cmp.Compare(b.score, a.score) })
 
 	out := make([]model.Repo, 0, len(hits))
 	for _, h := range hits {

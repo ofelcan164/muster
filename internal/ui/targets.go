@@ -198,40 +198,14 @@ func (m *Model) findTarget(key string, kind targetKind) int {
 	return -1
 }
 
-// TargetCount and ReachableRepos exist for tests and diagnostics: they report
-// what the cursor can actually get to.
-func (m *Model) TargetCount() int { return len(m.targets) }
-
-func (m *Model) ReachableRepos() int {
-	seen := map[string]bool{}
-	for _, t := range m.targets {
-		if t.repoKey != "" {
-			seen[t.repoKey] = true
-		}
-	}
-	return len(seen)
-}
-
-// TargetPane is the agent a target jumps to, or "" for a bare repo card.
-func (m *Model) TargetPane(i int) string {
+// targetPane is the agent a target jumps to, or "" for a bare repo card.
+func (m *Model) targetPane(i int) string {
 	if i < 0 || i >= len(m.targets) {
 		return ""
 	}
 	return m.targets[i].paneID
 }
 
-// IsRibbonTarget reports whether a target is a ribbon row, for tests.
-func (m *Model) IsRibbonTarget(i int) bool { return m.isKind(i, kindRibbon) }
-
-// IsStripTarget reports whether a target is the orchestrator strip, for tests.
-func (m *Model) IsStripTarget(i int) bool { return m.isKind(i, kindStrip) }
-
-// IsBannerTarget reports whether a target is the banner, for tests.
-func (m *Model) IsBannerTarget(i int) bool { return m.isKind(i, kindBanner) }
-
 func (m *Model) isKind(i int, kind targetKind) bool {
 	return i >= 0 && i < len(m.targets) && m.targets[i].kind == kind
 }
-
-// Cursor is the keyboard selection, exposed for tests.
-func (m *Model) Cursor() int { return m.cursor }

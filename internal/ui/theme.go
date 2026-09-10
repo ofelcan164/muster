@@ -25,7 +25,6 @@ var (
 	colRedDim = lipgloss.Color("#cc241d") // the pulse's other half
 	colGreen  = lipgloss.Color("#b8bb26")
 	colYellow = lipgloss.Color("#fabd2f")
-	colBlue   = lipgloss.Color("#83a598")
 	colOrange = lipgloss.Color("#fe8019")
 	colSelBG  = lipgloss.Color("#3c3836")
 	colPanel  = lipgloss.Color("#282828")

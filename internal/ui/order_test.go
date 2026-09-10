@@ -165,14 +165,14 @@ func TestSortModeRoundTrips(t *testing.T) {
 
 	key(m, "s")
 	key(m, "s")
-	want := m.Sort()
+	want := m.sort
 	if want != SortAttention {
 		t.Fatalf("two presses of s gave %v, want attention", want)
 	}
 
 	next := sized(t, 143)
 	next.SetSort(SortMode(state.LoadUI().Sort))
-	if got := next.Sort(); got != want {
+	if got := next.sort; got != want {
 		t.Errorf("reopened with sort %v, want %v", got, want)
 	}
 }
@@ -183,7 +183,7 @@ func TestRestoredSortModeIsClamped(t *testing.T) {
 	for _, bad := range []SortMode{-1, sortModeCount, 99} {
 		m := sized(t, 143)
 		m.SetSort(bad)
-		if got := m.Sort(); got != SortFirstSeen {
+		if got := m.sort; got != SortFirstSeen {
 			t.Errorf("SetSort(%d) kept %v, want first seen", bad, got)
 		}
 	}
