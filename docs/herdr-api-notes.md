@@ -1,7 +1,12 @@
-# herdr 0.8.2 notes
+# herdr API notes
 
-Verified against the installed binary and a live server on 2026-09-05. Design
-lives in `plan.html`; this file is only the mechanics needed to write code.
+Verified against the installed 0.8.2 binary and a live server on 2026-09-05,
+with the subscription section rechecked against a live 0.9.0 server on
+2026-09-10. This file is only the mechanics needed to write code.
+
+Muster's manifest sets `min_herdr_version = "0.8.2"`. That is the version this
+was verified against, not a proven floor: 0.8.0 and 0.8.1 were never tried, and
+they may well work. Treat it as "tested here" rather than "required".
 
 ## Getting the truth
 
@@ -161,7 +166,7 @@ link` still succeeds, so nothing fails loudly. Use `on = "workspace.created"`.
 
 The warning only shows in `plugin list` output, so check there after linking.
 
-### Holding a subscription (verified 2026-09-06, 0.8.2)
+### Holding a subscription (verified 2026-09-06 on 0.8.2, 2026-09-10 on 0.9.0)
 
 `events.subscribe` is the long-lived one. `events.wait` is a one-shot match with
 a timeout and is not a subscription at all. Subscribe replies
@@ -175,14 +180,25 @@ Five things that shape any daemon built on this.
    the delivered form. The exception is `pane_agent_status_changed`, which comes
    back dotted as `pane.agent_status_changed`. Normalise both.
 
-2. **Every subscribe replays the session's whole event history first, paced at
-   one event per 100ms.** The replay includes events for panes and workspaces
-   that have since closed, and it is not causally ordered: I saw `pane_closed`
-   for `w1:p2` arrive before that pane's `pane_created`. Two subscribes a second
-   apart replayed byte-identical sequences. So the stream is a "something
-   changed" hint and nothing more. Build state from `session.snapshot`, never
-   from the events, and expect ten redundant wakeups a second while a replay
-   drains.
+2. **On 0.8.2, every subscribe replays the session's whole event history first,
+   paced at one event per 100ms.** The replay includes events for panes and
+   workspaces that have since closed, and it is not causally ordered: I saw
+   `pane_closed` for `w1:p2` arrive before that pane's `pane_created`. Two
+   subscribes a second apart replayed byte-identical sequences. Expect ten
+   redundant wakeups a second while a replay drains.
+
+   **0.9.0 removed the replay.** Measured 2026-09-10: I created a workspace and
+   closed it, then opened a fresh subscription to all 16 global types. It
+   returned `subscription_started` and nothing else, twice over. The same
+   connection then delivered `pane_created`, `workspace_created`, `tab_created`
+   and `pane_updated` for the next workspace I made, so the subscription was
+   live, just not retrospective. The 0.9.0 docs say the same thing and prescribe
+   the ordering that closes the bootstrap gap: subscribe on one connection, wait
+   for the acknowledgement, buffer the stream, then call `session.snapshot` on
+   another. Muster already did that, so the code needed no change.
+
+   Either way the stream is a "something changed" hint and nothing more. Build
+   state from `session.snapshot`, never from the events.
 
 3. **A second `events.subscribe` on a subscribed connection resets it.** The
    server closes the socket. Subscriptions are fixed for the life of a
@@ -253,7 +269,7 @@ To check config without touching the real one, redirect the config home:
 `[[keys.command]]` accepts `type = "shell" | "popup" | "plugin_action"`.
 
 **Answered 2026-09-06: `plugin_action` cannot open a `[[panes]]` entrypoint.**
-Only `[[actions]]` ids are addressable. `plugin action list` returns the five
+Only `[[actions]]` ids are addressable. `plugin action list` returns the
 `[[actions]]` entries and not the `home` pane entrypoint, and
 `herdr plugin action invoke muster.home` returns `plugin_action_not_found` while
 `muster.open` runs. So `prefix+m` has to bind to an `[[actions]]` entry that

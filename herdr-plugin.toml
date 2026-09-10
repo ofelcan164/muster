@@ -1,6 +1,8 @@
 id = "muster"
 name = "Muster"
-version = "0.0.1"
+version = "0.1.0"
+# The floor Muster is tested against, not the lowest version that works: 0.8.0
+# and 0.8.1 were never tried. See docs/herdr-api-notes.md.
 min_herdr_version = "0.8.2"
 description = "One screen for every agent across every repo"
 platforms = ["linux", "macos"]
@@ -28,30 +30,35 @@ command = ["./bin/muster"]
 [[actions]]
 id = "open"
 title = "Open Muster"
+description = "Toggle the overlay. Every agent in the session gets one card."
 contexts = ["global"]
 command = ["./bin/muster", "open"]
 
 [[actions]]
 id = "jump-orchestrator"
 title = "Jump to orchestrator"
+description = "Focus the pane marked as the orchestrator, from wherever you are."
 contexts = ["global"]
 command = ["./bin/muster", "jump", "orchestrator"]
 
 [[actions]]
 id = "back"
 title = "Back to previous agent"
+description = "Return to the pane you were in before the last jump."
 contexts = ["global"]
 command = ["./bin/muster", "jump", "previous"]
 
 [[actions]]
 id = "mark-orchestrator"
 title = "Mark this agent as the orchestrator"
+description = "Record this pane as the orchestrator, so jumps and reports land here."
 contexts = ["pane"]
 command = ["./bin/muster", "mark-orchestrator"]
 
 [[actions]]
 id = "install"
 title = "Install Muster's keybindings"
+description = "Bind the three Muster keys in your herdr config, back the config up first, and start the daemon."
 contexts = ["global"]
 command = ["./bin/muster", "install"]
 
@@ -61,8 +68,19 @@ command = ["./bin/muster", "install"]
 [[actions]]
 id = "install-skill"
 title = "Install the reporting skill for the orchestrator"
+description = "Write muster-report to your Claude skills, so agents report a task line instead of a terminal title."
 contexts = ["global"]
 command = ["./bin/muster", "install-skill"]
+
+# herdr has no uninstall hook: `plugin unlink` leaves files alone and plugins
+# clean up after themselves. Without this action, unlinking Muster strands three
+# keybindings pointing at a plugin that is gone.
+[[actions]]
+id = "uninstall"
+title = "Uninstall Muster's keybindings and skill"
+description = "Remove Muster's config block and the reporting skill. Run before unlinking the plugin."
+contexts = ["global"]
+command = ["./bin/muster", "uninstall"]
 
 # Rare events only. Status and output events are far too chatty for a
 # process-per-event hook; musterd subscribes to those over the socket.

@@ -9,8 +9,9 @@ import (
 	"time"
 )
 
-// Verified against a live 0.8.2 server on 2026-09-06. The mechanics below are
-// not in the docs and three of them shape the daemon's design:
+// Verified against a live 0.8.2 server on 2026-09-06, with (3) re-verified
+// against a live 0.9.0 server on 2026-09-10. The mechanics below are not in the
+// docs and three of them shape the daemon's design:
 //
 //  1. events.subscribe holds the connection open and replies
 //     {"result":{"type":"subscription_started"}}. Live events then arrive on the
@@ -18,12 +19,17 @@ import (
 //  2. Subscription type names are dotted ("pane.updated"); delivered event names
 //     are underscored ("pane_updated"). The one exception is
 //     pane.agent_status_changed, which is delivered dotted. Normalise both.
-//  3. Every subscribe replays the session's whole retained event history before
-//     live events, paced at exactly one event per 100ms. The replay includes
-//     events for panes and workspaces that have since been closed, and is not
-//     causally ordered. Two subscribes a second apart produced byte-identical
-//     replays. Events are therefore usable only as a "something changed" hint,
-//     never as a state log.
+//  3. On 0.8.2, every subscribe replays the session's whole retained event
+//     history before live events, paced at exactly one event per 100ms. The
+//     replay includes events for panes and workspaces that have since been
+//     closed, and is not causally ordered. Two subscribes a second apart
+//     produced byte-identical replays. 0.9.0 dropped the replay: subscribing
+//     right after a workspace was created and closed returned
+//     subscription_started and nothing else, while live events kept arriving on
+//     that same connection. 0.9.0's docs prescribe subscribing first and
+//     buffering the stream while session.snapshot is in flight, which is the
+//     order Daemon.Run already subscribes and reconciles in. Under both
+//     versions events are a "something changed" hint, never a state log.
 //  4. A second events.subscribe on an already-subscribed connection makes the
 //     server reset it. Subscriptions are single-shot and read-only, so the set
 //     of subscriptions is fixed for the life of a connection and RPCs must use
