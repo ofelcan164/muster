@@ -5,8 +5,9 @@
 package triage
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -28,18 +29,24 @@ const StaleAfter = 10 * time.Minute
 //
 // Threshold checks are different and do not need this: a lower bound of ten
 // minutes still proves an agent has been idle for at least ten minutes.
-func longestFirst(a, b model.Agent, now time.Time) bool {
+func longestFirst(a, b model.Agent, now time.Time) int {
 	if a.AgeKnown != b.AgeKnown {
-		return a.AgeKnown
+		if a.AgeKnown {
+			return -1
+		}
+		return 1
 	}
-	return a.Age(now) > b.Age(now)
+	return cmp.Compare(b.Age(now), a.Age(now))
 }
 
-func newestFirst(a, b model.Agent, now time.Time) bool {
+func newestFirst(a, b model.Agent, now time.Time) int {
 	if a.AgeKnown != b.AgeKnown {
-		return a.AgeKnown
+		if a.AgeKnown {
+			return -1
+		}
+		return 1
 	}
-	return a.Age(now) < b.Age(now)
+	return cmp.Compare(a.Age(now), b.Age(now))
 }
 
 // Input is everything the ranking needs, already assembled by the daemon.
@@ -99,8 +106,8 @@ func Rank(in Input) []model.Attention {
 
 	// Rank 1: blocked, longest waiting first.
 	blocked := filter(all, func(x agentRef) bool { return x.agent.Status == model.StatusBlocked })
-	sort.SliceStable(blocked, func(i, j int) bool {
-		return longestFirst(blocked[i].agent, blocked[j].agent, in.Now)
+	slices.SortStableFunc(blocked, func(a, b agentRef) int {
+		return longestFirst(a.agent, b.agent, in.Now)
 	})
 	for _, x := range blocked {
 		add(model.Attention{
@@ -120,7 +127,7 @@ func Rank(in Input) []model.Attention {
 	// is invisible until you open the workspace, which is exactly the kind of
 	// thing this screen exists to surface.
 	stopped := append([]model.Stopped(nil), in.Stopped...)
-	sort.SliceStable(stopped, func(i, j int) bool { return stopped[i].PaneID < stopped[j].PaneID })
+	slices.SortStableFunc(stopped, func(a, b model.Stopped) int { return cmp.Compare(a.PaneID, b.PaneID) })
 	for _, sp := range stopped {
 		add(model.Attention{
 			Rank: 3, Reason: model.ReasonProcessStopped,
@@ -133,8 +140,8 @@ func Rank(in Input) []model.Attention {
 	// Rank 4: done and unseen, newest first. herdr's "done" already means idle
 	// after work you have not looked at, so this needs no history of our own.
 	done := filter(all, func(x agentRef) bool { return x.agent.Status == model.StatusDone })
-	sort.SliceStable(done, func(i, j int) bool {
-		return newestFirst(done[i].agent, done[j].agent, in.Now)
+	slices.SortStableFunc(done, func(a, b agentRef) int {
+		return newestFirst(a.agent, b.agent, in.Now)
 	})
 	for _, x := range done {
 		add(model.Attention{
@@ -157,8 +164,8 @@ func Rank(in Input) []model.Attention {
 			!in.EverDone[x.agent.PaneID] &&
 			x.agent.Age(in.Now) >= StaleAfter
 	})
-	sort.SliceStable(stale, func(i, j int) bool {
-		return longestFirst(stale[i].agent, stale[j].agent, in.Now)
+	slices.SortStableFunc(stale, func(a, b agentRef) int {
+		return longestFirst(a.agent, b.agent, in.Now)
 	})
 	for _, x := range stale {
 		add(model.Attention{
@@ -169,7 +176,7 @@ func Rank(in Input) []model.Attention {
 		})
 	}
 
-	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Rank < rows[j].Rank })
+	slices.SortStableFunc(rows, func(a, b model.Attention) int { return cmp.Compare(a.Rank, b.Rank) })
 	if len(rows) > RibbonMax {
 		rows = rows[:RibbonMax]
 	}
@@ -244,7 +251,7 @@ func detectGates(in Input, all []agentRef) []model.Attention {
 		if len(waiting) == 0 {
 			continue
 		}
-		sort.Strings(waiting)
+		slices.Sort(waiting)
 		out = append(out, model.Attention{
 			Rank: 2, Reason: model.ReasonGateUntold,
 			RepoKey: x.repo.Key, PaneID: x.agent.PaneID, Agent: x.agent.Name,
@@ -253,7 +260,7 @@ func detectGates(in Input, all []agentRef) []model.Attention {
 			Downstream: waiting,
 		})
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].Age > out[j].Age })
+	slices.SortStableFunc(out, func(a, b model.Attention) int { return cmp.Compare(b.Age, a.Age) })
 	return out
 }
 

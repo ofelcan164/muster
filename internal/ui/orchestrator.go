@@ -2,6 +2,7 @@ package ui
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 
@@ -13,7 +14,7 @@ import (
 func MarkOrchestrator() error {
 	pane := contextPaneID()
 	if pane == "" {
-		return fmt.Errorf("no pane to mark: run this action on the orchestrator's pane")
+		return errors.New("no pane to mark: run this action on the orchestrator's pane")
 	}
 	if err := markOrchestratorPane(pane, markedOrchestratorPane()); err != nil {
 		return err

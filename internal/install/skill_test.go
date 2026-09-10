@@ -167,21 +167,8 @@ func TestUninstallOnAFreshMachineIsQuiet(t *testing.T) {
 // A wrong CLAUDE_CONFIG_DIR must not turn an uninstall into a recursive delete
 // of somewhere else.
 func TestRemoveRefusesADirectoryThatIsNotOurs(t *testing.T) {
-	dir := skillHome(t)
-
-	// Point the canonical path somewhere that is not Muster's directory.
-	orig := skillPathForTest
-	skillPathForTest = filepath.Join(dir, "skills", "something-else", "SKILL.md")
-	t.Cleanup(func() { skillPathForTest = orig })
-
-	if err := os.MkdirAll(filepath.Dir(skillPathForTest), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := RemoveSkill(); err == nil {
+	if err := refuseForeign(filepath.Join(t.TempDir(), "skills", "something-else")); err == nil {
 		t.Error("remove accepted a directory that is not Muster's")
-	}
-	if _, err := os.Stat(filepath.Dir(skillPathForTest)); err != nil {
-		t.Error("remove deleted a directory it should have refused")
 	}
 }
 

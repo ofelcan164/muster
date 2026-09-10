@@ -64,19 +64,12 @@ func harnesses() []harness {
 	}
 }
 
-// skillPathForTest overrides SkillPath, so the refusal below can be exercised
-// against a path this never would have produced.
-var skillPathForTest string
-
 // CanonicalSkillDir is the one real copy, shared across runtimes.
 //
 // ~/.agents/skills is the cross-tool convention, and every harness gets a
 // symlink into it rather than a copy of its own. One file to update means a
 // rewritten skill cannot go live in Claude Code and stale in Codex.
 func CanonicalSkillDir() string {
-	if skillPathForTest != "" {
-		return filepath.Dir(skillPathForTest)
-	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""
@@ -87,9 +80,6 @@ func CanonicalSkillDir() string {
 // SkillPath is the file this installs. The links point at the directory holding
 // it.
 func SkillPath() string {
-	if skillPathForTest != "" {
-		return skillPathForTest
-	}
 	dir := CanonicalSkillDir()
 	if dir == "" {
 		return ""
@@ -199,6 +189,16 @@ func copySkill(src, dst string) error {
 	return nil
 }
 
+// refuseForeign refuses to delete anything that is not the directory this
+// installed. A wrong CLAUDE_CONFIG_DIR must not turn an uninstall into a
+// recursive delete of somewhere else.
+func refuseForeign(dir string) error {
+	if filepath.Base(dir) != skillName {
+		return fmt.Errorf("refusing to remove %s: not Muster's skill directory", dir)
+	}
+	return nil
+}
+
 // RemoveSkill deletes the canonical copy and every link into it.
 //
 // The skill lives in a directory of its own for exactly this reason: removal is
@@ -211,12 +211,8 @@ func RemoveSkill() (*Result, error) {
 		return nil, errors.New("cannot locate a home directory")
 	}
 	res := &Result{Path: canon}
-
-	// Refuse to delete anything that is not the directory this installed. A
-	// wrong CLAUDE_CONFIG_DIR must not turn an uninstall into a recursive
-	// delete of somewhere else.
-	if filepath.Base(canon) != skillName {
-		return nil, fmt.Errorf("refusing to remove %s: not Muster's skill directory", canon)
+	if err := refuseForeign(canon); err != nil {
+		return nil, err
 	}
 
 	for _, h := range harnesses() {

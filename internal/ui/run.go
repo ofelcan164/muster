@@ -1,7 +1,7 @@
 package ui
 
 import (
-	"fmt"
+	"errors"
 	"os"
 	"time"
 
@@ -26,7 +26,7 @@ const staleAfter = 30 * time.Second
 func Run() (string, error) {
 	snap, warning := load()
 	if snap == nil {
-		return "", fmt.Errorf("no snapshot and the daemon would not start")
+		return "", errors.New("no snapshot and the daemon would not start")
 	}
 
 	m := New(snap, warning)
@@ -269,11 +269,11 @@ func ResolveTarget(name string) (string, error) {
 
 	snap, err := daemon.ReadSnapshot()
 	if err != nil {
-		return "", fmt.Errorf("no snapshot: is musterd running?")
+		return "", errors.New("no snapshot: is musterd running?")
 	}
 	if name == "orchestrator" {
 		if !snap.Orch.Found {
-			return "", fmt.Errorf("no orchestrator marked: run the mark-orchestrator action on its pane")
+			return "", errors.New("no orchestrator marked: run the mark-orchestrator action on its pane")
 		}
 		return snap.Orch.PaneID, nil
 	}
@@ -299,7 +299,7 @@ func previousAgent(snap *model.Snapshot) (string, error) {
 	if snap.PreviousAgent != "" && snap.PreviousAgent != focused {
 		return snap.PreviousAgent, nil
 	}
-	return "", fmt.Errorf("no previous agent yet")
+	return "", errors.New("no previous agent yet")
 }
 
 // liveFocusedPane asks the server where focus actually is. Around 2ms, which is
