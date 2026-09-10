@@ -1,8 +1,17 @@
-// Command muster is the overlay client and the plugin's action entrypoints.
+// Command muster is the overlay and the plugin's action entrypoints.
 //
-// Only the parts the daemon depends on exist so far. The TUI is deliberately
-// not built yet: the overlay is worthless until something is watching, so the
-// daemon comes first. Prove the data model with `musterd dump`.
+//	muster                     open the overlay: the [[panes]] command
+//	muster open                ask herdr to toggle that pane, for a keybinding
+//	muster jump <target>       the orchestrator, or the previous agent
+//	muster mark-orchestrator   mark the pane this runs in
+//	muster discover            rescan after a workspace or worktree appears
+//	muster install | uninstall | install-skill | uninstall-skill
+//	muster chain get | set | clear
+//
+// Bare invocation is the overlay itself, one process per opening rather than
+// one per keypress: it runs a tea.Program on the alt screen and lives until q.
+// Everything it draws comes from the snapshot musterd leaves in the plugin
+// state dir, so drawing never touches the herdr socket. Only acting does.
 package main
 
 import (

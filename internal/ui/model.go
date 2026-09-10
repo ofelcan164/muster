@@ -131,11 +131,12 @@ func New(snap *model.Snapshot, warning string) *Model {
 
 // refreshInterval is how often the overlay re-reads the snapshot.
 //
-// The overlay is meant to be short-lived, spawned per keypress, so it used to
-// read once and never again. Left open, it froze: an agent could go from
-// working to blocked and the screen would still show the old state while
-// herdr's own sidebar showed the new one. A read costs about 25 microseconds,
-// so refreshing is cheaper than reasoning about when not to.
+// The overlay was first built to be spawned per keypress, so it read the
+// snapshot once and never again. It is not spawned per keypress: one process
+// runs for as long as the overlay is open, and left open it froze. An agent
+// could go from working to blocked while the screen still showed the old state
+// and herdr's own sidebar showed the new one. A read costs about 25
+// microseconds, so refreshing is cheaper than reasoning about when not to.
 const refreshInterval = 700 * time.Millisecond
 
 type refreshMsg struct{}
