@@ -8,17 +8,22 @@ package model
 
 import "time"
 
-// SchemaVersion is bumped whenever the snapshot shape changes so a stale client
-// can tell it does not understand the file rather than misreading it.
-const SchemaVersion = 1
-
+// Status is what an agent is doing: herdr's agent_status, passed through
+// unchanged.
 type Status string
 
 const (
-	StatusIdle    Status = "idle"
+	// StatusIdle is an agent at its prompt with nothing to do.
+	StatusIdle Status = "idle"
+	// StatusWorking is an agent in the middle of a turn.
 	StatusWorking Status = "working"
+	// StatusBlocked is an agent waiting on you, at a permission prompt or a
+	// question. Agent.Question holds the prompt when the daemon could read it.
 	StatusBlocked Status = "blocked"
-	StatusDone    Status = "done"
+	// StatusDone is an agent that finished work you have not looked at yet.
+	StatusDone Status = "done"
+	// StatusUnknown is herdr not being able to tell. Ribbon rows for a stopped
+	// process carry it too, because that pane runs no agent.
 	StatusUnknown Status = "unknown"
 )
 
@@ -27,6 +32,9 @@ const (
 // equal confidence.
 type TaskSource string
 
+// The tiers run from most trusted to least, and an agent gets the first one
+// that has a line. Tier 2 is a tier 1 line written before the agent entered its
+// current status, so it may no longer be true.
 const (
 	TaskFromOrchestrator      TaskSource = "orchestrator"       // tier 1
 	TaskFromOrchestratorStale TaskSource = "orchestrator_stale" // tier 2
@@ -35,6 +43,8 @@ const (
 	TaskFromNone              TaskSource = "none"               // tier 5
 )
 
+// Agent is one pane herdr has detected an agent in, such as Claude Code or
+// Codex. Each is a row on its repo's card.
 type Agent struct {
 	PaneID      string `json:"pane_id"`
 	WorkspaceID string `json:"workspace_id"`
@@ -126,11 +136,20 @@ type Repo struct {
 type Reason string
 
 const (
-	ReasonBlocked        Reason = "blocked"
-	ReasonGateUntold     Reason = "gate_untold"
+	// ReasonBlocked is rank 1, an agent waiting on you.
+	ReasonBlocked Reason = "blocked"
+	// ReasonGateUntold is rank 2. An agent finished, the orchestrator has been
+	// idle since before that, and an agent the chain puts downstream of it is
+	// idle too, waiting.
+	ReasonGateUntold Reason = "gate_untold"
+	// ReasonProcessStopped is rank 3, a non-agent pane whose process went away.
 	ReasonProcessStopped Reason = "process_stopped"
-	ReasonDoneUnseen     Reason = "done_unseen"
-	ReasonIdleNeverDone  Reason = "idle_never_done"
+	// ReasonDoneUnseen is rank 4, an agent that finished and you have not
+	// looked at since.
+	ReasonDoneUnseen Reason = "done_unseen"
+	// ReasonIdleNeverDone is rank 5, an agent that did some work, never
+	// reported done, and has been idle for at least ten minutes.
+	ReasonIdleNeverDone Reason = "idle_never_done"
 )
 
 // Attention is one row of the ranked ribbon.
@@ -158,6 +177,9 @@ type Stopped struct {
 	Process string `json:"process"`
 }
 
+// Orchestrator is the agent that hands work to the others. The overlay draws
+// it in a strip of its own rather than in the grid. Found is false when the
+// daemon found none, by token or by name, and the other fields are then empty.
 type Orchestrator struct {
 	Found  bool   `json:"found"`
 	PaneID string `json:"pane_id,omitempty"`
@@ -180,7 +202,6 @@ type Orchestrator struct {
 
 // Snapshot is the file at $HERDR_PLUGIN_STATE_DIR/snapshot.json.
 type Snapshot struct {
-	Schema       int       `json:"schema"`
 	GeneratedAt  time.Time `json:"generated_at"`
 	DaemonPID    int       `json:"daemon_pid"`
 	HerdrVersion string    `json:"herdr_version,omitempty"`
@@ -208,10 +229,16 @@ type Snapshot struct {
 	Counts Counts `json:"counts"`
 }
 
+// Counts are totals over the whole snapshot, so a reader does not have to walk
+// Repos for them.
 type Counts struct {
-	Repos     int `json:"repos"`
-	Agents    int `json:"agents"`
-	NeedsYou  int `json:"needs_you"`
-	Working   int `json:"working"`
+	Repos  int `json:"repos"`
+	Agents int `json:"agents"`
+	// NeedsYou is the number of rows in Attention, so never more than the
+	// ribbon's cap of four.
+	NeedsYou int `json:"needs_you"`
+	// Working is the number of agents whose status is working.
+	Working int `json:"working"`
+	// NonAgents is the number of OtherPanes across every repo.
 	NonAgents int `json:"non_agents"`
 }

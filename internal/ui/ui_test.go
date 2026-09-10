@@ -43,7 +43,6 @@ func testSnapshot() *model.Snapshot {
 		}
 	}
 	return &model.Snapshot{
-		Schema:      model.SchemaVersion,
 		GeneratedAt: now,
 		Repos: []model.Repo{
 			repo(0, "acme/contracts", "contracts", "main", "✦",

@@ -45,7 +45,7 @@ func write(b *testing.B, s *model.Snapshot) {
 
 func benchSnapshot(repos, agents int) *model.Snapshot {
 	now := time.Now()
-	s := &model.Snapshot{Schema: model.SchemaVersion, GeneratedAt: now, DaemonPID: os.Getpid()}
+	s := &model.Snapshot{GeneratedAt: now, DaemonPID: os.Getpid()}
 	for i := range repos {
 		r := model.Repo{
 			Key: fmt.Sprintf("acme/service-%d", i), Name: fmt.Sprintf("service-%d", i),
