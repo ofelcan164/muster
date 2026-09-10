@@ -32,8 +32,9 @@ internal/ui           overlay
 (the orchestrator strip), `talk` (the `i` and `t` keys), `view`, `theme`.
 
 State dir files: `snapshot.json`, `state.json` (grid slots, learned state),
-`ui.json` (repo order, sort, dismissed), `chain.json`, `keys.optout`,
-`musterd.log`, `musterd.lock`.
+`ui.json` (repo order, sort, dismissed) and `ui.json.lock` (serialises two
+overlays saving it), `chain.json`, `keys.optout`, `musterd.log`,
+`musterd.lock`, `musterd.spawn.lock` (serialises concurrent `--ensure`).
 
 ## Build and test
 
