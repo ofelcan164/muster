@@ -9,8 +9,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 )
 
@@ -288,21 +290,48 @@ func LoadUI() *UIState {
 	return u
 }
 
-// Save writes the overlay's state, skipping a write that would change nothing.
+// Save writes the fields this copy changed since it was loaded onto a fresh
+// read of the file, and leaves every other field as the file has it.
+//
+// Two overlays can be open at once. Writing back a whole copy read at opening
+// let one wipe what the other saved since: A saves its sort, B saves its order
+// and puts the old sort back. The read and the write happen under a lock every
+// overlay shares, so neither lands between the other's two. A new field needs
+// its own line below or it is never saved.
 func (u *UIState) Save() error {
-	if Dir() == "" {
-		return ErrNoStateDir
+	if _, err := EnsureDir(); err != nil {
+		return err
 	}
-	b, err := json.Marshal(u)
+	l, err := LockBlocking(UIStatePath() + ".lock")
 	if err != nil {
 		return err
 	}
-	if bytes.Equal(b, u.lastWritten) {
-		return nil
+	defer l.Release()
+
+	var loaded UIState
+	_ = json.Unmarshal(u.lastWritten, &loaded)
+	fresh := LoadUI()
+	if !slices.Equal(u.RepoOrder, loaded.RepoOrder) {
+		fresh.RepoOrder = u.RepoOrder
 	}
-	if err := WriteAtomic(UIStatePath(), b); err != nil {
+	if u.Sort != loaded.Sort {
+		fresh.Sort = u.Sort
+	}
+	if !maps.Equal(u.Dismissed, loaded.Dismissed) {
+		fresh.Dismissed = u.Dismissed
+	}
+	b, err := json.Marshal(fresh)
+	if err != nil {
 		return err
 	}
+	if !bytes.Equal(b, fresh.lastWritten) {
+		if err := WriteAtomic(UIStatePath(), b); err != nil {
+			return err
+		}
+	}
+	// Take on what the other overlay saved, so this copy's next save is measured
+	// against the file as it now is rather than as it was at opening.
+	*u = *fresh
 	u.lastWritten = b
 	return nil
 }
