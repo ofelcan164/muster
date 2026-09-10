@@ -20,11 +20,12 @@ import (
 // questionLines is how far back to look. The prompt is always near the bottom.
 const questionLines = 40
 
-// fetchQuestions reads the pane of every blocked agent whose question is not
-// already known, and asks for a reconcile if it learned anything.
+// fetchQuestions reads the pane of every blocked agent it was handed, and asks
+// for a reconcile if it learned anything. blocked maps each pane to the
+// state_change_seq its read was claimed at.
 //
 // It runs in its own goroutine so a slow read never delays the snapshot.
-func (d *Daemon) fetchQuestions(ctx context.Context, blocked []string) {
+func (d *Daemon) fetchQuestions(ctx context.Context, blocked map[string]uint64) {
 	// A panic in a goroutine takes the whole process with it, and the main loop
 	// cannot recover it. The daemon going silently dead is far worse than a
 	// missing question, so this failure is contained and logged instead.
@@ -35,12 +36,19 @@ func (d *Daemon) fetchQuestions(ctx context.Context, blocked []string) {
 	}()
 
 	learned := false
-	for _, paneID := range blocked {
+	for paneID, seq := range blocked {
 		if ctx.Err() != nil {
 			return
 		}
 		text, err := d.client.PaneRead(paneID, "visible", questionLines)
 		if err != nil {
+			// Give the claim back so the next reconcile tries again, unless a
+			// newer status has claimed the pane since.
+			d.mu.Lock()
+			if d.asked[paneID] == seq {
+				delete(d.asked, paneID)
+			}
+			d.mu.Unlock()
 			continue
 		}
 		q := ExtractQuestion(text)
@@ -63,27 +71,40 @@ func (d *Daemon) fetchQuestions(ctx context.Context, blocked []string) {
 	}
 }
 
-// blockedNeedingQuestion lists blocked panes with no question cached yet, and
-// drops cached questions for agents that are no longer blocked.
-func (d *Daemon) blockedNeedingQuestion(agents map[string]model.Agent) []string {
+// blockedNeedingQuestion claims a read for every blocked pane not yet read in
+// its current status, and drops what it knows about agents that are no longer
+// blocked.
+//
+// The key is the pane and herdr's state_change_seq, as for the orchestrator's
+// read (see wantSaid). The claim is taken here, before the read is launched, so
+// two reconciles in the same second do not both fire one, and it stays once the
+// read lands whether or not a question came out of it. Without that, a pane with
+// nothing to extract was read again on every reconcile, and the reads piled up
+// behind one another.
+func (d *Daemon) blockedNeedingQuestion(agents map[string]model.Agent) map[string]uint64 {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	blocked := map[string]bool{}
-	var want []string
+	want := map[string]uint64{}
 	for paneID, a := range agents {
 		if a.Status != model.StatusBlocked {
 			continue
 		}
-		blocked[paneID] = true
-		if d.questions[paneID] == "" {
-			want = append(want, paneID)
+		if seq, ok := d.asked[paneID]; ok && seq == a.StateChangeSeq {
+			continue
 		}
+		d.asked[paneID] = a.StateChangeSeq
+		want[paneID] = a.StateChangeSeq
 	}
 	// An agent that answered its prompt has no question any more.
 	for paneID := range d.questions {
-		if !blocked[paneID] {
+		if agents[paneID].Status != model.StatusBlocked {
 			delete(d.questions, paneID)
+		}
+	}
+	for paneID := range d.asked {
+		if agents[paneID].Status != model.StatusBlocked {
+			delete(d.asked, paneID)
 		}
 	}
 	return want

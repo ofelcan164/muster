@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -114,7 +114,7 @@ func Dump(w io.Writer, s *model.Snapshot, now time.Time) {
 			for _, p := range r.OtherPanes {
 				labels = append(labels, p.Label)
 			}
-			sort.Strings(labels)
+			slices.Sort(labels)
 			fmt.Fprintf(w, "      %s · %s\n", plural(len(r.OtherPanes), "pane"), strings.Join(labels, " · "))
 		}
 		fmt.Fprintln(w)

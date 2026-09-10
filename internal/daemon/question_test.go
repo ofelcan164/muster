@@ -1,6 +1,13 @@
 package daemon
 
-import "testing"
+import (
+	"context"
+	"path/filepath"
+	"testing"
+
+	"github.com/ofelcan164/muster/internal/herdr"
+	"github.com/ofelcan164/muster/internal/model"
+)
 
 // Captured verbatim from a live Claude Code agent that herdr had marked
 // blocked, on 2026-09-06. This is the shape the extractor actually has to
@@ -76,5 +83,53 @@ func TestIsChoice(t *testing.T) {
 		if isChoice(s) {
 			t.Errorf("%q should not read as a choice", s)
 		}
+	}
+}
+
+func blockedAt(seq uint64) map[string]model.Agent {
+	return map[string]model.Agent{
+		"w1:p1": {PaneID: "w1:p1", Status: model.StatusBlocked, StateChangeSeq: seq},
+	}
+}
+
+// A pane.read costs 350ms, so a blocked pane is read once per status. A pane
+// with no question in it used to be read again on every reconcile, each read
+// queued behind the last.
+func TestABlockedPaneIsReadOncePerStatus(t *testing.T) {
+	d := newTestDaemon(t)
+	if got := d.blockedNeedingQuestion(blockedAt(4)); got["w1:p1"] != 4 {
+		t.Fatalf("the first read should be wanted, got %v", got)
+	}
+	// Whether the read is still in flight or landed with nothing extracted,
+	// the same pane in the same status is not read again.
+	if got := d.blockedNeedingQuestion(blockedAt(4)); len(got) != 0 {
+		t.Errorf("a pane already read at this status was read again: %v", got)
+	}
+	if got := d.blockedNeedingQuestion(blockedAt(5)); got["w1:p1"] != 5 {
+		t.Errorf("a new status is a new question, got %v", got)
+	}
+
+	// Answering the prompt drops the question and the claim with it.
+	d.mu.Lock()
+	d.questions["w1:p1"] = "Proceed?"
+	d.mu.Unlock()
+	d.blockedNeedingQuestion(map[string]model.Agent{})
+	if q := d.question("w1:p1"); q != "" {
+		t.Errorf("an agent that is no longer blocked kept its question %q", q)
+	}
+	if _, ok := d.asked["w1:p1"]; ok {
+		t.Error("an agent that is no longer blocked kept its claim")
+	}
+}
+
+// A read that fails gives its claim back, so the next reconcile tries again.
+func TestAFailedQuestionReadIsTriedAgain(t *testing.T) {
+	d := newTestDaemon(t)
+	d.client = herdr.NewClient(filepath.Join(t.TempDir(), "no-server.sock"))
+
+	want := d.blockedNeedingQuestion(blockedAt(4))
+	d.fetchQuestions(context.Background(), want)
+	if got := d.blockedNeedingQuestion(blockedAt(4)); got["w1:p1"] != 4 {
+		t.Errorf("a failed read should be retried, got %v", got)
 	}
 }

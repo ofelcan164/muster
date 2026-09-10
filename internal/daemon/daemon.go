@@ -63,9 +63,11 @@ type Daemon struct {
 	procs   map[string]string
 	procsAt time.Time
 
-	// mu guards state shared with the question fetcher goroutine.
+	// mu guards state shared with the question fetcher goroutine. asked is the
+	// state_change_seq each blocked pane was last claimed for reading at.
 	mu        sync.Mutex
 	questions map[string]string
+	asked     map[string]uint64
 
 	// said is the orchestrator's last message, the pane it was read from, and
 	// the pane-and-status it was read at. One pane is ever read this way, so
@@ -92,6 +94,7 @@ func New(client *herdr.Client, logger *log.Logger) *Daemon {
 		persist:   state.LoadPersisted(),
 		log:       logger,
 		questions: map[string]string{},
+		asked:     map[string]uint64{},
 		rescan:    make(chan struct{}, 1),
 	}
 }
@@ -106,7 +109,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 
 	// Reconcile once up front so the snapshot is valid before any event
 	// arrives. The overlay may be opened a millisecond after the daemon starts.
-	d.reconcile()
+	d.reconcile(ctx)
 
 	ticker := time.NewTicker(fullInterval)
 	defer ticker.Stop()
@@ -147,19 +150,19 @@ func (d *Daemon) Run(ctx context.Context) error {
 			limited = false
 			if dirty {
 				dirty = false
-				if d.reconcile() {
+				if d.reconcile(ctx) {
 					lastReachable = time.Now()
 				}
 			}
 
 		case <-d.rescan:
-			if d.reconcile() {
+			if d.reconcile(ctx) {
 				lastReachable = time.Now()
 			}
 
 		case <-ticker.C:
 			dirty = false
-			if d.reconcile() {
+			if d.reconcile(ctx) {
 				lastReachable = time.Now()
 			} else if time.Since(lastReachable) > serverGrace {
 				d.logf("server unreachable for %s, exiting", serverGrace)
@@ -175,7 +178,10 @@ func (d *Daemon) Run(ctx context.Context) error {
 // the result. It never builds state from the event stream: herdr replays
 // historical events on every subscribe, including events for panes that no
 // longer exist, so the stream cannot be trusted as a log.
-func (d *Daemon) reconcile() bool {
+//
+// ctx is Run's, handed on to the pane reads it launches so none starts once the
+// daemon is shutting down.
+func (d *Daemon) reconcile(ctx context.Context) bool {
 	snap, err := d.client.SessionSnapshot()
 	if err != nil {
 		d.logf("snapshot: %v", err)
@@ -200,12 +206,12 @@ func (d *Daemon) reconcile() bool {
 		}
 	}
 	if want := d.blockedNeedingQuestion(agents); len(want) > 0 && d.client != nil {
-		go d.fetchQuestions(context.Background(), want)
+		go d.fetchQuestions(ctx, want)
 	}
 
 	// The other half of the orchestrator strip: what it said back, as opposed to
 	// what it was told, which is all the task ladder can report.
-	d.attachSaid(&orch, agents[orch.PaneID].StateChangeSeq)
+	d.attachSaid(ctx, &orch, agents[orch.PaneID].StateChangeSeq)
 
 	everDone := make(map[string]bool, len(d.persist.LastDoneSeq))
 	for pane := range d.persist.LastDoneSeq {

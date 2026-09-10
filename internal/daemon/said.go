@@ -167,7 +167,7 @@ func clip(s string, max int) string {
 // that could have changed. seq is the pane's state_change_seq, which is what
 // tells one turn from the next. Working is skipped deliberately: it is
 // mid-sentence.
-func (d *Daemon) attachSaid(orch *model.Orchestrator, seq uint64) {
+func (d *Daemon) attachSaid(ctx context.Context, orch *model.Orchestrator, seq uint64) {
 	if !orch.Found {
 		return
 	}
@@ -177,6 +177,6 @@ func (d *Daemon) attachSaid(orch *model.Orchestrator, seq uint64) {
 	}
 	key := fmt.Sprintf("%s|%s|%d", orch.PaneID, orch.Status, seq)
 	if d.wantSaid(key) {
-		go d.fetchSaid(context.Background(), orch.PaneID, key)
+		go d.fetchSaid(ctx, orch.PaneID, key)
 	}
 }

@@ -1,7 +1,8 @@
 package daemon
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"strings"
 	"time"
 
@@ -32,11 +33,8 @@ func (d *Daemon) buildRepos(snap *herdr.Snapshot, agents map[string]model.Agent,
 	// exact opposite of the fixed positions the grid exists to provide.
 	ordered := make([]herdr.Workspace, 0, len(snap.Workspaces))
 	ordered = append(ordered, snap.Workspaces...)
-	sort.SliceStable(ordered, func(i, j int) bool {
-		if ordered[i].Number != ordered[j].Number {
-			return ordered[i].Number < ordered[j].Number
-		}
-		return ordered[i].WorkspaceID < ordered[j].WorkspaceID
+	slices.SortStableFunc(ordered, func(a, b herdr.Workspace) int {
+		return cmp.Or(cmp.Compare(a.Number, b.Number), strings.Compare(a.WorkspaceID, b.WorkspaceID))
 	})
 
 	byKey := map[string]*model.Repo{}
@@ -134,9 +132,9 @@ func (d *Daemon) buildRepos(snap *herdr.Snapshot, agents map[string]model.Agent,
 		if len(r.Agents) > 0 {
 			d.persist.EverHadAgent[r.Key] = true
 		}
-		sort.SliceStable(r.Agents, func(i, j int) bool { return r.Agents[i].PaneID < r.Agents[j].PaneID })
-		sort.SliceStable(r.OtherPanes, func(i, j int) bool { return r.OtherPanes[i].PaneID < r.OtherPanes[j].PaneID })
-		sort.Strings(r.WorkspaceIDs)
+		slices.SortStableFunc(r.Agents, func(a, b model.Agent) int { return strings.Compare(a.PaneID, b.PaneID) })
+		slices.SortStableFunc(r.OtherPanes, func(a, b model.Pane) int { return strings.Compare(a.PaneID, b.PaneID) })
+		slices.Sort(r.WorkspaceIDs)
 		// Emit empty arrays rather than nil, which Go would marshal as null.
 		// The snapshot is a contract with the overlay, and a client should
 		// never have to special-case null where it expects a list.
@@ -153,6 +151,11 @@ func (d *Daemon) buildRepos(snap *herdr.Snapshot, agents map[string]model.Agent,
 	}
 	assignDisplayNames(out)
 
+	// Grid slot order, so a repo is in the same cell every time you look. This
+	// comes before repoByPane, which points into out and would be left pointing
+	// at the wrong repos by a sort that moved them.
+	slices.SortStableFunc(out, func(a, b model.Repo) int { return cmp.Compare(a.GridSlot, b.GridSlot) })
+
 	// Stopped panes are resolved against the finished repo set, so a stop in a
 	// workspace that no longer maps to a repo is simply dropped.
 	repoByPane := map[string]*model.Repo{}
@@ -162,9 +165,6 @@ func (d *Daemon) buildRepos(snap *herdr.Snapshot, agents map[string]model.Agent,
 		}
 	}
 	d.stopped = d.stoppedRows(snap, repoByPane)
-
-	// Grid slot order, so a repo is in the same cell every time you look.
-	sort.SliceStable(out, func(i, j int) bool { return out[i].GridSlot < out[j].GridSlot })
 	return out
 }
 
