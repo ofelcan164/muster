@@ -98,7 +98,13 @@ installs skill, wheel moves, hover highlights.
   Exhausting the candidates is an error, never a keyless install.
 - `install` writes a marked block + backup in the herdr config and calls
   `server.reload_config`. `uninstall` also removes
-  `~/.claude/skills/muster-report/`. No config of Muster's own exists.
+  the skill. No config of Muster's own exists.
+- The skill is one canonical copy at `~/.agents/skills/muster-report/`, symlinked
+  into each runtime that exists (`~/.claude/skills`, `~/.codex/skills` honouring
+  `CODEX_HOME`, `~/.config/opencode/skill`), relative target computed with
+  `filepath.Rel`. The embedded bytes are the version, so there is no sentinel
+  file: a differing copy is simply rewritten. A plain directory from an older
+  install gets replaced by the link.
 - The `[[startup]]` hook is `muster install --auto`, so setup is just
   `herdr plugin install`. `--auto` skips when `keys.optout` is in the state
   dir; `--no-keys` and both uninstalls write that marker, plain `install`

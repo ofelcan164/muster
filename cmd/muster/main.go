@@ -73,6 +73,9 @@ func main() {
 		}
 		if res.Changed {
 			fmt.Printf("removed the reporting skill from %s\n", res.Path)
+			for _, l := range res.Links {
+				fmt.Printf("  unlinked %s\n", l)
+			}
 		} else {
 			fmt.Println("the reporting skill was not installed")
 		}
@@ -391,8 +394,8 @@ func herdrBin() string { return os.Getenv("HERDR_BIN_PATH") }
 // cmdInstallSkill installs the reporting skill into the user's personal skills.
 //
 // It is a separate command from `muster install` on purpose. Keybindings go in
-// herdr's config, which is Muster's business; a skill goes in the user's Claude
-// directory, which is not, so installing it stays something you ask for.
+// herdr's config, which is Muster's business; a skill goes in the user's agent
+// directories, which is not, so installing it stays something you ask for.
 func cmdInstallSkill() int {
 	res, err := install.Skill()
 	if err != nil {
@@ -403,6 +406,15 @@ func cmdInstallSkill() int {
 		fmt.Printf("installed the reporting skill at %s\n", res.Path)
 	} else {
 		fmt.Printf("the reporting skill is already current at %s\n", res.Path)
+	}
+	// Naming the links is the only way to see which runtimes were found. A
+	// harness installed after this ran gets nothing until it runs again.
+	for _, l := range res.Links {
+		fmt.Printf("  linked %s\n", l)
+	}
+	if len(res.Links) == 0 {
+		fmt.Println("\nno agent runtime found to link it into.")
+		fmt.Println("expected one of ~/.claude, ~/.codex or ~/.config/opencode")
 	}
 	fmt.Println("\nit triggers on:")
 	fmt.Printf("  %s\n", install.SkillDescription())
@@ -451,6 +463,9 @@ func cmdUninstall(args []string) int {
 		fmt.Fprintf(os.Stderr, "muster uninstall: skill: %v\n", err)
 	} else if skill.Changed {
 		fmt.Printf("removed the reporting skill from %s\n", skill.Path)
+		for _, l := range skill.Links {
+			fmt.Printf("  unlinked %s\n", l)
+		}
 	}
 
 	if *purge {

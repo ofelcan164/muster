@@ -53,7 +53,11 @@ The daemon adds `snapshot.json` and `state.json` once it reaches herdr.
 first set a chain.
 
 The reporting skill is the exception. **Install the reporting skill for the
-orchestrator** writes to your Claude directory, so it stays a separate opt-in.
+orchestrator** writes to your agent directories, so it stays a separate opt-in.
+It puts one copy in `~/.agents/skills/muster-report/` and symlinks it into every
+runtime you actually have: `~/.claude/skills`, `~/.codex/skills`
+(`CODEX_HOME` honoured) and `~/.config/opencode/skill`. A runtime you have not
+installed is left alone rather than created.
 
 Commands that touch state (`install`, `chain`, `musterd dump`) run inside a
 herdr pane, where `HERDR_PLUGIN_STATE_DIR` is set. From a plain shell they fail
@@ -66,7 +70,7 @@ with "no state directory": pass `--state-dir <dir>`.
   `GOTOOLCHAIN=auto` fetches it, so an older Go still builds this. A Go with
   `GOTOOLCHAIN=local` set, which some distro packages do, needs 1.24 itself
 - Linux or macOS
-- Claude Code, only for the reporting skill
+- Claude Code, Codex or OpenCode, only for the reporting skill
 
 ## Keys
 
@@ -165,8 +169,9 @@ herdr plugin unlink muster
 ```
 
 `uninstall` removes the marked block from your herdr config (backup beside it),
-removes `~/.claude/skills/muster-report/`, and reloads the config. Note the
-skill goes with it even though installing it was opt-in.
+removes `~/.agents/skills/muster-report/` along with every runtime symlink
+into it, and reloads the config. Note the skill goes with it even though
+installing it was opt-in.
 
 It also records the refusal, so the startup hook does not rebind the keys at
 the next herdr start. `--purge` deletes that record along with the rest of the

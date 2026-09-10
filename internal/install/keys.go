@@ -78,6 +78,10 @@ type Result struct {
 	Diagnostic string
 	Letter     string
 	Bindings   []Binding
+
+	// Links is the per-harness paths a skill install pointed at the canonical
+	// copy, or that an uninstall took away.
+	Links []string
 }
 
 // blockRE matches one complete managed block. Both markers are required.
