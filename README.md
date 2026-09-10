@@ -24,9 +24,11 @@ Installing mid-session gets no startup hook, so opening the overlay once from
 herdr's action menu does the same job.
 
 To keep the overlay and skip the global keys, run `muster install --no-keys`,
-or the **Uninstall Muster's keybindings** action. Either records the refusal in
-the state dir, and `--auto` honours it from then on. Running the plain
-**Install Muster's keybindings** action asks for them back.
+or `muster uninstall-keys` if they are already in. Either records the refusal
+in the state dir, and `--auto` honours it from then on, so the startup hook
+stops putting them back. The **Install Muster's keybindings** action asks for
+them again. (The **Uninstall Muster's keybindings and skill** action is the
+full removal, skill included, not a way to drop just the keys.)
 
 From source instead, if you want to hack on it:
 
@@ -59,7 +61,7 @@ with "no state directory": pass `--state-dir <dir>`.
 
 ## Requirements
 
-- herdr 0.8.2 or newer (the version this is tested against)
+- herdr 0.8.2 or newer (tested against 0.8.2 and 0.9.0)
 - Go on `PATH`, any version from 1.21. `go.mod` asks for 1.24 and the default
   `GOTOOLCHAIN=auto` fetches it, so an older Go still builds this. A Go with
   `GOTOOLCHAIN=local` set, which some distro packages do, needs 1.24 itself
@@ -100,14 +102,14 @@ There is no `?` binding and no in-app legend, so this list is the reference.
 
 ```sh
 muster open | jump orchestrator | jump previous
-muster install [--key m] [--no-keys] [--auto] | uninstall [--purge]
-muster install-skill | uninstall-skill
+muster install [--key <letter>] [--no-keys] [--auto] | uninstall [--purge]
+muster install-skill | uninstall-skill | uninstall-keys
 muster mark-orchestrator
 muster chain get [--json] | set <spec> [--independent a,b] [--by NAME] | clear
 muster discover
 
 musterd --ensure          # start a daemon if none is running, then exit
-musterd --daemon          # run as the daemon (the manifest owns this)
+musterd --daemon          # run as the daemon (muster install spawns this)
 musterd dump [--json]     # the supported way to read the snapshot
 musterd status
 ```
@@ -151,8 +153,8 @@ no two repos collide until there are more repos than sigils. Grid slots are
 pinned in `state.json` on first sight, so a repo keeps its cell and its look
 for as long as your state file lives and the grid does not move under you.
 
-`docs/herdr-api-notes.md` has the verified herdr 0.8.2 mechanics the daemon is
-built on, including why events are a hint and never a log.
+`docs/herdr-api-notes.md` has the verified herdr mechanics the daemon is built
+on, including why events are a hint and never a log.
 
 ## Uninstall
 
@@ -165,6 +167,10 @@ herdr plugin unlink muster
 `uninstall` removes the marked block from your herdr config (backup beside it),
 removes `~/.claude/skills/muster-report/`, and reloads the config. Note the
 skill goes with it even though installing it was opt-in.
+
+It also records the refusal, so the startup hook does not rebind the keys at
+the next herdr start. `--purge` deletes that record along with the rest of the
+state dir, which is right when the plugin is going away.
 
 ## Troubleshooting
 

@@ -151,8 +151,10 @@ usage:
   muster chain get [--json]        print the recorded dependency order
   muster chain set <spec> [--independent a,b] [--by NAME]
   muster chain clear
-  muster install [--key m]         start the daemon and install keybindings
+  muster install [--key <letter>]  start the daemon and install keybindings
   muster install-skill             install the reporting skill for the orchestrator
+  muster uninstall-keys            drop the keybindings, keep everything else
+  muster uninstall-skill           drop the reporting skill
   muster uninstall [--purge]       remove everything Muster wrote outside itself
   muster discover                  rescan after a workspace or worktree appears
 

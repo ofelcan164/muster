@@ -49,7 +49,8 @@ live session keeps running the old one.
 
 ```
 muster open | jump orchestrator | jump previous     what the keybindings invoke
-muster install [--key m] [--no-keys] [--auto] | uninstall   keys, and undoing them
+muster install [--key <letter>] [--no-keys] [--auto]        keybindings
+muster uninstall-keys | uninstall [--purge]         undoing them
 muster install-skill | uninstall-skill              the orchestrator reporting skill
 muster mark-orchestrator                            run on the orchestrator's pane
 muster chain get [--json] | set <spec> [--independent a,b] [--by NAME] | clear
