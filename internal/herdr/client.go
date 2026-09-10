@@ -8,7 +8,9 @@ package herdr
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -51,12 +53,19 @@ type apiError struct {
 func (e *apiError) Error() string { return fmt.Sprintf("herdr %s: %s", e.Code, e.Message) }
 
 // Code returns the herdr error code for err, or "" if err is not an API error.
+// It looks through %w wraps, so a caller adding context keeps the code visible.
 func Code(err error) string {
-	if e, ok := err.(*apiError); ok {
+	var e *apiError
+	if errors.As(err, &e) {
 		return e.Code
 	}
 	return ""
 }
+
+// maxReply caps one Call reply. session.snapshot is the largest, and a live
+// 7-pane session measured about 10KB, so 16MiB covers sessions of thousands of
+// panes while still stopping a peer that never sends a newline.
+const maxReply = 16 << 20
 
 type envelope struct {
 	ID     string          `json:"id"`
@@ -94,8 +103,14 @@ func (c *Client) Call(method string, params any, out any) error {
 	// ReadBytes accumulates across fills, so the buffer size bounds nothing but
 	// the syscall count. A megabyte of it per call was 150MiB/min of garbage on
 	// a busy session; 16KiB reads a real snapshot in a fill or two and is faster.
-	r := bufio.NewReaderSize(conn, 1<<14)
+	// The LimitReader is what bounds memory.
+	r := bufio.NewReaderSize(io.LimitReader(conn, maxReply), 1<<14)
 	line, err := r.ReadBytes('\n')
+	if err != nil && len(line) == maxReply {
+		// The cap cut the reply short. Decoding the prefix would only fail with
+		// a parse error that hides the real cause.
+		return fmt.Errorf("%s: reply over %d bytes", method, maxReply)
+	}
 	if err != nil && len(line) == 0 {
 		return fmt.Errorf("%s: read: %w", method, err)
 	}

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"io"
 	"net"
 	"strings"
 	"time"
@@ -105,6 +106,13 @@ func (c *Client) Subscribe(ctx context.Context, types []string) <-chan Event {
 	return out
 }
 
+// maxEventLine caps one subscription line. pane.updated carries a whole pane
+// record and is the largest event; the biggest on a live session measured under
+// 600 bytes, so 1MiB leaves room for long titles and task notes while a peer
+// that never sends a newline can no longer grow the daemon until it runs out of
+// memory.
+const maxEventLine = 1 << 20
+
 func (c *Client) streamOnce(ctx context.Context, types []string, out chan<- Event) error {
 	conn, err := net.DialTimeout("unix", c.socket, 3*time.Second)
 	if err != nil {
@@ -141,13 +149,13 @@ func (c *Client) streamOnce(ctx context.Context, types []string, out chan<- Even
 	}
 
 	// No read deadline: a healthy subscription is silent whenever the session
-	// is idle, so a timeout here would tear down a working connection.
-	r := bufio.NewReaderSize(conn, 1<<20)
-	for {
-		line, err := r.ReadBytes('\n')
-		if err != nil {
-			return err
-		}
+	// is idle, so a timeout here would tear down a working connection. The line
+	// cap is what bounds memory instead. Past it Scan fails, this stream ends
+	// with bufio.ErrTooLong, and Subscribe reconnects with backoff.
+	sc := bufio.NewScanner(conn)
+	sc.Buffer(make([]byte, 0, 1<<14), maxEventLine)
+	for sc.Scan() {
+		line := sc.Bytes()
 		if len(line) == 0 {
 			continue
 		}
@@ -172,4 +180,10 @@ func (c *Client) streamOnce(ctx context.Context, types []string, out chan<- Even
 			// reconcile is already pending if the buffer is full.
 		}
 	}
+	if err := sc.Err(); err != nil {
+		return err
+	}
+	// The server closed the stream. Report it so Subscribe backs off rather
+	// than redialling in a tight loop.
+	return io.EOF
 }
