@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ofelcan164/muster/internal/chain"
 	"github.com/ofelcan164/muster/internal/model"
@@ -409,5 +410,19 @@ func TestOrchestratorStaysOutOfInformationalRanks(t *testing.T) {
 		if len(got) != 0 {
 			t.Errorf("status %s: orchestrator should stay in its strip, got %+v", st, got)
 		}
+	}
+}
+
+// A detail cut at 80 bytes can land inside a multi-byte character, and the
+// invalid tail comes out of json.Marshal as U+FFFD in the ribbon. Cutting
+// characters is what keeps the sentence readable.
+func TestDetailCutsCharactersNotBytes(t *testing.T) {
+	long := strings.Repeat("é", 100)
+	got := truncate(long, 80)
+	if !utf8.ValidString(got) {
+		t.Fatalf("invalid utf-8 out of truncate: %q", got)
+	}
+	if n := utf8.RuneCountInString(got); n != 80 {
+		t.Errorf("want 80 characters, got %d", n)
 	}
 }

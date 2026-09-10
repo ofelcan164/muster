@@ -14,7 +14,7 @@ import (
 	"github.com/ofelcan164/muster/internal/state"
 )
 
-var ansi = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+var escapes = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 // lipgloss strips styling when it cannot detect a colour-capable terminal,
 // which a test binary never has. Forcing the profile is what lets these tests
@@ -22,7 +22,7 @@ var ansi = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 func init() { lipgloss.SetColorProfile(termenv.TrueColor) }
 
 func visibleWidth(line string) int {
-	return len([]rune(ansi.ReplaceAllString(line, "")))
+	return len([]rune(escapes.ReplaceAllString(line, "")))
 }
 
 func testSnapshot() *model.Snapshot {
@@ -81,7 +81,7 @@ func TestNoLineExceedsTheWidth(t *testing.T) {
 		for i, line := range strings.Split(render(t, w), "\n") {
 			if got := visibleWidth(line); got > w {
 				t.Errorf("width %d: line %d is %d wide: %q",
-					w, i, got, ansi.ReplaceAllString(line, ""))
+					w, i, got, escapes.ReplaceAllString(line, ""))
 			}
 		}
 	}
@@ -737,7 +737,7 @@ func TestClickRegionsLineUpWithWhatWasDrawn(t *testing.T) {
 		if first < 0 || first >= len(lines) {
 			continue
 		}
-		plain := ansi.ReplaceAllString(lines[first], "")
+		plain := escapes.ReplaceAllString(lines[first], "")
 		if !strings.Contains(strings.ToUpper(plain), strings.ToUpper(r.Display)) {
 			t.Errorf("repo %s claims line %d but that line reads %q",
 				r.Display, first, strings.TrimSpace(plain))
@@ -791,7 +791,7 @@ func TestRibbonResolvesRepoForNonAgentRows(t *testing.T) {
 	}}
 	m := New(snap, "")
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 143, Height: 40})
-	plain := ansi.ReplaceAllString(out.View(), "")
+	plain := escapes.ReplaceAllString(out.View(), "")
 	if !strings.Contains(plain, "web/dev") {
 		t.Errorf("ribbon lost the repo for a non-agent row:\n%s", plain)
 	}
@@ -804,7 +804,7 @@ func TestRibbonResolvesRepoForNonAgentRows(t *testing.T) {
 // ribbon signals severity before any of it is read.
 func TestAttentionRuleShowsTheCount(t *testing.T) {
 	m := newSized(143)
-	plain := ansi.ReplaceAllString(m.View(), "")
+	plain := escapes.ReplaceAllString(m.View(), "")
 	if !strings.Contains(plain, "NEEDS YOU 2") {
 		t.Errorf("expected a counted heading, got:\n%s", strings.SplitN(plain, "\n", 4)[2])
 	}
@@ -815,7 +815,7 @@ func TestAttentionRuleShowsTheCount(t *testing.T) {
 // working while herdr's sidebar showed it blocked.
 func TestOverlayRefreshesFromTheSnapshot(t *testing.T) {
 	m := newSized(143)
-	before := ansi.ReplaceAllString(m.View(), "")
+	before := escapes.ReplaceAllString(m.View(), "")
 	if strings.Contains(before, "SOMETHING NEW") {
 		t.Fatal("fixture already contains the marker")
 	}
@@ -825,7 +825,7 @@ func TestOverlayRefreshesFromTheSnapshot(t *testing.T) {
 	m.SetReloader(func() *model.Snapshot { return updated })
 
 	m.Update(refreshMsg{})
-	after := ansi.ReplaceAllString(m.View(), "")
+	after := escapes.ReplaceAllString(m.View(), "")
 	if !strings.Contains(after, "SOMETHING NEW") {
 		t.Error("the overlay did not pick up the new snapshot")
 	}

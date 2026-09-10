@@ -267,13 +267,19 @@ func dominantCwd(panes []herdr.Pane, wsID string) string {
 
 // foregroundProcesses reads the running process for each non-agent pane.
 //
-// pane.process_info costs about 0.8ms, so this is cheap enough to do on every
-// reconcile, unlike pane.read at 350ms. Agent panes are skipped because their
-// foreground process is always the agent binary, which the model already knows.
+// pane.process_info costs 0.95 to 4ms per call, measured 2026-09-10, against
+// pane.read at 350ms. Cheap on its own, but this is one call per non-agent pane
+// and so scales with the session, which is why the reading is reused for
+// procInterval rather than taken fresh on every reconcile. Agent panes are
+// skipped because their foreground process is always the agent binary, which
+// the model already knows.
 func (d *Daemon) foregroundProcesses(snap *herdr.Snapshot, agents map[string]model.Agent) map[string]string {
 	out := make(map[string]string, len(snap.Panes))
 	if d.client == nil {
 		return out
+	}
+	if d.procs != nil && time.Since(d.procsAt) < procInterval {
+		return d.procs
 	}
 	for _, p := range snap.Panes {
 		if _, isAgent := agents[p.PaneID]; isAgent {
@@ -288,5 +294,6 @@ func (d *Daemon) foregroundProcesses(snap *herdr.Snapshot, agents map[string]mod
 		}
 		out[p.PaneID] = name
 	}
+	d.procs, d.procsAt = out, time.Now()
 	return out
 }

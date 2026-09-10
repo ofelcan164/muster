@@ -24,16 +24,24 @@ import (
 )
 
 const (
-	// minInterval rate-limits reconciles. It matters most during the historical
-	// event replay that herdr sends on every subscribe, which arrives at 10
-	// events per second: without a floor the daemon would reconcile ten times a
-	// second for the length of the replay, all of it redundant.
+	// minInterval rate-limits reconciles. Events come in bursts, and one burst
+	// describes one change, so reconciling per event is mostly redundant work.
+	// This floor was sized against 0.8.2's subscribe-time replay, which arrived
+	// at 10 events per second. 0.9.0 no longer replays, so the floor now only
+	// has live bursts to collapse and could be tightened if it ever felt slow.
 	minInterval = 300 * time.Millisecond
 
 	// fullInterval forces a reconcile even when nothing has happened. Several
 	// triage rules are time-based, so the ranking can change with no event at
 	// all.
 	fullInterval = 5 * time.Second
+
+	// procInterval is the floor between foreground-process polls. That poll is
+	// one RPC per non-agent pane, and an event burst can drive several
+	// reconciles a second, so without a floor most of a burst is spent asking a
+	// question nothing has changed the answer to. Only stop detection reads it,
+	// and a process that died is no more useful to know about a second sooner.
+	procInterval = time.Second
 
 	// serverGrace is how long the server may stay unreachable before the daemon
 	// gives up and exits. The daemon is meant to live and die with the herdr
@@ -49,6 +57,11 @@ type Daemon struct {
 	log      *log.Logger
 
 	herdrVersion string
+
+	// procs is the last foreground-process reading, kept so reconciles arriving
+	// faster than procInterval reuse it instead of re-polling every pane.
+	procs   map[string]string
+	procsAt time.Time
 
 	// mu guards state shared with the question fetcher goroutine.
 	mu        sync.Mutex

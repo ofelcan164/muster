@@ -94,14 +94,36 @@ func (c *Chain) IsIndependent(repo string) bool {
 // Only strictly later stages count. Repos sharing a stage run in parallel and
 // so cannot be waiting on each other.
 func (c *Chain) DependsOn(downstream, upstream string) bool {
-	if c.IsIndependent(downstream) || c.IsIndependent(upstream) {
-		return false
+	return c.Lookup()(downstream, upstream)
+}
+
+// Lookup returns DependsOn with each repo resolved to its stage only once.
+//
+// Answering a single pair means scanning the stages and lowercasing every name
+// in them, which is nothing; a caller comparing every agent against every other
+// pays it thousands of times. The returned function is not safe for concurrent
+// use, and holds whatever the chain said when it was made.
+func (c *Chain) Lookup() func(downstream, upstream string) bool {
+	type place struct {
+		stage int
+		indep bool
 	}
-	d, u := c.stageOf(downstream), c.stageOf(upstream)
-	if d < 0 || u < 0 {
-		return false
+	seen := map[string]place{}
+	at := func(repo string) place {
+		p, ok := seen[repo]
+		if !ok {
+			p = place{c.stageOf(repo), c.IsIndependent(repo)}
+			seen[repo] = p
+		}
+		return p
 	}
-	return d > u
+	return func(downstream, upstream string) bool {
+		d, u := at(downstream), at(upstream)
+		if d.indep || u.indep || d.stage < 0 || u.stage < 0 {
+			return false
+		}
+		return d.stage > u.stage
+	}
 }
 
 // matches compares a configured name against a discovered repo, tolerating the

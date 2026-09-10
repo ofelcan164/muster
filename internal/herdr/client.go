@@ -91,9 +91,10 @@ func (c *Client) Call(method string, params any, out any) error {
 		return fmt.Errorf("%s: write: %w", method, err)
 	}
 
-	// Reply size is bounded by the session snapshot, which is small, but give
-	// the reader a generous buffer so a large snapshot never truncates.
-	r := bufio.NewReaderSize(conn, 1<<20)
+	// ReadBytes accumulates across fills, so the buffer size bounds nothing but
+	// the syscall count. A megabyte of it per call was 150MiB/min of garbage on
+	// a busy session; 16KiB reads a real snapshot in a fill or two and is faster.
+	r := bufio.NewReaderSize(conn, 1<<14)
 	line, err := r.ReadBytes('\n')
 	if err != nil && len(line) == 0 {
 		return fmt.Errorf("%s: read: %w", method, err)

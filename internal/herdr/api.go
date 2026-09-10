@@ -133,7 +133,8 @@ func (c *Client) PaneRead(paneID, source string, lines int) (string, error) {
 }
 
 // PaneForegroundProcess returns the name of the process running in a pane, or
-// "" when the pane has none. Around 0.8ms per call.
+// "" when the pane has none. 0.95 to 4ms per call, measured 2026-09-10; most of
+// that is the read buffer Call allocates, not the server.
 //
 // herdr reports the whole foreground process group; the last entry is the
 // innermost process, which is the one worth showing. A pane sitting at a prompt

@@ -208,6 +208,11 @@ func detectGates(in Input, all []agentRef) []model.Attention {
 		return nil
 	}
 
+	// Resolving one repo to its stage scans every stage and lowercases both
+	// operands. The loop below is every finished agent against every other, so
+	// ask the chain through a lookup that resolves each name once.
+	dependsOn := in.Chain.Lookup()
+
 	var out []model.Attention
 	for _, x := range all {
 		if x.agent.Status != model.StatusDone {
@@ -229,7 +234,7 @@ func detectGates(in Input, all []agentRef) []model.Attention {
 				continue
 			}
 			// The chain is what makes this a gate rather than a coincidence.
-			if !in.Chain.DependsOn(other.repo.Name, x.repo.Name) {
+			if !dependsOn(other.repo.Name, x.repo.Name) {
 				continue
 			}
 			if other.agent.Age(in.Now) > x.agent.Age(in.Now) {
@@ -295,10 +300,14 @@ func filter(in []agentRef, keep func(agentRef) bool) []agentRef {
 	return out
 }
 
+// truncate cuts to n characters. Runes, not bytes: slicing bytes can cut a
+// multi-byte character in half, and json.Marshal turns the invalid tail into a
+// replacement character in the ribbon.
 func truncate(s string, n int) string {
 	s = strings.TrimSpace(s)
-	if len(s) <= n {
+	r := []rune(s)
+	if len(r) <= n {
 		return s
 	}
-	return s[:n-1] + "…"
+	return string(r[:n-1]) + "…"
 }

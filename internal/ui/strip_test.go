@@ -42,7 +42,7 @@ func withSnapshot(t *testing.T, s *model.Snapshot, width int) *Model {
 	return m
 }
 
-func plain(s string) string { return ansi.ReplaceAllString(s, "") }
+func plain(s string) string { return escapes.ReplaceAllString(s, "") }
 
 func TestStripShowsTheOrchestratorAndItsLastMessage(t *testing.T) {
 	m := withSnapshot(t, withOrch(), 143)

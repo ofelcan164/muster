@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/ofelcan164/muster/internal/model"
 )
@@ -384,21 +385,16 @@ func plural(n int, noun string) string {
 	return fmt.Sprintf("%d %ss", n, noun)
 }
 
-// truncate cuts to a display width, counting characters rather than bytes so
-// sigils and box drawing do not corrupt the layout.
+// truncate cuts to a display width, counting cells rather than bytes so sigils
+// and box drawing do not corrupt the layout. ansi.Truncate is what lipgloss
+// measures with, and unlike the loop it replaced it does not rescan the string
+// per rune dropped.
 func truncate(s string, width int) string {
 	s = strings.TrimSpace(s)
 	if width <= 0 {
 		return ""
 	}
-	if lipgloss.Width(s) <= width {
-		return s
-	}
-	runes := []rune(s)
-	for len(runes) > 0 && lipgloss.Width(string(runes))+1 > width {
-		runes = runes[:len(runes)-1]
-	}
-	return string(runes) + "…"
+	return ansi.Truncate(s, width, "…")
 }
 
 // pad right-pads to a display width without truncating styled content.
