@@ -246,6 +246,14 @@ func dominantCwd(panes []herdr.Pane, wsID string) string {
 		if p.WorkspaceID != wsID {
 			continue
 		}
+		// Muster's own overlay is a pane in whichever workspace you opened it
+		// from, and its cwd is the plugin checkout. Counting it lets the overlay
+		// re-identify the workspace it is drawn over: a one-pane workspace ties
+		// 1-1 and the tie breaks on the path, so a repo can change its name,
+		// colour and slot for exactly as long as you are looking at it.
+		if isOverlayPane(p) {
+			continue
+		}
 		cwd := p.Cwd
 		if cwd == "" {
 			cwd = p.ForegroundCwd

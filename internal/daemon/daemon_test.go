@@ -428,3 +428,23 @@ func TestStopClearsWhenAnAgentTakesThePaneOver(t *testing.T) {
 		t.Errorf("stale process state left behind: %v", d.persist.LastProcess)
 	}
 }
+
+// The overlay is a pane like any other and its cwd is the plugin checkout, so a
+// workspace hosting it has two cwds to choose from. Counting the overlay let it
+// rename the card it was drawn over: a one-pane workspace ties 1-1, the tie
+// breaks on the path, and the repo changed name, colour and slot for as long as
+// you were looking at it.
+func TestTheOverlayDoesNotReidentifyTheWorkspaceItOpensOver(t *testing.T) {
+	d := newTestDaemon(t)
+	dir := gitRepo(t, filepath.Join(t.TempDir(), "api"), "git@github.com:acme/api.git", "main")
+	overlay := pane("w1:p2", "w1", "/home/dev/.local/share/herdr/plugins/muster")
+	overlay.Label = overlayTitle
+	snap := &herdr.Snapshot{
+		Workspaces: []herdr.Workspace{{WorkspaceID: "w1", Number: 1}},
+		Panes:      []herdr.Pane{pane("w1:p1", "w1", dir), overlay},
+	}
+	repos := d.buildRepos(snap, map[string]model.Agent{}, model.Orchestrator{})
+	if len(repos) != 1 || repos[0].Key != "acme/api" {
+		t.Fatalf("want one card for acme/api, got %+v", repos)
+	}
+}
