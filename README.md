@@ -18,15 +18,22 @@ last message along the bottom](docs/overlay.png)
 herdr plugin install ofelcan164/muster
 ```
 
-Then run the **Install Muster's keybindings** action from herdr. That is the
-whole install.
+That is the whole install. Muster binds its keys itself: the startup hook runs
+`muster install --auto`, which starts the daemon and writes the keybindings.
+Installing mid-session gets no startup hook, so opening the overlay once from
+herdr's action menu does the same job.
+
+To keep the overlay and skip the global keys, run `muster install --no-keys`,
+or the **Uninstall Muster's keybindings** action. Either records the refusal in
+the state dir, and `--auto` honours it from then on. Running the plain
+**Install Muster's keybindings** action asks for them back.
 
 From source instead, if you want to hack on it:
 
 ```sh
 git clone https://github.com/ofelcan164/muster && cd muster
-mise exec -- go build -o ./bin/muster ./cmd/muster
-mise exec -- go build -o ./bin/musterd ./cmd/musterd
+go build -o ./bin/muster ./cmd/muster
+go build -o ./bin/musterd ./cmd/musterd
 herdr plugin link "$PWD"
 ```
 
@@ -53,8 +60,9 @@ with "no state directory": pass `--state-dir <dir>`.
 ## Requirements
 
 - herdr 0.8.2 or newer (the version this is tested against)
-- Go 1.24+ on `PATH` (`herdr plugin install` runs a bare `go build`, not
-  through mise or asdf shims)
+- Go on `PATH`, any version from 1.21. `go.mod` asks for 1.24 and the default
+  `GOTOOLCHAIN=auto` fetches it, so an older Go still builds this. A Go with
+  `GOTOOLCHAIN=local` set, which some distro packages do, needs 1.24 itself
 - Linux or macOS
 - Claude Code, only for the reporting skill
 
@@ -64,6 +72,12 @@ with "no state directory": pass `--state-dir <dir>`.
 
 Global, once installed: `prefix+m` opens Muster, `prefix+shift+m` jumps
 straight to the orchestrator, `prefix+ctrl+m` goes back to the previous agent.
+
+If you have already bound `prefix+m` yourself, yours wins and Muster takes the
+next free letter, saying which one. Name your own with
+`muster install --key <letter>`; that choice sticks across restarts. Muster
+never installs without a key, because the overlay would then only be reachable
+from herdr's action menu.
 
 In the overlay:
 
@@ -86,7 +100,7 @@ There is no `?` binding and no in-app legend, so this list is the reference.
 
 ```sh
 muster open | jump orchestrator | jump previous
-muster install [--no-keys] | uninstall [--purge]
+muster install [--key m] [--no-keys] [--auto] | uninstall [--purge]
 muster install-skill | uninstall-skill
 muster mark-orchestrator
 muster chain get [--json] | set <spec> [--independent a,b] [--by NAME] | clear
@@ -160,23 +174,27 @@ skill goes with it even though installing it was opt-in.
   unreachable server and lives and dies with herdr. Re-run the install action
   or `musterd --ensure`.
 - Linked the plugin and nothing happens: startup hooks do not fire on
-  `plugin link` mid-session. The install action starts the daemon itself.
+  `plugin link` mid-session. Open the overlay once from herdr's action menu,
+  which starts the daemon and binds the keys, or run the install action.
 - Cards show terminal titles instead of task lines: the reporting skill is
   missing. Press `S` while its banner is up, or run `muster install-skill`.
-- A new binding does nothing: herdr silently disables conflicting keys rather
-  than rejecting them. `muster install` prints `herdr config check` when it
-  disagrees. An old overlay binary also keeps running after a rebuild; reopen
-  it.
+- A new binding does nothing: an old overlay binary keeps running after a
+  rebuild, so reopen it. A key you bound yourself is not the cause; install
+  checks with `herdr config check` before writing and moves to a free letter
+  rather than binding over you.
 
 ## Developing
 
 ```sh
-mise install
-mise exec -- go build -o ./bin/muster ./cmd/muster
-mise exec -- go build -o ./bin/musterd ./cmd/musterd
-mise exec -- go test ./... -race
+go build -o ./bin/muster ./cmd/muster
+go build -o ./bin/musterd ./cmd/musterd
+go test ./... -race
 herdr plugin link "$PWD"     # undo with: herdr plugin unlink muster
 ```
+
+No toolchain manager required, here or anywhere else. `go.mod` is the only
+place a Go version is written down, and CI reads it with
+`setup-go: go-version-file`.
 
 Testing needs a running herdr server with a few agents; launching the herdr TUI
 from an agent session will hang it, so drive it from the CLI.

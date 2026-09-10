@@ -33,10 +33,26 @@ herdr api snapshot    # live session state
    with the pane. Anything that must outlive it needs `Setsid`
    (`syscall.SysProcAttr{Setsid: true}`). This is how the daemon must start.
 
+0. **There is no way to ship a prebuilt binary.** The manifest schema, read
+   out of the 0.9.0 binary on 2026-09-10, is exactly `id`, `version`,
+   `min_herdr_version`, `description`, `platforms`, `build`, `startup`,
+   `actions`, `events`, `panes`, `link_handlers`. No asset or release field.
+   `plugin install` clones into a managed checkout and runs `[[build]]` there,
+   so a Go toolchain on the user's machine is a hard requirement and goreleaser
+   would not change that.
+
+   The build runs in the plugin root, which is why a tracked `.mise.toml` was a
+   trap: herdr's PATH carries mise's shims but not the tool bin dirs, so `go`
+   resolves to the shim, and the shim obeys whatever the repo pins. Measured
+   here at over two minutes of silent toolchain download.
+
 4. **Startup hooks do not fire on `plugin link` mid-session.** They fire after
    session restore on server start, and again on `herdr update --handoff`.
    So the daemon must be startable by the install action too, and `--ensure`
-   must be idempotent under a lock.
+   must be idempotent under a lock. Re-checked on 0.9.0 on 2026-09-10 by
+   relinking and reading `herdr plugin log`: no new startup entry. This is
+   also why the overlay binds the keys on first open, for a plugin installed
+   into a running session.
 
 ## Overlay panes
 

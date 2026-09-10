@@ -28,16 +28,30 @@ type Binding struct {
 	Why     string
 }
 
-// Bindings is the whole of what Muster binds globally: one letter and its two
-// chords. You learn one key and derive the other two.
+// DefaultLetter is the key Muster asks for first, and letters is the order it
+// falls back through when the user has already bound one. Nothing distinguishes
+// the fallbacks beyond meaning something here: (m)uster, a(g)ent, (u)nit,
+// (y)ard.
+const DefaultLetter = "m"
+
+var letters = []string{DefaultLetter, "g", "u", "y"}
+
+// letterRE is what --key accepts. One character, because the whole point of the
+// scheme is that the three bindings are chords of a single key.
+var letterRE = regexp.MustCompile(`^[a-z0-9]$`)
+
+// BindingsFor is the whole of what Muster binds globally: one letter and its
+// two chords. You learn one key and derive the other two.
 //
-// prefix+m opens the "open" action rather than the pane entrypoint directly,
-// because a plugin_action cannot address a [[panes]] entrypoint. Verified
-// against 0.8.2: invoking the pane id returns plugin_action_not_found.
-var Bindings = []Binding{
-	{"prefix+m", "muster.open", "open Muster"},
-	{"prefix+shift+m", "muster.jump-orchestrator", "jump straight to the orchestrator"},
-	{"prefix+ctrl+m", "muster.back", "back to the previous agent"},
+// prefix+<letter> opens the "open" action rather than the pane entrypoint
+// directly, because a plugin_action cannot address a [[panes]] entrypoint.
+// Verified against 0.8.2: invoking the pane id returns plugin_action_not_found.
+func BindingsFor(letter string) []Binding {
+	return []Binding{
+		{"prefix+" + letter, "muster.open", "open Muster"},
+		{"prefix+shift+" + letter, "muster.jump-orchestrator", "jump straight to the orchestrator"},
+		{"prefix+ctrl+" + letter, "muster.back", "back to the previous agent"},
+	}
 }
 
 // ConfigPath is herdr's config file, honouring XDG so it can be pointed
@@ -54,11 +68,16 @@ func ConfigPath() string {
 }
 
 // Result reports what an install did, so the caller can say so plainly.
+//
+// Letter and Bindings are here because the key is no longer a constant the
+// caller can assume: a user who has already bound prefix+m gets a different one.
 type Result struct {
 	Path       string
 	Backup     string
 	Changed    bool
 	Diagnostic string
+	Letter     string
+	Bindings   []Binding
 }
 
 // blockRE matches one complete managed block. Both markers are required.
@@ -84,11 +103,131 @@ func strayMarker(body string) bool {
 	return strings.Contains(body, beginMarker) || strings.Contains(body, endMarker)
 }
 
+// installedKeyRE pulls the letter back out of a block a previous run wrote. It
+// matches the plain binding, which BindingsFor emits first.
+var installedKeyRE = regexp.MustCompile(`key = "prefix\+([a-z0-9])"`)
+
+// installedLetter reads back the letter already in the config, so a choice made
+// with --key survives the startup hook re-running install on every herdr start.
+func installedLetter(existing string) string {
+	m := installedKeyRE.FindStringSubmatch(blockRE.FindString(existing))
+	if m == nil {
+		return ""
+	}
+	return m[1]
+}
+
+// compose is the config file this would write for one letter.
+func compose(body, letter string) string {
+	out := block(letter) + "\n"
+	if body != "" {
+		out = body + "\n\n" + out
+	}
+	return out
+}
+
+// taken reports whether herdr would disable any of the bindings a letter
+// produces, which is what happens when the user has already bound that key.
+//
+// herdr's own validator is the only thing that knows the answer, and it answers
+// only about a config on disk. So the candidate goes into a throwaway copy
+// rather than the real file: trying four letters in place would mean rewriting
+// the user's config once per guess. `herdr config check` honours
+// XDG_CONFIG_HOME, which is what makes the copy possible.
+//
+// A collision reads as `prefix+m: kept keys.command[0].key, disabled
+// keys.command[1].key`. Muster's block is appended last, so the disabled one is
+// always Muster's. Exit status is 0 either way, so the text is the signal.
+//
+// No herdr binary means no answer, and an unanswerable check must not block an
+// install. That degrades to the old behaviour: bind the default and let the
+// post-write diagnostic report it.
+func taken(herdrBin, body, letter string) bool {
+	if herdrBin == "" {
+		return false
+	}
+	dir, err := os.MkdirTemp("", "muster-keycheck")
+	if err != nil {
+		return false
+	}
+	defer os.RemoveAll(dir)
+
+	path := filepath.Join(dir, "herdr", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return false
+	}
+	if err := os.WriteFile(path, []byte(compose(body, letter)), 0o600); err != nil {
+		return false
+	}
+
+	// Replace XDG_CONFIG_HOME rather than appending it. Which of two duplicate
+	// entries wins is the C library's business, not something to bet a config
+	// read on.
+	env := os.Environ()
+	kept := env[:0]
+	for _, kv := range env {
+		if !strings.HasPrefix(kv, "XDG_CONFIG_HOME=") {
+			kept = append(kept, kv)
+		}
+	}
+	cmd := exec.Command(herdrBin, "config", "check")
+	cmd.Env = append(kept, "XDG_CONFIG_HOME="+dir)
+	out, _ := cmd.CombinedOutput()
+
+	for _, line := range strings.Split(string(out), "\n") {
+		if !strings.Contains(line, "disabled") {
+			continue
+		}
+		for _, b := range BindingsFor(letter) {
+			if strings.HasPrefix(line, b.Key+":") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// chooseLetter settles which key Muster binds.
+//
+// An explicit --key wins, and collides loudly rather than quietly landing
+// somewhere else: the user named a key, so substituting one behind their back
+// is worse than refusing. Otherwise the letter already in the config is kept,
+// then the first candidate herdr will not disable.
+//
+// The one outcome ruled out is an install that leaves the user with no key at
+// all. Without a binding the overlay is only reachable through herdr's action
+// menu, which is not something a new user knows to look for, so exhausting the
+// candidates is an error naming --key rather than a silent shrug.
+func chooseLetter(herdrBin, existing, body, want string) (string, error) {
+	if want != "" {
+		if !letterRE.MatchString(want) {
+			return "", fmt.Errorf("--key %q: want one letter or digit, as in --key g", want)
+		}
+		if taken(herdrBin, body, want) {
+			return "", fmt.Errorf("prefix+%s is already bound in %s: pick another with --key", want, ConfigPath())
+		}
+		return want, nil
+	}
+	if cur := installedLetter(existing); cur != "" && !taken(herdrBin, body, cur) {
+		return cur, nil
+	}
+	for _, l := range letters {
+		if !taken(herdrBin, body, l) {
+			return l, nil
+		}
+	}
+	return "", fmt.Errorf(
+		"every key Muster tries (prefix+%s) is already bound in %s: free one, or choose another with `muster install --key <letter>`",
+		strings.Join(letters, ", prefix+"), ConfigPath())
+}
+
 // Keys writes the bindings, replacing any block a previous run left behind.
 //
 // It is safe to run repeatedly: the managed block is found and replaced rather
 // than appended, so running it twice does not bind anything twice.
-func Keys(herdrBin string) (*Result, error) {
+//
+// letter is the key to bind, or "" to let chooseLetter work it out.
+func Keys(herdrBin, letter string) (*Result, error) {
 	path := ConfigPath()
 	if path == "" {
 		return nil, errors.New("cannot locate herdr config")
@@ -104,10 +243,14 @@ func Keys(herdrBin string) (*Result, error) {
 	if strayMarker(body) {
 		return nil, fmt.Errorf("%s has an unpaired muster marker: remove the %q line by hand, then run this again", path, beginMarker)
 	}
-	updated := block() + "\n"
-	if body != "" {
-		updated = body + "\n\n" + updated
+	letter, err = chooseLetter(herdrBin, string(existing), body, letter)
+	if err != nil {
+		return nil, err
 	}
+	res.Letter = letter
+	res.Bindings = BindingsFor(letter)
+
+	updated := compose(body, letter)
 	if string(existing) == updated {
 		return res, nil
 	}
@@ -141,11 +284,11 @@ func Keys(herdrBin string) (*Result, error) {
 	return res, nil
 }
 
-func block() string {
+func block(letter string) string {
 	var b strings.Builder
 	b.WriteString(beginMarker + "\n")
 	b.WriteString("# Written by `muster install`. Re-running it replaces this block.\n")
-	for _, bind := range Bindings {
+	for _, bind := range BindingsFor(letter) {
 		fmt.Fprintf(&b, "\n# %s\n[[keys.command]]\nkey = %q\ntype = \"plugin_action\"\ncommand = %q\n",
 			bind.Why, bind.Key, bind.Command)
 	}
@@ -214,4 +357,49 @@ func Remove() (*Result, error) {
 	}
 	res.Changed = true
 	return res, nil
+}
+
+// The startup hook binds the keys on its own, so a refusal has to persist
+// somewhere or `muster uninstall` undoes itself at the next herdr start. The
+// marker is one file in Muster's own state dir, which is the one place Muster
+// may write without asking, and its presence is the whole signal.
+const optOutFile = "keys.optout"
+
+// OptOutPath is the marker, or "" when there is no state directory to put it
+// in. Outside a herdr pane there is nowhere to record a refusal, and a relative
+// path would drop the file in whatever directory the command happened to run
+// from.
+func OptOutPath(stateDir string) string {
+	if stateDir == "" {
+		return ""
+	}
+	return filepath.Join(stateDir, optOutFile)
+}
+
+// OptedOut reports whether the user has said no to the keybindings.
+//
+// No state directory reads as no refusal. The only caller that can reach this
+// without one is a hand-run command, which is someone asking for the keys.
+func OptedOut(stateDir string) bool {
+	p := OptOutPath(stateDir)
+	if p == "" {
+		return false
+	}
+	_, err := os.Stat(p)
+	return err == nil
+}
+
+// SetOptOut records a refusal, or clears one when the user installs again.
+func SetOptOut(stateDir string, on bool) error {
+	p := OptOutPath(stateDir)
+	if p == "" {
+		return nil
+	}
+	if !on {
+		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+	return writeAtomic(p, []byte("muster: keybindings declined\n"), 0o644)
 }

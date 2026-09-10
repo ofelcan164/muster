@@ -18,8 +18,13 @@ command = ["go", "build", "-o", "./bin/musterd", "./cmd/musterd"]
 
 # Must detach and return. A command that never exits sits in herdr's plugin
 # command table as permanently running.
+#
+# `install --auto` rather than `musterd --ensure`: it starts the daemon the same
+# way, then binds the keys, so installing the plugin is the whole setup. --auto
+# is what makes that safe to repeat, since it leaves the keys alone once you
+# have removed them.
 [[startup]]
-command = ["./bin/musterd", "--ensure"]
+command = ["./bin/muster", "install", "--auto"]
 
 [[panes]]
 id = "home"

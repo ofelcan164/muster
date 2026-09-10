@@ -32,8 +32,8 @@ internal/ui           overlay
 (the orchestrator strip), `talk` (the `i` and `t` keys), `view`, `theme`.
 
 State dir files: `snapshot.json`, `state.json` (grid slots, learned state),
-`ui.json` (repo order, sort, dismissed), `chain.json`, `musterd.log`,
-`musterd.lock`.
+`ui.json` (repo order, sort, dismissed), `chain.json`, `keys.optout`,
+`musterd.log`, `musterd.lock`.
 
 ## Build and test
 
@@ -49,7 +49,7 @@ live session keeps running the old one.
 
 ```
 muster open | jump orchestrator | jump previous     what the keybindings invoke
-muster install [--no-keys] | uninstall [--purge]    keybindings, and undoing them
+muster install [--key m] [--no-keys] [--auto] | uninstall   keys, and undoing them
 muster install-skill | uninstall-skill              the orchestrator reporting skill
 muster mark-orchestrator                            run on the orchestrator's pane
 muster chain get [--json] | set <spec> [--independent a,b] [--by NAME] | clear
@@ -66,7 +66,9 @@ Task lines come via `herdr pane report-metadata` (`task`, `blocked_on`,
 `note` tokens); the skill teaches the orchestrator to write them.
 
 Global keys, once installed (`prefix` is the reader's herdr prefix key):
-`prefix+m` overlay, `prefix+shift+m` orchestrator, `prefix+ctrl+m` back.
+`prefix+m` overlay, `prefix+shift+m` orchestrator, `prefix+ctrl+m` back. The
+letter falls back through `m g u y` when the user already bound one, and
+`--key` overrides.
 
 Overlay: arrows/`hjkl` move, `enter` jumps, `/` searches, `esc` leaves
 search / clears filter / closes, `s` cycles sort, `J`/`K` rearrange, `g`/`G`
@@ -81,12 +83,22 @@ installs skill, wheel moves, hover highlights.
   server from the CLI and read the overlay's own pane:
   `herdr pane list`, `herdr pane read <pane-id>`, `musterd dump`.
 - herdr kills the pane's process group on close: the daemon needs `Setsid` to
-  survive. Startup hooks do not fire on `plugin link` mid-session, so the
-  install action starts the daemon too. Manifest commands resolve through
-  `PATH`, not the plugin root, hence the leading `./`.
-- Daemon exits after 60s of unreachable server, by design. A conflicting key
-  is silently disabled, not rejected; `muster install` prints
-  `herdr config check` when it disagrees.
+  survive. Startup hooks do not fire on `plugin link` mid-session (still true
+  on 0.9.0), so the install action and the overlay both bind the keys too.
+  Manifest commands resolve through `PATH`, not the plugin root, hence the
+  leading `./`.
+- Daemon exits after 60s of unreachable server, by design.
+- herdr disables a conflicting key silently rather than rejecting it, and the
+  managed block is appended last, so a collision always disables Muster's. So
+  `install` asks first: it renders each candidate into a throwaway
+  `XDG_CONFIG_HOME` and reads `herdr config check` for
+  `prefix+X: kept ..., disabled ...`. The chosen letter is read back out of the
+  block on later runs, which is what makes `--key` survive the startup hook.
+  Exhausting the candidates is an error, never a keyless install.
 - `install` writes a marked block + backup in the herdr config and calls
   `server.reload_config`. `uninstall` also removes
   `~/.claude/skills/muster-report/`. No config of Muster's own exists.
+- The `[[startup]]` hook is `muster install --auto`, so setup is just
+  `herdr plugin install`. `--auto` skips when `keys.optout` is in the state
+  dir; `--no-keys` and both uninstalls write that marker, plain `install`
+  clears it. Without it every uninstall would undo itself at the next start.

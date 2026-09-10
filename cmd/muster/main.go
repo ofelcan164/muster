@@ -83,6 +83,12 @@ func main() {
 			fmt.Fprintf(os.Stderr, "muster: %v\n", err)
 			os.Exit(1)
 		}
+		// Record the refusal before reporting it. The startup hook binds the
+		// keys on its own now, so without this the next herdr start puts back
+		// what was just removed.
+		if err := install.SetOptOut(state.Dir(), true); err != nil {
+			fmt.Fprintf(os.Stderr, "muster: %v\n", err)
+		}
 		if res.Changed {
 			fmt.Printf("removed Muster keybindings from %s\n", res.Path)
 			fmt.Printf("backup: %s\n", res.Backup)
@@ -145,7 +151,7 @@ usage:
   muster chain get [--json]        print the recorded dependency order
   muster chain set <spec> [--independent a,b] [--by NAME]
   muster chain clear
-  muster install                   start the daemon and install keybindings
+  muster install [--key m]         start the daemon and install keybindings
   muster install-skill             install the reporting skill for the orchestrator
   muster uninstall [--purge]       remove everything Muster wrote outside itself
   muster discover                  rescan after a workspace or worktree appears
@@ -264,6 +270,8 @@ func cmdChain(args []string) int {
 // Focus happens after the program has torn down, because the overlay restoring
 // its own focus on exit would otherwise fight an outbound focus call.
 func runOverlay() int {
+	bindKeysQuietly()
+
 	target, err := ui.Run()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "muster: %v\n", err)
@@ -279,25 +287,65 @@ func runOverlay() int {
 	return 0
 }
 
+// bindKeysQuietly is the other half of the startup hook, for a plugin
+// installed mid-session.
+//
+// Startup hooks fire at server start and nowhere else, so `herdr plugin
+// install` on a running session leaves the keys unbound until the next restart.
+// Opening the overlay is the one thing such a user can still do, through
+// herdr's action menu, so that is where the keys get their second chance.
+//
+// Silent by design, and only here. Everything it could report belongs on a
+// screen the overlay is about to take over, and a config Muster cannot write is
+// not a reason to refuse to draw. The install action stays the loud version.
+// This runs before the alt screen, so a stray write cannot corrupt the frame.
+func bindKeysQuietly() {
+	if install.OptedOut(state.Dir()) {
+		return
+	}
+	res, err := install.Keys(herdrBin(), "")
+	if err != nil || !res.Changed {
+		return
+	}
+	_ = herdr.NewClient("").Call("server.reload_config", struct{}{}, nil)
+}
+
 // cmdInstallKeys writes the keybindings and says exactly what it did. This is
 // the only file Muster edits that the user owns, so nothing about it is silent.
+//
+// --auto is the startup hook's spelling: same work, but it honours a refusal
+// recorded by --no-keys or by uninstall. Run by hand, install means the user
+// asked, so it clears any refusal on its way through.
 func cmdInstallKeys(args []string) int {
 	fs := flag.NewFlagSet("install", flag.ExitOnError)
-	skipKeys := fs.Bool("no-keys", false, "skip the keybindings")
+	skipKeys := fs.Bool("no-keys", false, "skip the keybindings, and stop the startup hook binding them")
+	auto := fs.Bool("auto", false, "bind unless a previous --no-keys or uninstall said not to")
+	key := fs.String("key", "", "the letter to bind, as in --key g; default picks the first free one")
 	_ = fs.Parse(args)
 
 	if *skipKeys {
+		if err := install.SetOptOut(state.Dir(), true); err != nil {
+			fmt.Fprintf(os.Stderr, "muster install: %v\n", err)
+		}
 		fmt.Println("daemon ensured; keybindings skipped")
 		return 0
 	}
+	if *auto {
+		if install.OptedOut(state.Dir()) {
+			fmt.Println("keybindings declined earlier, leaving them alone")
+			return 0
+		}
+	} else if err := install.SetOptOut(state.Dir(), false); err != nil {
+		fmt.Fprintf(os.Stderr, "muster install: %v\n", err)
+	}
 
-	res, err := install.Keys(herdrBin())
+	res, err := install.Keys(herdrBin(), *key)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "muster install: %v\n", err)
 		return 1
 	}
 	if !res.Changed {
-		fmt.Println("keybindings already installed, nothing to do")
+		fmt.Printf("keybindings already installed on prefix+%s, nothing to do\n", res.Letter)
 		return 0
 	}
 
@@ -305,8 +353,15 @@ func cmdInstallKeys(args []string) int {
 	if res.Backup != "" {
 		fmt.Printf("backup:  %s\n", res.Backup)
 	}
-	for _, b := range install.Bindings {
+	for _, b := range res.Bindings {
 		fmt.Printf("  %-16s %s\n", b.Key, b.Why)
+	}
+	// Say so when the default was not available. Someone who read the README
+	// will be pressing prefix+m and getting whatever they bound it to.
+	if res.Letter != install.DefaultLetter {
+		fmt.Printf("\nprefix+%s was already bound, so Muster took prefix+%s instead.\n",
+			install.DefaultLetter, res.Letter)
+		fmt.Println("choose a different one with: muster install --key <letter>")
 	}
 
 	// A conflicting key is disabled rather than rejected, so the diagnostic is
@@ -365,6 +420,13 @@ func cmdUninstall(args []string) int {
 	// strands a file the user has no obvious way to find. Do everything that
 	// still can be done, then fail.
 	code := 0
+	// Same reason as uninstall-keys: the startup hook would otherwise rebind
+	// them at the next herdr start. --purge deletes the marker along with the
+	// rest of the state dir, which is correct, since purge means the plugin is
+	// going away entirely.
+	if err := install.SetOptOut(state.Dir(), true); err != nil {
+		fmt.Fprintf(os.Stderr, "muster uninstall: %v\n", err)
+	}
 	res, err := install.Uninstall()
 	switch {
 	case err != nil:

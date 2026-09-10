@@ -3,6 +3,7 @@ package install
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -31,7 +32,7 @@ new_tab = "prefix+c"
 
 func TestKeysAddsTheBindings(t *testing.T) {
 	path := setup(t, userConfig)
-	res, err := Keys("")
+	res, err := Keys("", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +40,7 @@ func TestKeysAddsTheBindings(t *testing.T) {
 		t.Fatal("expected a change")
 	}
 	body, _ := os.ReadFile(path)
-	for _, b := range Bindings {
+	for _, b := range res.Bindings {
 		if !strings.Contains(string(body), b.Key) {
 			t.Errorf("missing binding %s", b.Key)
 		}
@@ -60,12 +61,12 @@ func TestKeysAddsTheBindings(t *testing.T) {
 // silently disabled by herdr, so a second run could quietly break the first.
 func TestKeysIsIdempotent(t *testing.T) {
 	path := setup(t, userConfig)
-	if _, err := Keys(""); err != nil {
+	if _, err := Keys("", ""); err != nil {
 		t.Fatal(err)
 	}
 	first, _ := os.ReadFile(path)
 
-	res, err := Keys("")
+	res, err := Keys("", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +85,7 @@ func TestKeysIsIdempotent(t *testing.T) {
 
 func TestKeysBacksUpFirst(t *testing.T) {
 	setup(t, userConfig)
-	res, err := Keys("")
+	res, err := Keys("", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +105,7 @@ func TestKeysBacksUpFirst(t *testing.T) {
 // would linger.
 func TestKeysReplacesAnOutdatedBlock(t *testing.T) {
 	path := setup(t, userConfig)
-	if _, err := Keys(""); err != nil {
+	if _, err := Keys("", ""); err != nil {
 		t.Fatal(err)
 	}
 	body, _ := os.ReadFile(path)
@@ -113,7 +114,7 @@ func TestKeysReplacesAnOutdatedBlock(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := Keys(""); err != nil {
+	if _, err := Keys("", ""); err != nil {
 		t.Fatal(err)
 	}
 	updated, _ := os.ReadFile(path)
@@ -127,7 +128,7 @@ func TestKeysReplacesAnOutdatedBlock(t *testing.T) {
 
 func TestRemoveTakesTheBlockBackOut(t *testing.T) {
 	path := setup(t, userConfig)
-	if _, err := Keys(""); err != nil {
+	if _, err := Keys("", ""); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Remove(); err != nil {
@@ -145,7 +146,7 @@ func TestRemoveTakesTheBlockBackOut(t *testing.T) {
 func TestWorksWithNoExistingConfig(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
-	res, err := Keys("")
+	res, err := Keys("", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +167,7 @@ func TestWorksWithNoExistingConfig(t *testing.T) {
 // thing that can make that true.
 func TestUninstallLeavesNothingMusterSpecific(t *testing.T) {
 	path := setup(t, userConfig)
-	if _, err := Keys(""); err != nil {
+	if _, err := Keys("", ""); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Uninstall(); err != nil {
@@ -191,7 +192,7 @@ func TestUninstallLeavesNothingMusterSpecific(t *testing.T) {
 // already-clean file.
 func TestUninstallIsIdempotent(t *testing.T) {
 	setup(t, userConfig)
-	if _, err := Keys(""); err != nil {
+	if _, err := Keys("", ""); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Uninstall(); err != nil {
@@ -225,7 +226,7 @@ func TestKeysRefusesAConfigWithAStrayMarker(t *testing.T) {
 		"[keys]\nprefix = \"alt+q\"\nnew_tab = \"prefix+c\"\n"
 	path := setup(t, original)
 
-	if _, err := Keys(""); err == nil {
+	if _, err := Keys("", ""); err == nil {
 		t.Fatal("installed over an unpaired marker instead of refusing")
 	}
 	body, _ := os.ReadFile(path)
@@ -237,7 +238,7 @@ func TestKeysRefusesAConfigWithAStrayMarker(t *testing.T) {
 // The same guard from the other side: an end marker with no begin.
 func TestKeysRefusesAStrayEndMarker(t *testing.T) {
 	path := setup(t, userConfig+"\n"+endMarker+"\n")
-	if _, err := Keys(""); err == nil {
+	if _, err := Keys("", ""); err == nil {
 		t.Fatal("expected a refusal")
 	}
 	body, _ := os.ReadFile(path)
@@ -249,7 +250,7 @@ func TestKeysRefusesAStrayEndMarker(t *testing.T) {
 // Running twice must stay safe even after a stray marker appears between runs.
 func TestKeysRefusesAStrayMarkerAddedAfterInstalling(t *testing.T) {
 	path := setup(t, userConfig)
-	if _, err := Keys(""); err != nil {
+	if _, err := Keys("", ""); err != nil {
 		t.Fatal(err)
 	}
 	installed, _ := os.ReadFile(path)
@@ -258,7 +259,7 @@ func TestKeysRefusesAStrayMarkerAddedAfterInstalling(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := Keys(""); err == nil {
+	if _, err := Keys("", ""); err == nil {
 		t.Fatal("expected a refusal")
 	}
 	body, _ := os.ReadFile(path)
@@ -314,7 +315,7 @@ func TestKeysPreservesTheFileMode(t *testing.T) {
 			if err := os.Chmod(path, mode); err != nil {
 				t.Fatal(err)
 			}
-			res, err := Keys("")
+			res, err := Keys("", "")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -340,7 +341,7 @@ func TestKeysPreservesTheFileMode(t *testing.T) {
 // mutation testing isolated that write site on its own.
 func TestRemovePreservesTheFileMode(t *testing.T) {
 	path := setup(t, userConfig)
-	if _, err := Keys(""); err != nil {
+	if _, err := Keys("", ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Chmod(path, 0o640); err != nil {
@@ -374,10 +375,10 @@ func TestRemovePreservesTheFileMode(t *testing.T) {
 // not catch it: two runs in the same second overwrite the same backup name.
 func TestKeysDoesNotBackUpWhenNothingChanges(t *testing.T) {
 	path := setup(t, userConfig)
-	if _, err := Keys(""); err != nil {
+	if _, err := Keys("", ""); err != nil {
 		t.Fatal(err)
 	}
-	res, err := Keys("")
+	res, err := Keys("", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -396,5 +397,153 @@ func TestKeysDoesNotBackUpWhenNothingChanges(t *testing.T) {
 	}
 	if backups != 1 {
 		t.Errorf("found %d backups after two runs, want 1", backups)
+	}
+}
+
+// TestOptOut covers the marker that keeps an uninstall uninstalled: the startup
+// hook runs `install --auto` on every herdr start, so a refusal that did not
+// persist would be undone the next morning.
+func TestOptOut(t *testing.T) {
+	dir := t.TempDir()
+
+	if OptedOut(dir) {
+		t.Fatal("a fresh state dir is not a refusal")
+	}
+	if err := SetOptOut(dir, true); err != nil {
+		t.Fatal(err)
+	}
+	if !OptedOut(dir) {
+		t.Fatal("refusal did not stick")
+	}
+	// Setting it again must not fail: uninstall can be run twice.
+	if err := SetOptOut(dir, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetOptOut(dir, false); err != nil {
+		t.Fatal(err)
+	}
+	if OptedOut(dir) {
+		t.Fatal("install did not clear the refusal")
+	}
+	// Clearing one that was never there is what a first install does.
+	if err := SetOptOut(dir, false); err != nil {
+		t.Fatal(err)
+	}
+
+	// No state directory means nowhere to record a refusal, and no relative
+	// path dropped in whatever directory the command ran from.
+	if p := OptOutPath(""); p != "" {
+		t.Fatalf("OptOutPath(%q) = %q, want empty", "", p)
+	}
+	if OptedOut("") {
+		t.Fatal("no state dir must not read as a refusal")
+	}
+	if err := SetOptOut("", true); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// herdrBin is the real herdr, or a skip. Conflict detection has no meaning
+// without it: herdr's validator is the only thing that knows whether a key
+// collides, and faking it would only test the fake.
+func herdrBin(t *testing.T) string {
+	t.Helper()
+	bin, err := exec.LookPath("herdr")
+	if err != nil {
+		t.Skip("herdr not on PATH")
+	}
+	return bin
+}
+
+// conflictConfig already binds prefix+m, which is the key Muster wants first.
+const conflictConfig = `onboarding = false
+
+[keys]
+prefix = "alt+q"
+
+[[keys.command]]
+key = "prefix+m"
+type = "shell"
+command = "echo mine"
+`
+
+// A user who has taken prefix+m must still end up with a working key. Landing
+// on nothing is the one outcome ruled out: without a binding the overlay is
+// reachable only through herdr's action menu, which no new user goes looking
+// for.
+func TestKeysFallsBackWhenTheDefaultIsTaken(t *testing.T) {
+	bin := herdrBin(t)
+	path := setup(t, conflictConfig)
+
+	res, err := Keys(bin, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Letter == DefaultLetter {
+		t.Fatalf("took prefix+%s, which the user had already bound", DefaultLetter)
+	}
+	body, _ := os.ReadFile(path)
+	if !strings.Contains(string(body), "key = \"prefix+"+res.Letter+"\"") {
+		t.Errorf("config has no prefix+%s binding", res.Letter)
+	}
+	// The user's own binding survives, and stays the one herdr keeps.
+	if !strings.Contains(string(body), "echo mine") {
+		t.Error("clobbered the user's own prefix+m binding")
+	}
+}
+
+// An explicit --key is a decision, not a hint. Silently binding something else
+// would leave the user pressing a key that does nothing.
+func TestExplicitKeyRefusesAConflict(t *testing.T) {
+	bin := herdrBin(t)
+	setup(t, conflictConfig)
+
+	if _, err := Keys(bin, DefaultLetter); err == nil {
+		t.Fatal("expected --key m to be refused: the user already bound it")
+	}
+	if _, err := Keys(bin, "zz"); err == nil {
+		t.Fatal("expected a two-character key to be refused")
+	}
+}
+
+// The startup hook re-runs install on every herdr start with no --key, so a
+// choice that did not survive that would last until the next reboot.
+func TestExplicitKeySurvivesALaterAutoRun(t *testing.T) {
+	bin := herdrBin(t)
+	setup(t, userConfig)
+
+	if _, err := Keys(bin, "y"); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Keys(bin, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Letter != "y" {
+		t.Fatalf("letter = %q, want the y chosen earlier", res.Letter)
+	}
+	if res.Changed {
+		t.Error("rerun rewrote the config for no reason")
+	}
+}
+
+// Every candidate bound is the case where Muster cannot do its job. It has to
+// say so, not write a block herdr will disable and call that an install.
+func TestKeysFailsWhenEveryCandidateIsTaken(t *testing.T) {
+	bin := herdrBin(t)
+	var b strings.Builder
+	b.WriteString("[keys]\nprefix = \"alt+q\"\n")
+	for _, l := range letters {
+		fmt.Fprintf(&b, "\n[[keys.command]]\nkey = %q\ntype = \"shell\"\ncommand = \"echo mine\"\n", "prefix+"+l)
+	}
+	path := setup(t, b.String())
+	before, _ := os.ReadFile(path)
+
+	if _, err := Keys(bin, ""); err == nil {
+		t.Fatal("expected an error when every candidate is bound")
+	}
+	after, _ := os.ReadFile(path)
+	if string(before) != string(after) {
+		t.Error("a failed install still wrote to the user's config")
 	}
 }

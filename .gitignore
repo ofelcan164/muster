@@ -14,3 +14,6 @@ musterd.spawn.lock
 
 # scratch: demo staging, screenshot working files
 tmp/
+
+# a personal toolchain pin, deliberately not tracked: see CONTRIBUTING.md
+.mise.local.toml
