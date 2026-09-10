@@ -8,6 +8,10 @@ That last one is why it exists. An agent finishes, the orchestrator never
 learns, and three downstream agents idle against a gate that already opened.
 Muster shows you that and gives you one key to repair it.
 
+![The Muster overlay: a ribbon of the agents that need you, above one card per
+repo showing each agent's status, age and task line, with the orchestrator's
+last message along the bottom](docs/overlay.png)
+
 ## Install
 
 ```sh
