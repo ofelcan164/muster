@@ -2,3 +2,12 @@ bin/
 # scaffolding for the publish review, remove before publishing
 docs/publish-audit.html
 docs/TODOs.md
+
+# what the daemon writes, in case a state dir is pointed at the checkout
+snapshot.json
+state.json
+ui.json
+chain.json
+musterd.log
+musterd.lock
+musterd.spawn.lock
