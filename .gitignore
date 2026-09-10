@@ -1,1 +1,4 @@
 bin/
+# scaffolding for the publish review, remove before publishing
+docs/publish-audit.html
+docs/TODOs.md
