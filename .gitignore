@@ -11,3 +11,6 @@ chain.json
 musterd.log
 musterd.lock
 musterd.spawn.lock
+
+# scratch: demo staging, screenshot working files
+tmp/
