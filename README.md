@@ -65,7 +65,8 @@ with "no state directory": pass `--state-dir <dir>`.
 
 ## Requirements
 
-- herdr 0.8.2 or newer (tested against 0.8.2 and 0.9.0)
+- herdr 0.8.2 or newer. Since Muster became a popup, only 0.9.0 has been
+  tested
 - Go on `PATH`, any version from 1.21. `go.mod` asks for 1.24 and the default
   `GOTOOLCHAIN=auto` fetches it, so an older Go still builds this. A Go with
   `GOTOOLCHAIN=local` set, which some distro packages do, needs 1.24 itself
@@ -102,7 +103,8 @@ In the overlay:
   `prefix+shift+m` working. `prefix+m` does nothing inside; close with `q` or
   `esc`. `prefix+ctrl+m` arrives as `enter` and jumps to the selected card
 - mouse: click a card to jump, click the banner to install the skill, wheel
-  scrolls, hover highlights
+  scrolls, hover highlights. A click outside Muster does nothing: herdr keeps
+  clicks outside a popup to itself
 
 There is no `?` binding and no in-app legend, so this list is the reference.
 
@@ -149,7 +151,8 @@ Two binaries. `musterd` holds one event subscription on the herdr socket,
 rebuilds state from `session.snapshot`, and writes `snapshot.json` into the
 plugin state dir. `muster` is the overlay: one process per opening, a
 `tea.Program` with alt screen that lives until `q`, reading the snapshot and
-drawing. herdr shows it as a popup floating over the tab, not a pane in it.
+drawing. herdr shows it as a popup covering the tab area, not a pane in it,
+so opening it changes nothing in the tab behind.
 The daemon exists because opening this screen a hundred times a day has to be
 free, and because something has to watch while the overlay is closed. Reading
 and decoding the snapshot is all the overlay does at open time;
@@ -210,12 +213,20 @@ go test ./... -race
 herdr plugin link "$PWD"     # undo with: herdr plugin unlink muster
 ```
 
+herdr reads `herdr-plugin.toml` when the plugin is linked, so a manifest change
+(the popup's size, say) needs an unlink and a link. A rebuilt binary needs
+nothing: the next open runs it.
+
 No toolchain manager required, here or anywhere else. `go.mod` is the only
 place a Go version is written down, and CI reads it with
 `setup-go: go-version-file`.
 
 Testing needs a running herdr server with a few agents; launching the herdr TUI
-from an agent session will hang it, so drive it from the CLI.
+from an agent session will hang it, so drive it from the CLI. That covers less
+than it used to: the popup has no pane id, so the CLI can open and kill it but
+not read it or type into it. A server with no terminal attached also cannot show
+whether a jump moves what you see, which is how a jump that landed nowhere
+passed every headless check.
 
 ## License
 
