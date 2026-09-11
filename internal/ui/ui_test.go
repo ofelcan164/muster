@@ -73,8 +73,8 @@ func render(t *testing.T, width int) string {
 	return out.View()
 }
 
-// The overlay is sized to the tab area. A line that runs past it wraps and
-// destroys the layout, so nothing may ever exceed the width.
+// The popup is a fixed size. A line that runs past it wraps and destroys the
+// layout, so nothing may ever exceed the width.
 func TestNoLineExceedsTheWidth(t *testing.T) {
 	for _, w := range []int{40, 53, 70, 80, 100, 117, 120, 143, 160, 200, 240} {
 		for i, line := range strings.Split(render(t, w), "\n") {

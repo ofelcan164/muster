@@ -8,7 +8,7 @@ doing, which need attention, which finished unnoticed.
 `musterd` holds one herdr event subscription, rebuilds from
 `session.snapshot`, writes `snapshot.json` to the plugin state dir. `muster`
 is one process per overlay opening (`tea.Program`, alt screen, lives until
-`q`), not per keypress.
+`q`), not per keypress. herdr opens it as a popup, not a pane.
 
 ```
 cmd/muster            client: overlay, and every action the manifest binds
@@ -76,14 +76,23 @@ Overlay: arrows/`hjkl` move, `enter` jumps, `/` searches, `esc` leaves
 search / clears filter / closes, `s` cycles sort, `J`/`K` rearrange, `g`/`G`
 ends, `1`-`9` ribbon row, `x` dismisses one, `o` marks orchestrator, `i`
 messages it, `t` reports a finished agent to it, `S` installs the skill while
-its banner shows, `q`/`ctrl+c` closes. Mouse: click card jumps, click banner
-installs skill, wheel moves, hover highlights.
+its banner shows, `q`/`ctrl+c`/`m` closes, `M` jumps to the orchestrator.
+Mouse: click card jumps, click banner installs skill, wheel moves, hover
+highlights.
 
 ## Gotchas
 
 - Do not launch the herdr TUI from an agent session, it hangs. Drive the
-  server from the CLI and read the overlay's own pane:
-  `herdr pane list`, `herdr pane read <pane-id>`, `musterd dump`.
+  server from the CLI: `herdr pane list`, `musterd dump`. The popup has no
+  pane id, so `herdr pane read` cannot see Muster; headless you can only open
+  it with `herdr plugin action invoke muster.open` and kill it.
+- The popup is modal: herdr sends it every key before its own bindings,
+  prefix included, so the global keys cannot fire while it is open. Muster
+  ignores the prefix and binds plain `m`/`M`, which keeps `prefix+m` and
+  `prefix+shift+m` working. `prefix+ctrl+m` arrives as `enter` (0x0D).
+  Alt keys are dropped from the search and message inputs, or an `alt+q`
+  prefix types a q. One popup per session: a second open is `ui_busy`, which
+  `muster open` treats as done.
 - herdr kills the pane's process group on close: the daemon needs `Setsid` to
   survive. Startup hooks do not fire on `plugin link` mid-session (still true
   on 0.9.0), so the install action and the overlay both bind the keys too.

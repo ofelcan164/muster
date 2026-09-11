@@ -273,8 +273,10 @@ func cmdChain(args []string) int {
 
 // runOverlay draws the screen, then focuses whatever was chosen.
 //
-// Focus happens after the program has torn down, because the overlay restoring
-// its own focus on exit would otherwise fight an outbound focus call.
+// Focus happens after the program has torn down. When Muster was an overlay
+// pane that mattered, since herdr restored the overlay's saved focus on exit.
+// A popup restores nothing, but finishing the screen before acting is still the
+// order that cannot race.
 func runOverlay() int {
 	bindKeysQuietly()
 

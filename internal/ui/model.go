@@ -8,12 +8,13 @@ import (
 	"github.com/ofelcan164/muster/internal/model"
 )
 
-// Breakpoints are measured in columns of the tab area, which is what an overlay
-// actually gets: the terminal minus herdr's sidebar.
+// Breakpoints are measured in columns of what the popup gets: 90% of the tab
+// area, which is the terminal minus herdr's sidebar.
 //
-// Checked against real terminals: a fullscreen 13" laptop gives 143 columns, and
-// the same laptop with the window shrunk gives 53. Both cases have to work, and
-// the narrow one is not an edge case, it is what you get whenever you split.
+// Checked against real terminals: a fullscreen 13" laptop gives a 143-column
+// tab area, so 128 for the popup and still three columns, and the same laptop
+// with the window shrunk gives 53. Both cases have to work, and the narrow one
+// is not an edge case, it is what a half-screen window gets.
 const (
 	twoColumnMin   = 70
 	threeColumnMin = 120
@@ -169,8 +170,8 @@ func (m *Model) startAnimation() tea.Cmd {
 }
 
 // animated reports whether anything on the screen moves. An overlay showing
-// nothing but idle agents redraws never, which is what a pane left open all day
-// should cost.
+// nothing but idle agents redraws never, which is what a screen left open all
+// day should cost.
 func (m *Model) animated() bool {
 	moving := func(s model.Status) bool {
 		return s == model.StatusWorking || s == model.StatusBlocked

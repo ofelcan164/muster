@@ -54,9 +54,45 @@ herdr api snapshot    # live session state
    also why the overlay binds the keys on first open, for a plugin installed
    into a running session.
 
+## Popup panes
+
+How Muster opens since 2026-09-11. Verified on 0.9.0 that day against a
+headless server and the v0.9.0 source.
+
+- Popup plugin panes exist since 0.7.4 (CHANGELOG, #1125), below Muster's
+  `min_herdr_version`.
+- The manifest takes `placement = "popup"` with `width` and `height`, as cells
+  (an integer) or a percentage string like `"90%"`. At 90% on a 120x40 tab
+  area the program got 105x34.
+- Not part of any tab. `pane list` does not show it and the layout does not
+  change, so there is no zoom and no focus restore on exit. While it is open,
+  `session.snapshot`'s `focused_pane_id` is the pane underneath.
+- One popup per session. A second `plugin.pane.open` returns `ui_busy` ("a
+  popup pane is already open", `src/app/api/plugins/mod.rs:478`), and
+  `muster open` counts that as done.
+- A successful open returns `{"result":{"type":"ok"}}`, not the `plugin_pane`
+  object an overlay open returns. The `focus` param is never read for a popup.
+- `agent.focus` from inside, then exit: lands on the target, in the same tab
+  and in another workspace.
+- The process gets `HERDR_SOCKET_PATH`, `HERDR_PLUGIN_STATE_DIR` and the rest
+  of the plugin env, but no `HERDR_PANE_ID`, `HERDR_TAB_ID` or
+  `HERDR_WORKSPACE_ID`. It has no pane id at all, so `herdr pane read` and
+  `pane send-text` cannot reach it. Headless, the most you can do is start it
+  with `plugin action invoke muster.open` and kill it.
+- It is modal. The client routes every key to the popup before its own
+  bindings, prefix included (`src/client/shell/input.rs:503`), and drops clicks
+  outside it (`src/client/shell/mouse.rs:855`). Direct bindings like
+  `alt+enter` do nothing while it is open. Mouse events inside go through the
+  same translation panes use.
+- Keys arrive in legacy encoding unless the program asks for the kitty
+  protocol, which bubbletea v1 does not. So `alt+q` is `ESC q`, and bubbletea
+  reports it as `alt+q`. `ctrl+m` is 0x0D, the same byte as Enter, and
+  arrives as `enter`. `ctrl+i` arrives as `tab`. `ctrl+h` is 0x08, which
+  bubbletea names `ctrl+h`, not `backspace`.
+
 ## Overlay panes
 
-Confirmed by spike:
+How Muster opened before the popup. Confirmed by spike:
 
 - Get a real TTY. `stdin` is a char device.
 - Get an initial size and live resizes. Bubbletea saw `86x33 -> 76x23 -> 47x21`
@@ -98,6 +134,14 @@ and section rules, or below the last card.
 - The overlay's own focus restore does **not** steal focus back.
 - No `plugin pane close` needed. No detached helper. No delay.
 - Overlay leaves no residue in `pane list`.
+
+But an overlay restores the focus and zoom it saved at open time when its
+process exits (`restore_overlay_after_exit`, `src/app/api.rs:458`). It is a
+real split in the tab it opened from, zoomed. Jump to an agent in that same tab
+and you land on it, but the tab stays zoomed (`pane layout` shows
+`"zoomed": true`), hiding the tab's other panes. That, and a second overlay
+opening in another tab while the first was still up, is why Muster became a
+popup. See "Popup panes".
 
 ## Response shapes
 

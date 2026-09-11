@@ -406,8 +406,8 @@ func pad(s string, width int) string {
 }
 
 // padLine pads to exactly width, and trims anything longer. Nothing may
-// overflow: an overlay is sized to the tab area, and a line that runs past it
-// wraps and destroys the layout.
+// overflow: the popup is a fixed size, and a line that runs past it wraps and
+// destroys the layout.
 func padLine(s string, width int) string { return fitLine(s, width) }
 
 // fitLine pads or trims a line to exactly the given width, so grid cells always

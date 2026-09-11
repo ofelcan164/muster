@@ -97,6 +97,10 @@ In the overlay:
 - `i` messages the orchestrator, `t` reports a finished agent to it (the repair
   key from the second paragraph)
 - `S` installs the reporting skill, but only while its banner is on screen
+- `m` closes, `M` jumps to the orchestrator. Muster opens as a herdr popup,
+  which gets every key while it is open, your prefix included, so this is what
+  keeps `prefix+m` and `prefix+shift+m` working. `prefix+ctrl+m` arrives as
+  `enter` and jumps to the selected card; closing already takes you back
 - mouse: click a card to jump, click the banner to install the skill, wheel
   scrolls, hover highlights
 
@@ -145,11 +149,11 @@ Two binaries. `musterd` holds one event subscription on the herdr socket,
 rebuilds state from `session.snapshot`, and writes `snapshot.json` into the
 plugin state dir. `muster` is the overlay: one process per opening, a
 `tea.Program` with alt screen that lives until `q`, reading the snapshot and
-drawing. The daemon exists because opening this screen a hundred times a day
-has to be free, and because something has to watch while the overlay is
-closed. Reading and decoding the snapshot is all the overlay does at open
-time; `go test ./internal/daemon -bench ReadSnapshot` measures it on your
-machine.
+drawing. herdr shows it as a popup floating over the tab, not a pane in it.
+The daemon exists because opening this screen a hundred times a day has to be
+free, and because something has to watch while the overlay is closed. Reading
+and decoding the snapshot is all the overlay does at open time;
+`go test ./internal/daemon -bench ReadSnapshot` measures it on your machine.
 
 Colour and border are pure hashes of the repo key, so those match on any
 machine. Sigils are not: they are assigned round-robin in discovery order, so
@@ -187,6 +191,9 @@ state dir, which is right when the plugin is going away.
 - Linked the plugin and nothing happens: startup hooks do not fire on
   `plugin link` mid-session. Open the overlay once from herdr's action menu,
   which starts the daemon and binds the keys, or run the install action.
+- Muster closed without landing where you picked, or flashed and closed on
+  open: the error is in `musterd.log` in the state dir. The popup is gone
+  before anything it prints could be read.
 - Cards show terminal titles instead of task lines: the reporting skill is
   missing. Press `S` while its banner is up, or run `muster install-skill`.
 - A new binding does nothing: an old overlay binary keeps running after a
