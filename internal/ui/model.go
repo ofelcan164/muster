@@ -8,13 +8,13 @@ import (
 	"github.com/ofelcan164/muster/internal/model"
 )
 
-// Breakpoints are measured in columns of what the popup gets: 95% of the tab
-// area, which is the terminal minus herdr's sidebar.
+// Breakpoints are measured in columns of what the popup gets: the whole tab
+// area, which is the terminal minus herdr's sidebar and the popup's border.
 //
 // Checked against real terminals: a fullscreen 13" laptop gives a 143-column
-// tab area, so 135 for the popup and still three columns, and the same laptop
-// with the window shrunk gives 53. Both cases have to work, and the narrow one
-// is not an edge case, it is what a half-screen window gets.
+// tab area, so three columns, and the same laptop with the window shrunk gives
+// 53. Both cases have to work, and the narrow one is not an edge case, it is
+// what a half-screen window gets.
 const (
 	twoColumnMin   = 70
 	threeColumnMin = 120
