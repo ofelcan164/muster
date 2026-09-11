@@ -59,19 +59,21 @@ func TestNoticeShowsWithNoOrchestrator(t *testing.T) {
 }
 
 // Muster is a popup, so herdr hands it the global keys instead of acting on
-// them. m and M are those keys with the prefix left off, and the prefix itself
-// has to do nothing for prefix+m to keep closing.
+// them. M is prefix+shift+m with the prefix left off, and the prefix itself has
+// to do nothing for that to hold. m is not a close key: only q and esc are.
 func TestGlobalKeysInsideThePopup(t *testing.T) {
 	altQ := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q"), Alt: true}
 
 	m := withSnapshot(t, withOrch(), 143)
 	m.Update(altQ)
-	if m.quit || m.Jump() != "" {
-		t.Fatalf("the prefix on its own acted: quit=%v jump=%q", m.quit, m.Jump())
-	}
 	key(m, "m")
-	if !m.quit {
-		t.Error("prefix then m should close, the way it would outside the popup")
+	if m.quit || m.Jump() != "" {
+		t.Errorf("prefix then m acted: quit=%v jump=%q, want nothing", m.quit, m.Jump())
+	}
+	m.Update(altQ)
+	key(m, "M")
+	if m.Jump() != "w4:p1" {
+		t.Errorf("prefix then M jumped to %q, want the orchestrator w4:p1", m.Jump())
 	}
 
 	orch := withSnapshot(t, withOrch(), 143)

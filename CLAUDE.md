@@ -76,7 +76,7 @@ Overlay: arrows/`hjkl` move, `enter` jumps, `/` searches, `esc` leaves
 search / clears filter / closes, `s` cycles sort, `J`/`K` rearrange, `g`/`G`
 ends, `1`-`9` ribbon row, `x` dismisses one, `o` marks orchestrator, `i`
 messages it, `t` reports a finished agent to it, `S` installs the skill while
-its banner shows, `q`/`ctrl+c`/`m` closes, `M` jumps to the orchestrator.
+its banner shows, `q`/`ctrl+c` closes, `M` jumps to the orchestrator.
 Mouse: click card jumps, click banner installs skill, wheel moves, hover
 highlights.
 
@@ -88,8 +88,9 @@ highlights.
   it with `herdr plugin action invoke muster.open` and kill it.
 - The popup is modal: herdr sends it every key before its own bindings,
   prefix included, so the global keys cannot fire while it is open. Muster
-  ignores the prefix and binds plain `m`/`M`, which keeps `prefix+m` and
-  `prefix+shift+m` working. `prefix+ctrl+m` arrives as `enter` (0x0D).
+  ignores the prefix and binds plain `M`, which keeps `prefix+shift+m`
+  working. `prefix+m` does nothing inside (only `q` and `esc` close), and
+  `prefix+ctrl+m` arrives as `enter` (0x0D).
   Alt keys are dropped from the search and message inputs, or an `alt+q`
   prefix types a q. One popup per session: a second open is `ui_busy`, which
   `muster open` treats as done.

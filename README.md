@@ -97,10 +97,10 @@ In the overlay:
 - `i` messages the orchestrator, `t` reports a finished agent to it (the repair
   key from the second paragraph)
 - `S` installs the reporting skill, but only while its banner is on screen
-- `m` closes, `M` jumps to the orchestrator. Muster opens as a herdr popup,
-  which gets every key while it is open, your prefix included, so this is what
-  keeps `prefix+m` and `prefix+shift+m` working. `prefix+ctrl+m` arrives as
-  `enter` and jumps to the selected card; closing already takes you back
+- `M` jumps to the orchestrator. Muster opens as a herdr popup, which gets
+  every key while it is open, your prefix included, so this is what keeps
+  `prefix+shift+m` working. `prefix+m` does nothing inside; close with `q` or
+  `esc`. `prefix+ctrl+m` arrives as `enter` and jumps to the selected card
 - mouse: click a card to jump, click the banner to install the skill, wheel
   scrolls, hover highlights
 

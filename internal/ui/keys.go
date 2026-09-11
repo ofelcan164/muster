@@ -67,20 +67,19 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.quit = true
 		return m, tea.Quit
 
-	// m and M are the global keys with the prefix left off. Muster is a popup,
-	// and herdr sends a popup every key before its own bindings, prefix
-	// included, so the global keys cannot fire while this is open. The prefix
-	// itself falls through to nothing here, which is what lets prefix+m still
-	// close and prefix+shift+m still reach the orchestrator. Recognising the
-	// real chords meant reading the prefix out of herdr's config and holding a
-	// half-typed chord, and the one chord that plain keys lose, prefix+ctrl+m for
-	// back, arrives as enter: closing already goes back to where you were.
+	// M is prefix+shift+m with the prefix left off. Muster is a popup, and herdr
+	// sends a popup every key before its own bindings, prefix included, so the
+	// global keys cannot fire while this is open. The prefix itself falls
+	// through to nothing here, which is what lets prefix+shift+m still reach the
+	// orchestrator. Recognising the real chords meant reading the prefix out of
+	// herdr's config and holding a half-typed chord.
 	//
-	// Hard-coded rather than following the letter install picked. Nothing here
-	// can collide with a herdr binding, since herdr never sees these keys.
-	case "m":
-		m.quit = true
-		return m, tea.Quit
+	// prefix+m gets no twin: q and esc close, and a letter that also closed was
+	// one more way to lose the screen by accident. prefix+ctrl+m arrives as
+	// enter, and closing already goes back to where you were.
+	//
+	// Hard-coded rather than following the letter install picked. herdr never
+	// sees this key, so it cannot collide with a herdr binding.
 	case "M":
 		if !m.snap.Orch.Found {
 			m.notice = "no orchestrator marked: press o on its card first"

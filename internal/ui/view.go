@@ -45,7 +45,7 @@ func (m *Model) header() string {
 			fmt.Sprintf("%d need you", n))
 	}
 
-	right := styHint.Render("/ search · s sort:" + m.sort.String() + " · m closes")
+	right := styHint.Render("/ search · s sort:" + m.sort.String() + " · q closes")
 	if m.warning != "" {
 		right = styWarn.Render("! " + m.warning)
 	}
