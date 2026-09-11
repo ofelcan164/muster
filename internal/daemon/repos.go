@@ -199,7 +199,9 @@ func shortName(name string) string {
 // the pane label.
 const overlayTitle = "Muster"
 
-// isOverlayPane reports whether a pane is one of Muster's own overlays.
+// isOverlayPane reports whether a pane is one of Muster's own overlays. A popup
+// is not a pane, so this only matches overlays opened by builds from before the
+// popup, and can go once none of those are left running.
 func isOverlayPane(p herdr.Pane) bool {
 	return strings.TrimSpace(p.Label) == overlayTitle
 }

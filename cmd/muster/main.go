@@ -1,7 +1,7 @@
 // Command muster is the overlay and the plugin's action entrypoints.
 //
 //	muster                     open the overlay: the [[panes]] command
-//	muster open                ask herdr to toggle that pane, for a keybinding
+//	muster open                ask herdr to open that pane, for a keybinding
 //	muster jump <target>       the orchestrator, or the previous agent
 //	muster mark-orchestrator   mark the pane this runs in
 //	muster discover            rescan after a workspace or worktree appears
@@ -112,7 +112,7 @@ func main() {
 	case "open":
 		// The action a keybinding invokes. It cannot open a pane entrypoint
 		// itself, so it asks herdr to.
-		if err := ui.TogglePane(); err != nil {
+		if err := ui.OpenPane(); err != nil {
 			fmt.Fprintf(os.Stderr, "muster open: %v\n", err)
 			os.Exit(1)
 		}

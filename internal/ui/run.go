@@ -167,85 +167,32 @@ func tabOf(panes []herdr.Pane, paneID string) string {
 	return ""
 }
 
-// TogglePane opens the overlay, or closes it if it is already open.
-//
-// The plan makes prefix+m the one hot key: press it to open, press it again to
-// close, and press it to come back. herdr does not toggle on its own, so
-// opening twice stacks two overlays on top of each other. Finding an existing
-// one by its manifest title is how the overlay locates itself, since the pane
-// list reports that title as the label.
-//
-// A label outlives the plugin pane it named. When the overlay process in a pane
-// exits, herdr keeps the pane, keeps the label, and stops tracking it as a
-// plugin pane, so closing it returns plugin_pane_not_found. That pane then
-// matched every press and failed every time, and since this key is the only way
-// in, the overlay became permanently unreachable. Whatever it is now, it is not
-// an overlay, so open one.
-func TogglePane() error {
-	c := herdr.NewClient("")
-	for _, pane := range findOverlayPanes() {
-		err := c.Call("plugin.pane.close", map[string]any{"pane_id": pane}, nil)
-		if herdr.Code(err) == "plugin_pane_not_found" {
-			// Not an overlay, whatever the label says. Try the next match: a
-			// corpse alongside a real overlay must not mean the real one never
-			// closes and a third opens on every press.
-			continue
-		}
-		return err
-	}
-	return OpenPane()
-}
-
-// findOverlayPanes returns the panes in the focused tab that carry the overlay's
-// label, most likely candidate first.
-//
-// Scoping is the whole point: the toggle closes whatever this finds, so an
-// overlay open somewhere you cannot see means the key closes that one and from
-// where you are sitting it did nothing, with the next press finally opening one.
-//
-// The scope is the tab, not the workspace. An overlay is a pane in one tab's
-// split tree, zoomed inside that tab, and only one tab of a workspace is on
-// screen at a time. Scoping to the workspace still spent a press closing an
-// overlay sitting in the tab next door.
-//
-// It returns every match rather than the first because the label is not proof:
-// a pane keeps it after the overlay process in it has gone.
-func findOverlayPanes() []string {
-	snap, err := herdr.NewClient("").SessionSnapshot()
-	if err != nil {
-		return nil
-	}
-	return overlayPanesIn(snap.Panes, snap.FocusedTabID)
-}
-
-func overlayPanesIn(panes []herdr.Pane, tab string) []string {
-	var out []string
-	for _, p := range panes {
-		if p.Label == overlayTitle && p.TabID == tab {
-			out = append(out, p.PaneID)
-		}
-	}
-	return out
-}
-
-// overlayTitle is the [[panes]] title from the manifest, which is what shows up
-// as the pane label.
-const overlayTitle = "Muster"
-
-// OpenPane asks herdr to open the overlay pane.
+// OpenPane asks herdr to open the overlay as a popup.
 //
 // A plugin_action keybinding cannot address a [[panes]] entrypoint directly,
 // verified against 0.8.2: invoking the pane id returns plugin_action_not_found.
 // So the key binds to an action, and the action shells out to this.
+//
+// It only opens. Closing used to be this key's job too, which meant finding the
+// overlay among the panes of the focused tab, and every way that search went
+// wrong left a stray overlay somewhere. A popup takes every key while it is
+// open, so the key never reaches here while there is anything to close.
+//
+// There is no focus param. An overlay needed "focus": true, but a popup is
+// modal and herdr never reads the flag for one.
 func OpenPane() error {
-	c := herdr.NewClient("")
-	return c.Call("plugin.pane.open", map[string]any{
+	err := herdr.NewClient("").Call("plugin.pane.open", map[string]any{
 		"plugin_id":  pluginID(),
 		"entrypoint": "home",
-		// focus defaults to false, and an overlay you have to click into is not
-		// an overlay.
-		"focus": true,
 	}, nil)
+	// herdr allows one popup per session. ui_busy means Muster is already open,
+	// or another plugin's popup is, and either way there is nothing to do. Keys
+	// cannot get here while a popup is up, but `herdr plugin action invoke
+	// muster.open` can.
+	if herdr.Code(err) == "ui_busy" {
+		return nil
+	}
+	return err
 }
 
 func pluginID() string {
