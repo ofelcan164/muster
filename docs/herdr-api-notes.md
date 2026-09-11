@@ -72,8 +72,17 @@ headless server and the v0.9.0 source.
   `muster open` counts that as done.
 - A successful open returns `{"result":{"type":"ok"}}`, not the `plugin_pane`
   object an overlay open returns. The `focus` param is never read for a popup.
-- `agent.focus` from inside, then exit: lands on the target, in the same tab
-  and in another workspace.
+- Jump with `pane.focus`, not `agent.focus`. See "Jumping out" below: on
+  0.9.0 `agent.focus` moves the session's focus but not what an attached
+  terminal shows. A headless server has no attached terminal, so a headless
+  check cannot tell the two apart; this one needed the real client.
+- It covers the tab area only. The client lays it out inside the pane surface
+  (`src/client/shell/composition.rs:470`), so the sidebar stays visible and
+  100% is the whole tab area, never the screen.
+- No dimmed backdrop. herdr's own popups (settings, help) dim everything
+  behind them (`src/client/shell/overlays.rs:47`), but the plugin popup path
+  only clears its own rectangle and draws a border. No manifest field changes
+  that on 0.9.0.
 - The process gets `HERDR_SOCKET_PATH`, `HERDR_PLUGIN_STATE_DIR` and the rest
   of the plugin env, but no `HERDR_PANE_ID`, `HERDR_TAB_ID` or
   `HERDR_WORKSPACE_ID`. It has no pane id at all, so `herdr pane read` and
@@ -81,7 +90,8 @@ headless server and the v0.9.0 source.
   with `plugin action invoke muster.open` and kill it.
 - It is modal. The client routes every key to the popup before its own
   bindings, prefix included (`src/client/shell/input.rs:503`), and drops clicks
-  outside it (`src/client/shell/mouse.rs:855`). Direct bindings like
+  outside it (`src/client/shell/mouse.rs:855`) rather than delivering them, so
+  the program cannot close on a click outside. Direct bindings like
   `alt+enter` do nothing while it is open. Mouse events inside go through the
   same translation panes use.
 - Keys arrive in legacy encoding unless the program asks for the kitty
@@ -128,7 +138,16 @@ and section rules, or below the last card.
 
 ## Jumping out of an overlay
 
-`agent focus <target>` then exit the process. That is the whole thing.
+`pane.focus {"pane_id": ...}` then exit the process. That is the whole thing.
+
+`agent.focus` was the call until 2026-09-11, and on 0.9.0 it is wrong. 0.9.0
+gave every attached client its own view of which workspace and tab it shows
+(CHANGELOG, #3526), and a public socket call only moves those views for
+`workspace.focus`, `tab.focus` and `pane.focus`
+(`src/server/headless/client_views.rs:811`). `agent.focus` moves the session's
+focus and leaves every screen where it was, so from the popup a jump closed
+Muster and landed nowhere. `pane.focus` exists on 0.8.2 too, and takes shells
+and editors, which `agent.focus` refused with `agent_not_found`.
 
 - ~2ms, works across workspaces.
 - The overlay's own focus restore does **not** steal focus back.
