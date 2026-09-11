@@ -26,10 +26,18 @@ command = ["go", "build", "-o", "./bin/musterd", "./cmd/musterd"]
 [[startup]]
 command = ["./bin/muster", "install", "--auto"]
 
+# A popup, not an overlay. An overlay is a real split in the tab you open it
+# from, zoomed, and on exit herdr restores the focus and zoom it saved at open
+# time, so a jump into that same tab left it zoomed. A popup belongs to no tab,
+# so there is nothing to restore, and herdr allows one per session, so a second
+# Muster cannot open behind the first. See "Popup panes" in
+# docs/herdr-api-notes.md.
 [[panes]]
 id = "home"
 title = "Muster"
-placement = "overlay"
+placement = "popup"
+width = "90%"
+height = "90%"
 command = ["./bin/muster"]
 
 [[actions]]
