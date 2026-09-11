@@ -55,7 +55,7 @@ func (m *Model) stripLines(startY int) []string {
 	// The jump hint is the first thing to go when the pane is narrow. Who the
 	// orchestrator is and what state it is in matter more than a key you can
 	// also read off the strip's last line.
-	hint := styHint.Render("prefix+shift+m jumps ")
+	hint := styHint.Render("M jumps ")
 	if gap := m.width - lipgloss.Width(head) - lipgloss.Width(hint); gap > 0 {
 		head += strings.Repeat(" ", gap) + hint
 	}
