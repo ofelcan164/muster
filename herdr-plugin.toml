@@ -36,8 +36,8 @@ command = ["./bin/muster", "install", "--auto"]
 id = "home"
 title = "Muster"
 placement = "popup"
-width = "90%"
-height = "90%"
+width = "95%"
+height = "95%"
 command = ["./bin/muster"]
 
 [[actions]]
