@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/ofelcan164/muster/internal/chain"
@@ -280,6 +281,7 @@ func runOverlay() int {
 	target, err := ui.Run()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "muster: %v\n", err)
+		logFailure("%v", err)
 		return 1
 	}
 	if target == "" {
@@ -287,9 +289,29 @@ func runOverlay() int {
 	}
 	if err := ui.Jump(target); err != nil {
 		fmt.Fprintf(os.Stderr, "muster: jump: %v\n", err)
+		logFailure("jump to %s: %v", target, err)
 		return 1
 	}
 	return 0
+}
+
+// logFailure appends to musterd.log as well as stderr. herdr closes the popup
+// the moment this process exits, so stderr alone is a message nobody sees, and
+// a jump that failed looked like one that closed the screen for no reason.
+//
+// A plain O_APPEND open, the same one Ensure uses to hand the daemon its stderr.
+// The daemon's rotation does not count these bytes, which only means it rotates
+// a line or two late.
+func logFailure(format string, args ...any) {
+	if state.Dir() == "" {
+		return
+	}
+	f, err := os.OpenFile(state.LogPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	log.New(f, "muster ", log.LstdFlags|log.Lmsgprefix).Printf(format, args...)
 }
 
 // bindKeysQuietly is the other half of the startup hook, for a plugin
