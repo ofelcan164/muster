@@ -136,7 +136,10 @@ func (m *Model) handleCompose(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.quit = true
 		return m, tea.Quit
 	case tea.KeyRunes:
-		m.compose += string(msg.Runes)
+		// Same as the filter: an alt key, herdr's prefix among them, is not text.
+		if !msg.Alt {
+			m.compose += string(msg.Runes)
+		}
 		return m, nil
 	case tea.KeySpace:
 		m.compose += " "

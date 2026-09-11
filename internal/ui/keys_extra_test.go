@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/ofelcan164/muster/internal/model"
 )
 
@@ -53,5 +55,60 @@ func TestNoticeShowsWithNoOrchestrator(t *testing.T) {
 	m.notice = "ofelcan has nothing open to jump to"
 	if !strings.Contains(plain(m.View()), "nothing open to jump to") {
 		t.Errorf("the notice never reached the screen:\n%s", plain(m.View()))
+	}
+}
+
+// Muster is a popup, so herdr hands it the global keys instead of acting on
+// them. m and M are those keys with the prefix left off, and the prefix itself
+// has to do nothing for prefix+m to keep closing.
+func TestGlobalKeysInsideThePopup(t *testing.T) {
+	altQ := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q"), Alt: true}
+
+	m := withSnapshot(t, withOrch(), 143)
+	m.Update(altQ)
+	if m.quit || m.Jump() != "" {
+		t.Fatalf("the prefix on its own acted: quit=%v jump=%q", m.quit, m.Jump())
+	}
+	key(m, "m")
+	if !m.quit {
+		t.Error("prefix then m should close, the way it would outside the popup")
+	}
+
+	orch := withSnapshot(t, withOrch(), 143)
+	key(orch, "M")
+	if orch.Jump() != "w4:p1" {
+		t.Errorf("M jumped to %q, want the orchestrator w4:p1", orch.Jump())
+	}
+
+	none := withSnapshot(t, testSnapshot(), 143)
+	key(none, "M")
+	if none.quit || none.Jump() != "" {
+		t.Errorf("with no orchestrator M should stay open: quit=%v jump=%q", none.quit, none.Jump())
+	}
+	if !strings.Contains(none.notice, "no orchestrator") {
+		t.Errorf("notice = %q, want it to say there is no orchestrator", none.notice)
+	}
+}
+
+// While typing, m is a letter, and an alt key is a chord rather than text. The
+// prefix is alt+q for plenty of people, and it reaches the popup.
+func TestTypingKeepsMAndDropsAltKeys(t *testing.T) {
+	altQ := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q"), Alt: true}
+
+	m := withSnapshot(t, withOrch(), 143)
+	key(m, "slash")
+	m.Update(altQ)
+	key(m, "m")
+	key(m, "M")
+	if m.quit || m.filter != "mM" {
+		t.Errorf("filter = %q quit=%v, want \"mM\" and still open", m.filter, m.quit)
+	}
+
+	c := withSnapshot(t, withOrch(), 143)
+	key(c, "i")
+	c.Update(altQ)
+	key(c, "m")
+	if c.compose != "m" {
+		t.Errorf("compose = %q, want \"m\" with the alt key dropped", c.compose)
 	}
 }
