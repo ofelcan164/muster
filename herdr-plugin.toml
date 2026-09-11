@@ -68,12 +68,12 @@ contexts = ["global"]
 command = ["./bin/muster", "install"]
 
 # Separate from install on purpose. Keybindings go in herdr's config, which is
-# Muster's business. A skill goes in the user's Claude directory, which is not,
-# so installing it stays something they ask for.
+# Muster's business. A skill goes in the user's agent directories, which are
+# not, so installing it stays something they ask for.
 [[actions]]
 id = "install-skill"
 title = "Install the reporting skill for the orchestrator"
-description = "Write muster-report to your Claude skills, so agents report a task line instead of a terminal title."
+description = "Write muster-report to ~/.agents/skills and link it into Claude Code, Codex and OpenCode where installed, so agents report a task line instead of a terminal title."
 contexts = ["global"]
 command = ["./bin/muster", "install-skill"]
 

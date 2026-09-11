@@ -429,10 +429,10 @@ func cmdUninstall(args []string) int {
 	_ = fs.Parse(args)
 
 	// A config this cannot read must not stop the rest. The reporting skill
-	// lives in the user's Claude directory, nowhere near herdr's config, and
-	// abandoning it because config.toml is unreadable is how an uninstall
-	// strands a file the user has no obvious way to find. Do everything that
-	// still can be done, then fail.
+	// lives in ~/.agents/skills and the agent directories linked to it, nowhere
+	// near herdr's config, and abandoning it because config.toml is unreadable
+	// is how an uninstall strands a file the user has no obvious way to find.
+	// Do everything that still can be done, then fail.
 	code := 0
 	// Same reason as uninstall-keys: the startup hook would otherwise rebind
 	// them at the next herdr start. --purge deletes the marker along with the

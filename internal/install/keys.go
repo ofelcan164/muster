@@ -325,7 +325,7 @@ func Remove() (*Result, error) {
 		// A config that is not there has nothing of ours in it. Returning the
 		// error aborted `muster uninstall` before it reached the reporting
 		// skill, so anyone who had not run `muster install` was left with the
-		// skill in their Claude directory and no way to remove it.
+		// skill installed and no way to remove it.
 		if os.IsNotExist(err) {
 			return res, nil
 		}
