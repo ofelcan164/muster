@@ -49,8 +49,8 @@ Install writes: a marked block in your herdr config (with a timestamped backup
 beside it), a detached daemon, that daemon's `musterd.log` and lock files in
 the plugin state dir, and a `server.reload_config` call so the keys go live.
 The daemon adds `snapshot.json` and `state.json` once it reaches herdr.
-`ui.json` appears when you first close the overlay and `chain.json` when you
-first set a chain.
+`ui.json` appears the first time you rearrange repos, change the sort or dismiss
+a row, and `chain.json` when you first set a chain.
 
 The reporting skill is the exception. **Install the reporting skill for the
 orchestrator** writes to your agent directories, so it stays a separate opt-in.
