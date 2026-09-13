@@ -414,6 +414,9 @@ func cmdInstallKeys(args []string) int {
 	for _, b := range res.Bindings {
 		fmt.Printf("  %-16s %s\n", b.Key, b.Why)
 	}
+	if res.Badge {
+		fmt.Printf("  %-16s %s\n", "tab bar", "what needs you, and the key that opens Muster")
+	}
 	// Say so when the default was not available. Someone who read the README
 	// will be pressing prefix+m and getting whatever they bound it to.
 	if res.Letter != install.DefaultLetter {

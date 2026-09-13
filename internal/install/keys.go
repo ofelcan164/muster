@@ -87,6 +87,10 @@ type Result struct {
 	// Links is the per-harness paths a skill install pointed at the canonical
 	// copy, or that an uninstall took away.
 	Links []string
+
+	// Badge is whether the tab bar badge is in the config. It is not when there
+	// is no state dir to point it at, or no tab_bar_right it could place safely.
+	Badge bool
 }
 
 // blockRE matches one complete managed block. Both markers are required.
@@ -195,8 +199,7 @@ func badgeEntry(letter string) string {
 // A tab_bar_right it cannot place for certain, such as a dotted ui.tab_bar_right
 // or one outside the [ui] table it found, gets no badge. A second tab_bar_right
 // would be a TOML error, and herdr drops the whole config on one of those.
-func withBadge(body, letter string) (string, string) {
-	entry := badgeEntry(letter)
+func withBadge(body, entry string) (string, string) {
 	if entry == "" {
 		return body, ""
 	}
@@ -357,7 +360,9 @@ func Keys(herdrBin, letter string) (*Result, error) {
 	res.Letter = letter
 	res.Bindings = BindingsFor(letter)
 
-	body, ui := withBadge(body, letter)
+	entry := badgeEntry(letter)
+	body, ui := withBadge(body, entry)
+	res.Badge = entry != "" && strings.Contains(body+ui, entry)
 	updated := compose(body, letter, ui)
 	if string(existing) == updated {
 		return res, nil

@@ -609,8 +609,12 @@ func TestKeysAddsTheBadgeAndRemoveTakesItBack(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			path := setup(t, cfg)
 			t.Setenv("HERDR_PLUGIN_STATE_DIR", t.TempDir())
-			if _, err := Keys("", ""); err != nil {
+			res, err := Keys("", "")
+			if err != nil {
 				t.Fatal(err)
+			}
+			if !res.Badge {
+				t.Error("install placed the badge but did not say so")
 			}
 			body, _ := os.ReadFile(path)
 			if n := strings.Count(string(body), ` badge m"`); n != 1 {
