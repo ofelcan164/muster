@@ -378,5 +378,6 @@ checked. So Muster's entry carries absolute, single-quoted paths and
 `--state-dir`.
 
 `[[keys.command]]` accepts `description`. `label`, `title`, `name`, `help`,
-`desc` and `summary` are all unknown keys. Whether the `prefix+?` help lists the
-description is not confirmed yet.
+`desc` and `summary` are all unknown keys. **Confirmed 2026-09-13:** the
+`prefix+?` help shows the description under the key, where a binding without
+one reads "custom command". The badge renders in a live tab bar too.
