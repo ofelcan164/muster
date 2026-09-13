@@ -108,8 +108,14 @@ func (d *Daemon) fetchSaid(ctx context.Context, paneID, key string) {
 // did it dispatch. Wrapped text continues indented underneath and is joined
 // back on, because half a sentence reads as a bug.
 //
-// The fallback is the last line with words in it that is not the input box or
-// the chrome around it. It is a guess, and a guess beats an empty strip.
+// No other agent marks its own lines, so for them the "●" scan never fires and
+// the fallback carries the strip: the last line with words in it that is not
+// the input box or the chrome around it. It is a guess, and a guess beats an
+// empty strip.
+//
+// ponytail: the reject list below is one agent's box drawing. An agent whose
+// chrome slips through shows a junk line, never a missing one; widen the list
+// when one actually does, not before.
 func ExtractSaid(text string) string {
 	lines := strings.Split(text, "\n")
 

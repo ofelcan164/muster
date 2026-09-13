@@ -81,7 +81,7 @@ command = ["./bin/muster", "install"]
 [[actions]]
 id = "install-skill"
 title = "Install the reporting skill for the orchestrator"
-description = "Write muster-report to ~/.agents/skills and link it into Claude Code, Codex and OpenCode where installed, so agents report a task line instead of a terminal title."
+description = "Write muster-report to ~/.agents/skills and link it into every agent runtime that keeps a skills directory, so agents report a task line instead of a terminal title."
 contexts = ["global"]
 command = ["./bin/muster", "install-skill"]
 

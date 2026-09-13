@@ -65,6 +65,18 @@ func harnesses() []harness {
 	}
 }
 
+// HarnessDirs names the directory each known runtime is detected by, for the
+// message that has to say where Muster looked. Derived from harnesses() so the
+// paths quoted are the paths actually searched, environment overrides included.
+func HarnessDirs() []string {
+	hs := harnesses()
+	out := make([]string, 0, len(hs))
+	for _, h := range hs {
+		out = append(out, h.name+" ("+h.detect+")")
+	}
+	return out
+}
+
 // CanonicalSkillDir is the one real copy, shared across runtimes.
 //
 // ~/.agents/skills is the cross-tool convention, and every harness gets a

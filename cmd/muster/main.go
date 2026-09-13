@@ -21,6 +21,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/ofelcan164/muster/internal/chain"
@@ -455,8 +456,12 @@ func cmdInstallSkill() int {
 		fmt.Printf("  linked %s\n", l)
 	}
 	if len(res.Links) == 0 {
-		fmt.Println("\nno agent runtime found to link it into.")
-		fmt.Println("expected one of ~/.claude, ~/.codex or ~/.config/opencode")
+		// Linking only reaches runtimes that read a personal skills directory.
+		// An agent that keeps its instructions somewhere else will never be
+		// found here however often this runs, so say what to do instead.
+		fmt.Println("\nno agent runtime with a skills directory found to link it into.")
+		fmt.Printf("looked in: %s\n", strings.Join(install.HarnessDirs(), ", "))
+		fmt.Printf("for any other agent, paste %s into its instructions file.\n", res.Path)
 	}
 	fmt.Println("\nit triggers on:")
 	fmt.Printf("  %s\n", install.SkillDescription())

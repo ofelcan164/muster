@@ -43,8 +43,8 @@ const (
 	TaskFromNone              TaskSource = "none"               // tier 5
 )
 
-// Agent is one pane herdr has detected an agent in, such as Claude Code or
-// Codex. Each is a row on its repo's card.
+// Agent is one pane herdr has detected an agent in, whichever agent that is.
+// Each is a row on its repo's card.
 type Agent struct {
 	PaneID      string `json:"pane_id"`
 	WorkspaceID string `json:"workspace_id"`
@@ -52,8 +52,11 @@ type Agent struct {
 
 	// Name is herdr's agent name when one has been set, else a stable label
 	// derived from the pane.
-	Name    string `json:"name"`
-	Kind    string `json:"kind"` // "claude", "codex", ...
+	Name string `json:"name"`
+	// Kind is herdr's own label for the agent, passed through unread. Nothing
+	// in Muster branches on it, so an agent herdr has never seen before still
+	// gets a card.
+	Kind    string `json:"kind"`
 	Status  Status `json:"status"`
 	Focused bool   `json:"focused"`
 
