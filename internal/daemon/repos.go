@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"cmp"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -11,41 +12,46 @@ import (
 	"github.com/ofelcan164/muster/internal/model"
 )
 
-// buildRepos groups agents and non-agent panes under the repo their workspace
-// sits in. Every repo here was learned at runtime from a workspace cwd.
+// buildRepos resolves each pane from its own cwd and groups agents and
+// non-agent panes under the repo that cwd is in. Every repo here was learned
+// at runtime from a pane's cwd, never assumed from the workspace.
 func (d *Daemon) buildRepos(snap *herdr.Snapshot, agents map[string]model.Agent, orch model.Orchestrator) []model.Repo {
 	wsByID := make(map[string]herdr.Workspace, len(snap.Workspaces))
 	for _, w := range snap.Workspaces {
 		wsByID[w.WorkspaceID] = w
 	}
 
-	// A workspace has no cwd of its own, so take it from its panes. The most
-	// common pane cwd is a better answer than the first one, which might be a
-	// shell someone has cd'd out of.
-	wsCwd := map[string]string{}
-	for wsID := range wsByID {
-		wsCwd[wsID] = dominantCwd(snap.Panes, wsID)
-	}
-
-	// Iterate workspaces in a stable order. Grid slots are handed out on first
-	// sight and then pinned forever, so allocating them from Go's randomised
-	// map iteration would give a different layout on every fresh install: the
-	// exact opposite of the fixed positions the grid exists to provide.
-	ordered := make([]herdr.Workspace, 0, len(snap.Workspaces))
-	ordered = append(ordered, snap.Workspaces...)
-	slices.SortStableFunc(ordered, func(a, b herdr.Workspace) int {
-		return cmp.Or(cmp.Compare(a.Number, b.Number), strings.Compare(a.WorkspaceID, b.WorkspaceID))
+	// Walk panes in a fixed order. Grid slots are handed out on first sight and
+	// then pinned forever, so allocating them in Go's randomised map order would
+	// give a different layout on every fresh install: the exact opposite of the
+	// fixed positions the grid exists to provide.
+	panes := append([]herdr.Pane(nil), snap.Panes...)
+	slices.SortStableFunc(panes, func(a, b herdr.Pane) int {
+		return cmp.Or(
+			cmp.Compare(wsByID[a.WorkspaceID].Number, wsByID[b.WorkspaceID].Number),
+			cmp.Compare(a.WorkspaceID, b.WorkspaceID),
+			cmp.Compare(a.PaneID, b.PaneID),
+		)
 	})
 
 	byKey := map[string]*model.Repo{}
-	for _, ws := range ordered {
-		wsID := ws.WorkspaceID
-		cwd := wsCwd[wsID]
-		if cwd == "" {
+	repoForPane := map[string]*model.Repo{}
+	for _, p := range panes {
+		// Muster's own overlay is a pane like any other, so without this it
+		// shows up on whatever card its own cwd resolves to, and closing it
+		// reads as a process that stopped.
+		if isOverlayPane(p) {
 			continue
 		}
+		cwd := p.Cwd
+		if cwd == "" {
+			cwd = p.ForegroundCwd
+		}
+		// The worktree hint describes the workspace's own checkout, not every
+		// pane in it: a pane cd'd into a different repo must not be told it is
+		// on the workspace's branch.
 		var hint *herdr.WorkspaceWorktree
-		if ws.Worktree != nil {
+		if ws := wsByID[p.WorkspaceID]; ws.Worktree != nil && withinPath(cwd, ws.Worktree.Path) {
 			hint = ws.Worktree
 		}
 		info := d.resolver.Resolve(cwd, hint)
@@ -72,14 +78,8 @@ func (d *Daemon) buildRepos(snap *herdr.Snapshot, agents map[string]model.Agent,
 			}
 			byKey[info.Key] = r
 		}
-		r.WorkspaceIDs = append(r.WorkspaceIDs, wsID)
-	}
-
-	repoForWorkspace := map[string]*model.Repo{}
-	for _, r := range byKey {
-		for _, wsID := range r.WorkspaceIDs {
-			repoForWorkspace[wsID] = r
-		}
+		r.WorkspaceIDs = append(r.WorkspaceIDs, p.WorkspaceID)
+		repoForPane[p.PaneID] = r
 	}
 
 	procs := d.foregroundProcesses(snap, agents)
@@ -97,14 +97,8 @@ func (d *Daemon) buildRepos(snap *herdr.Snapshot, agents map[string]model.Agent,
 	d.detectStoppedProcesses(procs, tracked, time.Now())
 
 	for _, p := range snap.Panes {
-		r := repoForWorkspace[p.WorkspaceID]
+		r := repoForPane[p.PaneID]
 		if r == nil {
-			continue
-		}
-		if isOverlayPane(p) {
-			// Muster's own overlay is a pane like any other, so without this it
-			// shows up in the footer of whatever workspace you opened it from,
-			// and closing it reads as a process that stopped.
 			continue
 		}
 		if a, isAgent := agents[p.PaneID]; isAgent {
@@ -131,6 +125,7 @@ func (d *Daemon) buildRepos(snap *herdr.Snapshot, agents map[string]model.Agent,
 		slices.SortStableFunc(r.Agents, func(a, b model.Agent) int { return strings.Compare(a.PaneID, b.PaneID) })
 		slices.SortStableFunc(r.OtherPanes, func(a, b model.Pane) int { return strings.Compare(a.PaneID, b.PaneID) })
 		slices.Sort(r.WorkspaceIDs)
+		r.WorkspaceIDs = slices.Compact(r.WorkspaceIDs)
 		// Emit empty arrays rather than nil, which Go would marshal as null.
 		// The snapshot is a contract with the overlay, and a client should
 		// never have to special-case null where it expects a list.
@@ -250,38 +245,15 @@ func paneLabel(p herdr.Pane, proc string) string {
 	return t
 }
 
-// dominantCwd returns the most common cwd among a workspace's panes.
-func dominantCwd(panes []herdr.Pane, wsID string) string {
-	counts := map[string]int{}
-	for _, p := range panes {
-		if p.WorkspaceID != wsID {
-			continue
-		}
-		// Muster's own overlay is a pane in whichever workspace you opened it
-		// from, and its cwd is the plugin checkout. Counting it lets the overlay
-		// re-identify the workspace it is drawn over: a one-pane workspace ties
-		// 1-1 and the tie breaks on the path, so a repo can change its name,
-		// colour and slot for exactly as long as you are looking at it.
-		if isOverlayPane(p) {
-			continue
-		}
-		cwd := p.Cwd
-		if cwd == "" {
-			cwd = p.ForegroundCwd
-		}
-		if cwd != "" {
-			counts[cwd]++
-		}
+// withinPath reports whether cwd is root or somewhere under it. Used to decide
+// whether a pane belongs to a workspace's own worktree hint, since a pane cd'd
+// into a different repo must not inherit a branch that is not its own.
+func withinPath(cwd, root string) bool {
+	if cwd == "" || root == "" {
+		return false
 	}
-	best, bestN := "", 0
-	for cwd, n := range counts {
-		// Ties break on the lexicographically smaller path purely so the result
-		// is deterministic across reconciles.
-		if n > bestN || (n == bestN && cwd < best) {
-			best, bestN = cwd, n
-		}
-	}
-	return best
+	cwd, root = filepath.Clean(cwd), filepath.Clean(root)
+	return cwd == root || strings.HasPrefix(cwd, root+string(filepath.Separator))
 }
 
 // foregroundProcesses reads the running process for each non-agent pane.

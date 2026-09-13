@@ -225,25 +225,93 @@ func TestGridSlotsAreStableAndDeterministic(t *testing.T) {
 	}
 }
 
-func TestDominantCwdWinsOverAStrayShell(t *testing.T) {
-	panes := []herdr.Pane{
-		pane("w1:p1", "w1", "/repo"),
-		pane("w1:p2", "w1", "/repo"),
-		pane("w1:p3", "w1", "/tmp"),
-		pane("w2:p1", "w2", "/elsewhere"),
+// The bug this whole step fixes: a workspace with agents in three repos used
+// to be filed under one directory shared by all its panes. Each pane now
+// resolves against its own cwd, so three repos come out, each with its own
+// agent.
+func TestOneWorkspaceThreeReposEachOwnAgent(t *testing.T) {
+	d := newTestDaemon(t)
+	root := t.TempDir()
+	contracts := gitRepo(t, filepath.Join(root, "contracts"), "git@github.com:acme/contracts.git", "main")
+	api := gitRepo(t, filepath.Join(root, "api"), "git@github.com:acme/api.git", "main")
+	web := gitRepo(t, filepath.Join(root, "web"), "git@github.com:acme/web.git", "main")
+
+	snap := &herdr.Snapshot{
+		Workspaces: []herdr.Workspace{{WorkspaceID: "w1", Number: 1}},
+		Panes: []herdr.Pane{
+			pane("w1:p1", "w1", contracts),
+			pane("w1:p2", "w1", api),
+			pane("w1:p3", "w1", web),
+		},
+		Agents: []herdr.Agent{
+			agentPane("w1:p1", "w1", contracts, "working"),
+			agentPane("w1:p2", "w1", api, "blocked"),
+			agentPane("w1:p3", "w1", web, "idle"),
+		},
 	}
-	if got := dominantCwd(panes, "w1"); got != "/repo" {
-		t.Errorf("dominantCwd = %q, want /repo", got)
+	agents := d.buildAgents(snap, time.Now())
+	repos := d.buildRepos(snap, agents, model.Orchestrator{})
+	if len(repos) != 3 {
+		t.Fatalf("want 3 repos, got %d: %+v", len(repos), repos)
+	}
+	for _, r := range repos {
+		if len(r.Agents) != 1 {
+			t.Errorf("repo %s: want 1 agent of its own, got %d", r.Key, len(r.Agents))
+		}
+		if len(r.WorkspaceIDs) != 1 || r.WorkspaceIDs[0] != "w1" {
+			t.Errorf("repo %s: want workspace w1 recorded once, got %v", r.Key, r.WorkspaceIDs)
+		}
 	}
 }
 
-func TestDominantCwdTieIsDeterministic(t *testing.T) {
-	panes := []herdr.Pane{pane("w1:p1", "w1", "/b"), pane("w1:p2", "w1", "/a")}
-	first := dominantCwd(panes, "w1")
-	for i := 0; i < 50; i++ {
-		if got := dominantCwd(panes, "w1"); got != first {
-			t.Fatalf("tie break not deterministic: %q then %q", first, got)
-		}
+// The worktree hint describes the workspace's own checkout. A pane cd'd into a
+// different repo must read its own branch off disk rather than inherit the
+// hint's.
+func TestWorktreeHintOnlyAppliesToPanesInsideIt(t *testing.T) {
+	d := newTestDaemon(t)
+	root := t.TempDir()
+	hinted := gitRepo(t, filepath.Join(root, "hinted"), "git@github.com:acme/hinted.git", "on-disk-branch")
+	other := gitRepo(t, filepath.Join(root, "other"), "git@github.com:acme/other.git", "other-branch")
+
+	snap := &herdr.Snapshot{
+		Workspaces: []herdr.Workspace{{
+			WorkspaceID: "w1", Number: 1,
+			Worktree: &herdr.WorkspaceWorktree{Path: hinted, Branch: "hint-branch"},
+		}},
+		Panes: []herdr.Pane{pane("w1:p1", "w1", hinted), pane("w1:p2", "w1", other)},
+	}
+	repos := d.buildRepos(snap, map[string]model.Agent{}, model.Orchestrator{})
+
+	byKey := map[string]model.Repo{}
+	for _, r := range repos {
+		byKey[r.Key] = r
+	}
+	if got := byKey["acme/hinted"].Branch; got != "hint-branch" {
+		t.Errorf("pane inside the worktree hint: branch = %q, want hint-branch", got)
+	}
+	if got := byKey["acme/other"].Branch; got != "other-branch" {
+		t.Errorf("pane outside the worktree hint: branch = %q, want its own on-disk branch", got)
+	}
+}
+
+// A pane with no cwd used to be skipped entirely. Resolve("") already answers
+// with the neutral "unknown" identity, so there is nothing left to guard
+// against: the pane belongs in the snapshot like any other.
+func TestPaneWithNoCwdStillAppearsInSnapshot(t *testing.T) {
+	d := newTestDaemon(t)
+	snap := &herdr.Snapshot{
+		Workspaces: []herdr.Workspace{{WorkspaceID: "w1", Number: 1}},
+		Panes:      []herdr.Pane{pane("w1:p1", "w1", "")},
+	}
+	repos := d.buildRepos(snap, map[string]model.Agent{}, model.Orchestrator{})
+	if len(repos) != 1 {
+		t.Fatalf("want a card for the cwd-less pane, got %+v", repos)
+	}
+	if repos[0].IsGit {
+		t.Error("a pane with no cwd cannot be a git repo")
+	}
+	if len(repos[0].OtherPanes) != 1 {
+		t.Errorf("want the pane recorded, got %+v", repos[0])
 	}
 }
 
