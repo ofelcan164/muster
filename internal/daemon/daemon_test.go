@@ -516,3 +516,46 @@ func TestTheOverlayDoesNotReidentifyTheWorkspaceItOpensOver(t *testing.T) {
 		t.Fatalf("want one card for acme/api, got %+v", repos)
 	}
 }
+
+// Workspaces come out in number order, whatever order herdr lists them in.
+func TestBuildWorkspacesSortsByNumber(t *testing.T) {
+	snap := &herdr.Snapshot{
+		Workspaces: []herdr.Workspace{
+			{WorkspaceID: "w3", Number: 3, Label: "spike"},
+			{WorkspaceID: "w1", Number: 1, Label: "rollout"},
+			{WorkspaceID: "w2", Number: 2, Label: "mobile"},
+		},
+	}
+	got := buildWorkspaces(snap)
+	if len(got) != 3 {
+		t.Fatalf("want 3 workspaces, got %d", len(got))
+	}
+	want := []model.Workspace{
+		{ID: "w1", Number: 1, Label: "rollout"},
+		{ID: "w2", Number: 2, Label: "mobile"},
+		{ID: "w3", Number: 3, Label: "spike"},
+	}
+	for i, w := range want {
+		if got[i] != w {
+			t.Errorf("position %d: got %+v, want %+v", i, got[i], w)
+		}
+	}
+}
+
+// A non-agent pane's workspace id is what lets an empty workspace tile show
+// which repos its panes sit in.
+func TestOtherPanesCarryTheirWorkspaceID(t *testing.T) {
+	d := newTestDaemon(t)
+	api := gitRepo(t, filepath.Join(t.TempDir(), "api"), "git@github.com:acme/api.git", "main")
+	snap := &herdr.Snapshot{
+		Workspaces: []herdr.Workspace{{WorkspaceID: "w1", Number: 1}},
+		Panes:      []herdr.Pane{pane("w1:p1", "w1", api)},
+	}
+	repos := d.buildRepos(snap, map[string]model.Agent{}, model.Orchestrator{})
+	if len(repos) != 1 || len(repos[0].OtherPanes) != 1 {
+		t.Fatalf("want one repo with one other pane, got %+v", repos)
+	}
+	if got := repos[0].OtherPanes[0].WorkspaceID; got != "w1" {
+		t.Errorf("OtherPanes[0].WorkspaceID = %q, want w1", got)
+	}
+}

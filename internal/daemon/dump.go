@@ -48,8 +48,9 @@ func icon(s model.Status) string {
 // save it.
 func Dump(w io.Writer, s *model.Snapshot, now time.Time) {
 	age := now.Sub(s.GeneratedAt)
-	fmt.Fprintf(w, "MUSTER  %s · %s  %d need you\n",
-		plural(s.Counts.Repos, "repo"), plural(s.Counts.Agents, "agent"), s.Counts.NeedsYou)
+	fmt.Fprintf(w, "MUSTER  %s · %s · %s  %d need you\n",
+		plural(s.Counts.Repos, "repo"), plural(s.Counts.Workspaces, "workspace"),
+		plural(s.Counts.Agents, "agent"), s.Counts.NeedsYou)
 	fmt.Fprintf(w, "snapshot %s old · herdr %s · daemon pid %d\n",
 		compactDur(age), orDash(s.HerdrVersion), s.DaemonPID)
 	fmt.Fprintln(w)

@@ -8,10 +8,12 @@
 package daemon
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"log"
 	"os"
+	"slices"
 	"sync"
 	"time"
 
@@ -194,6 +196,7 @@ func (d *Daemon) reconcile(ctx context.Context) bool {
 	agents := d.buildAgents(snap, now)
 	orch := d.findOrchestrator(snap, agents, now)
 	repos := d.buildRepos(snap, agents, orch)
+	workspaces := buildWorkspaces(snap)
 
 	// The question a blocked agent is waiting on is the single most useful
 	// string in the ribbon, and it only exists in the pane. Attach whatever the
@@ -245,16 +248,18 @@ func (d *Daemon) reconcile(ctx context.Context) bool {
 	d.trackFocus(snap.FocusedPaneID, agents)
 
 	out := model.Snapshot{
-		GeneratedAt:   now,
-		DaemonPID:     os.Getpid(),
-		HerdrVersion:  snap.Version,
-		Repos:         repos,
-		Attention:     ribbon,
-		Orch:          orch,
-		FocusedPane:   snap.FocusedPaneID,
-		PreviousAgent: d.previousAgent(),
-		FocusHistory:  append([]string(nil), d.persist.FocusHistory...),
-		Counts:        countOf(repos, ribbon),
+		GeneratedAt:      now,
+		DaemonPID:        os.Getpid(),
+		HerdrVersion:     snap.Version,
+		Repos:            repos,
+		Workspaces:       workspaces,
+		Attention:        ribbon,
+		Orch:             orch,
+		FocusedPane:      snap.FocusedPaneID,
+		FocusedWorkspace: snap.FocusedWorkspaceID,
+		PreviousAgent:    d.previousAgent(),
+		FocusHistory:     append([]string(nil), d.persist.FocusHistory...),
+		Counts:           countOf(repos, workspaces, ribbon),
 	}
 
 	body, err := json.Marshal(out)
@@ -270,8 +275,19 @@ func (d *Daemon) reconcile(ctx context.Context) bool {
 	return true
 }
 
-func countOf(repos []model.Repo, ribbon []model.Attention) model.Counts {
-	c := model.Counts{Repos: len(repos), NeedsYou: len(ribbon)}
+// buildWorkspaces carries herdr's workspaces through in number order, so the
+// overlay can draw a tile for one holding no agent at all.
+func buildWorkspaces(snap *herdr.Snapshot) []model.Workspace {
+	out := make([]model.Workspace, 0, len(snap.Workspaces))
+	for _, w := range snap.Workspaces {
+		out = append(out, model.Workspace{ID: w.WorkspaceID, Number: w.Number, Label: w.Label})
+	}
+	slices.SortStableFunc(out, func(a, b model.Workspace) int { return cmp.Compare(a.Number, b.Number) })
+	return out
+}
+
+func countOf(repos []model.Repo, workspaces []model.Workspace, ribbon []model.Attention) model.Counts {
+	c := model.Counts{Repos: len(repos), Workspaces: len(workspaces), NeedsYou: len(ribbon)}
 	for _, r := range repos {
 		c.Agents += len(r.Agents)
 		c.NonAgents += len(r.OtherPanes)

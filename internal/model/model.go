@@ -94,11 +94,22 @@ func (a Agent) Age(now time.Time) time.Duration {
 }
 
 // Pane is a non-agent pane: dev servers, log tails, shells. Ignored for triage,
-// shown as a one-line footer per repo.
+// shown as a one-line footer per repo, and grouped by WorkspaceID onto an
+// empty workspace tile when its workspace holds no agent at all.
 type Pane struct {
-	PaneID  string `json:"pane_id"`
-	Label   string `json:"label"`
-	Command string `json:"command,omitempty"`
+	PaneID      string `json:"pane_id"`
+	WorkspaceID string `json:"workspace_id"`
+	Label       string `json:"label"`
+	Command     string `json:"command,omitempty"`
+}
+
+// Workspace is one of herdr's workspaces, carried through so the overlay can
+// draw a tile for one that holds no agent at all: a repo card alone has
+// nowhere to put it.
+type Workspace struct {
+	ID     string `json:"id"`
+	Number int    `json:"number"`
+	Label  string `json:"label"`
 }
 
 // Repo is one discovered repository. Identity is keyed on (repo, worktree) from
@@ -207,9 +218,15 @@ type Snapshot struct {
 	DaemonPID    int       `json:"daemon_pid"`
 	HerdrVersion string    `json:"herdr_version,omitempty"`
 
-	Repos     []Repo       `json:"repos"`
-	Attention []Attention  `json:"attention"`
-	Orch      Orchestrator `json:"orchestrator"`
+	Repos      []Repo       `json:"repos"`
+	Workspaces []Workspace  `json:"workspaces"`
+	Attention  []Attention  `json:"attention"`
+	Orch       Orchestrator `json:"orchestrator"`
+
+	// FocusedWorkspace is herdr's FocusedWorkspaceID, straight through. The
+	// grid marks this workspace's tiles so you can tell where you are without
+	// leaving the overlay.
+	FocusedWorkspace string `json:"focused_workspace,omitempty"`
 
 	// FocusedPane is where you are now. PreviousAgent is the agent you were in
 	// before it, which is what the back key returns you to. Both are tracked by
@@ -229,8 +246,9 @@ type Snapshot struct {
 // Counts are totals over the whole snapshot, so a reader does not have to walk
 // Repos for them.
 type Counts struct {
-	Repos  int `json:"repos"`
-	Agents int `json:"agents"`
+	Repos      int `json:"repos"`
+	Workspaces int `json:"workspaces"`
+	Agents     int `json:"agents"`
 	// NeedsYou is the number of rows in Attention, so never more than the
 	// ribbon's cap of four.
 	NeedsYou int `json:"needs_you"`

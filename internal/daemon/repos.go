@@ -111,9 +111,10 @@ func (d *Daemon) buildRepos(snap *herdr.Snapshot, agents map[string]model.Agent,
 		// real foreground process where the daemon has one: a dead dev server
 		// shows as "shell", which is the information you actually wanted.
 		r.OtherPanes = append(r.OtherPanes, model.Pane{
-			PaneID:  p.PaneID,
-			Label:   paneLabel(p, procs[p.PaneID]),
-			Command: procs[p.PaneID],
+			PaneID:      p.PaneID,
+			WorkspaceID: p.WorkspaceID,
+			Label:       paneLabel(p, procs[p.PaneID]),
+			Command:     procs[p.PaneID],
 		})
 	}
 
