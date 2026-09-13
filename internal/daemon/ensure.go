@@ -11,6 +11,9 @@ import (
 	"github.com/ofelcan164/muster/internal/state"
 )
 
+// daemonName is the executable the manifest's [[build]] steps produce.
+const daemonName = "musterd"
+
 // Ensure starts a daemon if one is not already running, and returns
 // immediately either way.
 //
@@ -29,9 +32,6 @@ import (
 // `herdr update --handoff`, and because the install action starts the daemon
 // too: startup hooks do not fire when a plugin is linked mid-session, so
 // linking Muster has to work without waiting for a restart.
-// daemonName is the executable the manifest's [[build]] steps produce.
-const daemonName = "musterd"
-
 func Ensure() (started bool, err error) {
 	if _, err := state.EnsureDir(); err != nil {
 		return false, err

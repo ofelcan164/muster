@@ -5,19 +5,29 @@ on:
     branches: [master]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     # macOS is a real check, not decoration: the daemon relies on Setsid and
     # Flock, and there are no build tags to hide a break behind.
+    #
+    # Two Go versions. go.mod names the floor, and an empty go-version falls
+    # back to it, which keeps go.mod the only place a version is written down.
+    # The other leg is what people installing this actually build with.
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
+        go: ["", stable]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          go-version: ${{ matrix.go }}
       - run: go build ./...
       - run: go vet ./...
+      - run: test -z "$(gofmt -l .)"
       - run: go test ./... -race

@@ -1,5 +1,7 @@
 bin/
-# scaffolding for the publish review, remove before publishing
+
+# local scratch that is not part of the plugin: the publish review and its
+# working notes. Ignored rather than deleted, since they are still useful here.
 docs/publish-audit.html
 docs/TODOs.md
 
@@ -7,8 +9,11 @@ docs/TODOs.md
 snapshot.json
 state.json
 ui.json
+ui.json.lock
 chain.json
+keys.optout
 musterd.log
+musterd.log.1
 musterd.lock
 musterd.spawn.lock
 

@@ -85,6 +85,16 @@ description = "Write muster-report to ~/.agents/skills and link it into Claude C
 contexts = ["global"]
 command = ["./bin/muster", "install-skill"]
 
+# The only way to drop the keys and keep the overlay. `plugin install` puts the
+# binaries in herdr's own checkout rather than on PATH, so without an action of
+# its own this is a command the README could name and nobody could run.
+[[actions]]
+id = "uninstall-keys"
+title = "Remove Muster's keybindings, keep the overlay"
+description = "Take the three Muster keys back out of your herdr config and remember the refusal, so the startup hook stops rebinding them. Muster stays installed and openable from this menu."
+contexts = ["global"]
+command = ["./bin/muster", "uninstall-keys"]
+
 # herdr has no uninstall hook: `plugin unlink` leaves files alone and plugins
 # clean up after themselves. Without this action, unlinking Muster strands three
 # keybindings pointing at a plugin that is gone.

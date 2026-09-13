@@ -14,21 +14,31 @@ last message along the bottom](docs/overlay.png)
 
 ## Install
 
+Needs herdr 0.9.0 and Go on `PATH`; herdr builds plugins from source. Full list
+under [Requirements](#requirements).
+
 ```sh
 herdr plugin install ofelcan164/muster
 ```
 
-That is the whole install. Muster binds its keys itself: the startup hook runs
+That is the whole install. There are no release tags yet, so this tracks the
+default branch. Muster binds its keys itself: the startup hook runs
 `muster install --auto`, which starts the daemon and writes the keybindings.
 Installing mid-session gets no startup hook, so opening the overlay once from
 herdr's action menu does the same job.
 
-To keep the overlay and skip the global keys, run `muster install --no-keys`,
-or `muster uninstall-keys` if they are already in. Either records the refusal
-in the state dir, and `--auto` honours it from then on, so the startup hook
-stops putting them back. The **Install Muster's keybindings** action asks for
-them again. (The **Uninstall Muster's keybindings and skill** action is the
-full removal, skill included, not a way to drop just the keys.)
+To keep the overlay and skip the global keys, use the **Remove Muster's
+keybindings, keep the overlay** action, or run `muster install --no-keys`
+before the first install. Either records the refusal in the state dir, and
+`--auto` honours it from then on, so the startup hook stops putting them back.
+The **Install Muster's keybindings** action asks for them again. (The
+**Uninstall Muster's keybindings and skill** action is the full removal, skill
+included.)
+
+The actions matter here because `herdr plugin install` puts the binaries in
+herdr's own checkout rather than on your `PATH`. Every `muster` command below
+is reachable that way; from a source checkout you can run `./bin/muster`
+directly instead.
 
 From source instead, if you want to hack on it:
 
@@ -115,6 +125,7 @@ muster open | jump orchestrator | jump previous
 muster install [--key <letter>] [--no-keys] [--auto] | uninstall [--purge]
 muster install-skill | uninstall-skill | uninstall-keys
 muster mark-orchestrator
+muster --help
 muster chain get [--json] | set <spec> [--independent a,b] [--by NAME] | clear
 muster discover
 
@@ -139,6 +150,12 @@ muster chain set "contracts > api > web,mobile" --independent infra
 read it back with `muster chain get` to confirm or replace it. Without a chain
 the gate rule stays silent rather than guessing.
 
+Who runs that: whoever has the binary and the state dir. An agent pane has
+neither, so either you set it, or you give the orchestrator the full path to
+`muster` and its `--state-dir`. The reporting skill deliberately does not teach
+it, since a skill that names a path that does not exist on the reader's machine
+is worse than one that stays quiet.
+
 The task lines come separately, through `herdr pane report-metadata`
 (`task`, `blocked_on`, `note` tokens). The reporting skill teaches the
 orchestrator to write them at dispatch time and rewrite them when the work
@@ -158,9 +175,9 @@ free, and because something has to watch while the overlay is closed. Reading
 and decoding the snapshot is all the overlay does at open time;
 `go test ./internal/daemon -bench ReadSnapshot` measures it on your machine.
 
-Colour and border are pure hashes of the repo key, so those match on any
-machine. Sigils are not: they are assigned round-robin in discovery order, so
-no two repos collide until there are more repos than sigils. Grid slots are
+Colour is a pure hash of the repo key, so it matches on any machine. Sigils are
+not: they follow the grid slot, skipping any mark already on screen, so two
+cards visible at once never carry the same one. Grid slots are
 pinned in `state.json` on first sight, so a repo keeps its cell and its look
 for as long as your state file lives and the grid does not move under you.
 
@@ -187,7 +204,8 @@ state dir, which is right when the plugin is going away.
 ## Troubleshooting
 
 - `muster: no state directory` from a plain shell: run through herdr, or pass
-  `--state-dir`. The README's install line assumes a herdr pane.
+  `--state-dir`. herdr sets `HERDR_PLUGIN_STATE_DIR` for its own panes and
+  plugin actions, and nothing else does.
 - The daemon is gone after herdr was down: by design it exits after 60s of an
   unreachable server and lives and dies with herdr. Re-run the install action
   or `musterd --ensure`.

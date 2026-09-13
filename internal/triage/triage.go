@@ -1,6 +1,6 @@
 // Package triage computes the attention ranking.
 //
-// The ranks come straight from the plan's triage table. Working agents are
+// The ranks come straight from the design's triage table. Working agents are
 // deliberately absent: an agent doing its job is not something that needs you.
 package triage
 

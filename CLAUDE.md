@@ -17,7 +17,8 @@ cmd/musterd           daemon: reconcile loop, dump, ensure
 internal/herdr        socket client. Never shells out to the herdr binary
 internal/daemon       reconcile loop, lifecycle, snapshot writing
 internal/discover     workspace cwd to repo identity. Reads .git directly
-internal/identity     colour/border hashed from repo key, sigil round-robin by slot
+internal/identity     colour hashed from repo key, sigil by slot, skipping any
+                      mark already on screen
 internal/chain        orchestrator-recorded dependency order (chain.json)
 internal/triage       attention ranking that fills the ribbon
 internal/state        state dir, lock, atomic writes. No invented fallback:
@@ -55,7 +56,7 @@ muster uninstall-keys | uninstall [--purge]         undoing them
 muster install-skill | uninstall-skill              the orchestrator reporting skill
 muster mark-orchestrator                            run on the orchestrator's pane
 muster chain get [--json] | set <spec> [--independent a,b] [--by NAME] | clear
-muster discover                                     rescan after workspace/worktree appears
+muster discover                                     make sure the daemon is up; the event hooks call it
 
 musterd --ensure          start a daemon if none is running, then exit at once
 musterd --daemon          run as the daemon

@@ -33,7 +33,7 @@ herdr api snapshot    # live session state
    with the pane. Anything that must outlive it needs `Setsid`
    (`syscall.SysProcAttr{Setsid: true}`). This is how the daemon must start.
 
-0. **There is no way to ship a prebuilt binary.** The manifest schema, read
+4. **There is no way to ship a prebuilt binary.** The manifest schema, read
    out of the 0.9.0 binary on 2026-09-10, is exactly `id`, `version`,
    `min_herdr_version`, `description`, `platforms`, `build`, `startup`,
    `actions`, `events`, `panes`, `link_handlers`. No asset or release field.
@@ -328,7 +328,7 @@ HERDR_PLUGIN_CONTEXT_JSON
 
 Always call herdr through `HERDR_BIN_PATH`, not a bare `herdr`.
 
-## Config surface Muster writes
+## herdr config, and what Muster writes into it
 
 `[ui.sidebar.agents] rows` takes multi-row layouts. Builtins: `state_icon`,
 `state_text`, `workspace`, `tab`, `pane`, `agent`, `terminal_title`,
@@ -351,9 +351,10 @@ To check config without touching the real one, redirect the config home:
 Only `[[actions]]` ids are addressable. `plugin action list` returns the
 `[[actions]]` entries and not the `home` pane entrypoint, and
 `herdr plugin action invoke muster.home` returns `plugin_action_not_found` while
-`muster.open` runs. So `prefix+m` has to bind to an `[[actions]]` entry that
-shells out to `herdr plugin pane open`, costing one extra process spawn on the
-hottest path.
+`muster.open` runs. So `prefix+m` binds an `[[actions]]` entry that asks the
+server to open the pane, over the socket rather than through the herdr binary
+(`plugin.pane.open`, see internal/ui/run.go), costing one extra process spawn on
+the hottest path.
 
 Watch out: `herdr config check` does not resolve action ids. It accepts
 `command = "totally.bogus-nonexistent"` as `config: ok`, so a keybinding

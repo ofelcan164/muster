@@ -1,8 +1,10 @@
 package herdr
 
-// Record shapes below mirror herdr's success_response schema. Only the fields
-// Muster reads are declared; herdr omits empty maps and null objects, so every
-// optional field has to tolerate being absent.
+// Record shapes below mirror herdr's success_response schema. They cover more
+// than Muster reads: the shape of a record is documentation of the API, and the
+// fields nobody reads yet are the ones that say what else is on offer. herdr
+// omits empty maps and null objects, so every optional field has to tolerate
+// being absent.
 
 type Scroll struct {
 	ViewportRows int `json:"viewport_rows"`
@@ -93,9 +95,9 @@ type Snapshot struct {
 
 // SessionSnapshot is the daemon's authoritative read of the world.
 //
-// The event stream is only ever a hint that something changed: herdr replays
-// historical events on every subscribe, including events for panes and
-// workspaces that no longer exist, so state is always rebuilt from here.
+// The event stream is only ever a hint that something changed, never a log:
+// 0.8.2 replayed closed panes on every subscribe, and 0.9.0 promises nothing
+// about ordering either, so state is always rebuilt from here.
 func (c *Client) SessionSnapshot() (*Snapshot, error) {
 	var out struct {
 		Snapshot Snapshot `json:"snapshot"`
@@ -133,8 +135,8 @@ func (c *Client) PaneRead(paneID, source string, lines int) (string, error) {
 }
 
 // PaneForegroundProcess returns the name of the process running in a pane, or
-// "" when the pane has none. 0.95 to 4ms per call, measured 2026-09-10; most of
-// that is the read buffer Call allocates, not the server.
+// "" when the pane has none. 0.95 to 4ms per call, measured 2026-09-10 against
+// a read buffer that has since shrunk to 16KiB.
 //
 // herdr reports the whole foreground process group; the last entry is the
 // innermost process, which is the one worth showing. A pane sitting at a prompt

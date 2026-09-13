@@ -82,8 +82,6 @@ func (d *Daemon) buildAgents(snap *herdr.Snapshot, now time.Time) map[string]mod
 }
 
 // stampStatus returns when the pane entered its current status, recording the
-// transition the first time it is seen.
-// stampStatus returns when the pane entered its current status, recording the
 // transition the first time it is seen. The second return reports whether the
 // daemon actually watched that transition, which is what makes the age honest.
 func (d *Daemon) stampStatus(paneID, status string, now time.Time) (time.Time, bool) {

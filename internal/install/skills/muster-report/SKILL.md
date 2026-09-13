@@ -28,8 +28,8 @@ herdr pane report-metadata <pane-id> --source muster \
 | Token | What it is for |
 |---|---|
 | `task` | What this agent is doing. One sentence, present tense. This is the line Muster shows. |
-| `blocked_on` | What this agent is waiting on, when it is parked. A PR reference, a repo name, whatever names the thing. |
-| `note` | Anything you want on the card that is not the task. |
+| `blocked_on` | What this agent is waiting on, when it is parked. A PR reference, a repo name, whatever names the thing. Read back by `musterd dump`, not shown on the card. |
+| `note` | Anything else worth recording. Read back by `musterd dump`, not shown on the card. |
 | `role` | Set to `orchestrator` on your own pane. Muster's mark-orchestrator action does this for you. |
 
 Set `--ttl-ms 86400000` so a line expires after a day rather than outliving the

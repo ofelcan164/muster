@@ -54,8 +54,9 @@ func Dump(w io.Writer, s *model.Snapshot, now time.Time) {
 		compactDur(age), orDash(s.HerdrVersion), s.DaemonPID)
 	fmt.Fprintln(w)
 
-	// Ranked ribbon. Absent entirely when nothing needs you, which is the
-	// point: an empty ribbon is a signal, not a gap to fill.
+	// Ranked ribbon. The overlay drops it entirely when nothing needs you,
+	// since an empty ribbon is a signal rather than a gap to fill. Here it says
+	// so out loud: a dump with a section missing reads as a dump that failed.
 	if len(s.Attention) == 0 {
 		fmt.Fprintln(w, "NEEDS YOU")
 		fmt.Fprintln(w, "  (nothing)")

@@ -25,7 +25,7 @@ func SetDir(dir string) { override = dir }
 
 // ErrNoStateDir is returned when Muster has nowhere it has been told to write.
 var ErrNoStateDir = errors.New(
-	"no state directory: run musterd through herdr, or pass --state-dir")
+	"no state directory: run through herdr, or pass --state-dir")
 
 // Dir resolves Muster's state directory.
 //

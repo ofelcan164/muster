@@ -1,4 +1,4 @@
-// Package herdr is a thin client for the herdr 0.8.2 unix socket API.
+// Package herdr is a thin client for the herdr 0.9.0 unix socket API.
 //
 // Everything the daemon needs is on the socket, so nothing here shells out to
 // the herdr binary. Requests are newline-delimited JSON objects; every reply is

@@ -4,8 +4,8 @@
 //	muster open                ask herdr to open that pane, for a keybinding
 //	muster jump <target>       the orchestrator, or the previous agent
 //	muster mark-orchestrator   mark the pane this runs in
-//	muster discover            rescan after a workspace or worktree appears
-//	muster install | uninstall | install-skill | uninstall-skill
+//	muster discover            make sure the daemon is up after a workspace appears
+//	muster install | uninstall | install-skill | uninstall-skill | uninstall-keys
 //	muster chain get | set | clear
 //
 // Bare invocation is the overlay itself, one process per opening rather than
@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"time"
@@ -144,25 +145,39 @@ func main() {
 		// overlay.
 		os.Exit(runOverlay())
 
+	case "-h", "--help", "help":
+		usage(os.Stdout)
+
 	default:
-		usage()
+		fmt.Fprintf(os.Stderr, "muster: unknown command %q\n", cmd)
+		usage(os.Stderr)
 		os.Exit(2)
 	}
 }
 
-func usage() {
-	fmt.Fprint(os.Stderr, `muster — the Muster client
+func usage(w io.Writer) {
+	fmt.Fprint(w, `muster — the Muster client
 
 usage:
+  muster                           open the overlay (herdr's [[panes]] command)
+  muster open                      ask herdr to open the overlay, for a keybinding
+  muster jump orchestrator|previous  focus one of them
+  muster mark-orchestrator         mark the pane this runs in as the orchestrator
   muster chain get [--json]        print the recorded dependency order
   muster chain set <spec> [--independent a,b] [--by NAME]
   muster chain clear
-  muster install [--key <letter>]  start the daemon and install keybindings
+  muster install [--key <letter>] [--no-keys] [--auto]
+                                   start the daemon and install keybindings
   muster install-skill             install the reporting skill for the orchestrator
   muster uninstall-keys            drop the keybindings, keep everything else
   muster uninstall-skill           drop the reporting skill
   muster uninstall [--purge]       remove everything Muster wrote outside itself
-  muster discover                  rescan after a workspace or worktree appears
+  muster discover                  make sure the daemon is up, for the event hooks
+
+any command may be preceded by --state-dir <dir>, which is what herdr supplies
+through HERDR_PLUGIN_STATE_DIR. --no-keys installs without touching your herdr
+config, and --auto is the startup hook's form: it does nothing if you have said
+no to the keys before.
 
 chain spec syntax:
   "contracts > api > web,mobile"   ">" is sequence, "," is parallel
@@ -268,7 +283,8 @@ func cmdChain(args []string) int {
 		return 0
 
 	default:
-		usage()
+		fmt.Fprintf(os.Stderr, "muster chain: unknown subcommand %q\n", sub)
+		usage(os.Stderr)
 		return 2
 	}
 }

@@ -1,7 +1,8 @@
 // Mouse handling, and the hit regions it resolves against.
 //
 // A terminal click gives coordinates and nothing else, so the only way to know
-// what was clicked is to remember where the last render put things. herdr
+// what was clicked is to remember where the last render put things. The window
+// scrolls, so the regions move with it; see Model.window. herdr
 // delivers those coordinates pane-local and 0-based, measured against a real
 // mouse; see docs/herdr-api-notes.md.
 
