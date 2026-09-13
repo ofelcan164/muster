@@ -92,12 +92,10 @@ type Model struct {
 	// test must never rename one of the user's agents.
 	mark func(paneID string) error
 
-	// sort is how the grid is ordered, and moves is the manual arrangement
-	// layered on top of it.
-	sort  SortMode
-	moves []string
+	// sort is how the grid is ordered.
+	sort SortMode
 
-	// saveSort persists the sort mode, injected the same way saveOrder is.
+	// saveSort persists the sort mode, injected the same way saveDismissed is.
 	saveSort func(SortMode)
 
 	// dismissed is the acknowledged ribbon rows, pane id to the status each was
@@ -105,9 +103,10 @@ type Model struct {
 	dismissed     map[string]string
 	saveDismissed func(map[string]string)
 
-	// saveOrder persists the manual arrangement. Injected the same way reload
-	// is, so the model never touches the filesystem itself.
-	saveOrder func([]string)
+	// moveWorkspace asks herdr to move a workspace to a new position, for J and
+	// K in herdr sort. Injected the same way mark and prompt are, so a test
+	// never moves one of the user's real workspaces.
+	moveWorkspace func(workspaceID string, insertIndex int) error
 
 	// reload fetches a fresh snapshot. Injected so the model stays testable
 	// without touching the filesystem.
@@ -199,14 +198,10 @@ func (m *Model) SetSnapshot(s *model.Snapshot) {
 // SetReloader supplies the function the overlay calls to refresh itself.
 func (m *Model) SetReloader(f func() *model.Snapshot) { m.reload = f }
 
-// SetManualOrder restores an arrangement made in an earlier session.
-func (m *Model) SetManualOrder(order []string) {
-	m.moves = order
-	m.rebuild()
+// SetWorkspaceMover supplies the function J and K call in herdr sort.
+func (m *Model) SetWorkspaceMover(f func(workspaceID string, insertIndex int) error) {
+	m.moveWorkspace = f
 }
-
-// SetOrderSaver supplies the function that persists the manual arrangement.
-func (m *Model) SetOrderSaver(f func([]string)) { m.saveOrder = f }
 
 // SetSort restores the sort mode chosen in an earlier session. A value from a
 // file that no longer means anything falls back to the default rather than
@@ -341,6 +336,31 @@ func (m *Model) agentByPane(paneID string) (model.Repo, model.Agent, bool) {
 		}
 	}
 	return model.Repo{}, model.Agent{}, false
+}
+
+// workspaceOf finds the workspace an agent's pane belongs to, for the
+// ribbon's workspace tag. A stopped-process row points at a non-agent pane
+// and so has no agent to look the workspace up through; it gets the zero
+// value, which draws nothing.
+func (m *Model) workspaceOf(paneID string) model.Workspace {
+	for _, r := range m.snap.Repos {
+		for _, a := range r.Agents {
+			if a.PaneID == paneID {
+				return m.workspaceByID(a.WorkspaceID)
+			}
+		}
+	}
+	return model.Workspace{}
+}
+
+// workspaceByID finds a workspace by id.
+func (m *Model) workspaceByID(id string) model.Workspace {
+	for _, w := range m.snap.Workspaces {
+		if w.ID == id {
+			return w
+		}
+	}
+	return model.Workspace{}
 }
 
 // repoByKey finds a repo by its identity key.

@@ -23,7 +23,7 @@ func (m *Model) View() string {
 	lines = append(lines, m.headerLines()...)
 	lines = append(lines, "")
 	lines = append(lines, m.ribbonLines(len(lines))...)
-	lines = append(lines, m.repoLines(len(lines))...)
+	lines = append(lines, m.gridLines(len(lines))...)
 	if strip := m.stripLines(len(lines) + 1); len(strip) > 0 {
 		lines = append(lines, "")
 		lines = append(lines, strip...)
@@ -94,7 +94,7 @@ func (m *Model) headerLines() []string {
 func (m *Model) header() string {
 	c := m.snap.Counts
 	left := styTitle.Render("MUSTER") + "  " +
-		styMeta.Render(fmt.Sprintf("%s · %s", plural(c.Repos, "repo"), plural(c.Agents, "agent")))
+		styMeta.Render(fmt.Sprintf("%s · %s", plural(c.Workspaces, "workspace"), plural(c.Agents, "agent")))
 	// The ribbon rather than the daemon's count, which does not know what you
 	// have dismissed. They are the same number until you dismiss something.
 	if n := len(m.ribbonRows()); n > 0 {
@@ -130,12 +130,19 @@ func (m *Model) ribbonLines(startY int) []string {
 		selected := m.isActive(ti)
 
 		repo := m.repoByKey(a.RepoKey)
+		ws := m.workspaceOf(a.PaneID)
 		accent := reasonAccent(a.Reason)
 
 		bar := accentBar(accent)
 		idx := lipgloss.NewStyle().Foreground(accent).Bold(true).Render(fmt.Sprintf("%d", i+1))
 		label := badge(reasonLabel(a.Reason, a.Status), accent)
-		who := repoStyle(repo).Bold(true).Render(repo.Sigil+" "+repo.Display) +
+		// The workspace comes first, faint, the way every tile in the grid leads
+		// with it: the ribbon and the grid should read as the same map.
+		wsTag := ""
+		if ws.Label != "" {
+			wsTag = styFaint.Render(fmt.Sprintf("%d %s", ws.Number, ws.Label)) + " "
+		}
+		who := wsTag + repoStyle(repo).Bold(true).Render(repo.Sigil+" "+repo.Display) +
 			styFaint.Render("/") + styFG.Bold(true).Render(a.Agent)
 		age := styMeta.Render(ageText(a.Age, a.AgeKnown))
 
@@ -151,7 +158,7 @@ func (m *Model) ribbonLines(startY int) []string {
 			}
 		} else {
 			head := fmt.Sprintf("%s %s %s %s %s  ",
-				bar, idx, pad(label, 11), pad(who, 34), pad(age, 4))
+				bar, idx, pad(label, 11), pad(who, 42), pad(age, 4))
 			// The detail is the sentence you actually read, so it gets the
 			// bright foreground rather than the dim one the grid uses.
 			head += styFG.Render(truncate(a.Detail, max(10, m.width-lipgloss.Width(head)-1)))
@@ -182,20 +189,22 @@ func (m *Model) ribbonLines(startY int) []string {
 	return append(out, "")
 }
 
-func (m *Model) repoLines(startY int) []string {
-	repos := m.orderedRepos(m.visibleRepos())
-	if len(repos) == 0 {
+// gridLines renders the grid: one tile per agent, one dim tile per workspace
+// holding none.
+func (m *Model) gridLines(startY int) []string {
+	tiles := m.orderedTiles(m.visibleTiles())
+	label := "agents & workspaces"
+	if m.filter != "" {
+		label = "matches"
+	}
+	if len(tiles) == 0 {
 		if m.filter != "" {
 			return []string{m.sectionRule("no matches"),
 				styDim.Render("  nothing matches " + m.filter)}
 		}
-		return []string{m.sectionRule("repos"), styDim.Render("  no repos discovered yet")}
+		return []string{m.sectionRule(label), styDim.Render("  no workspaces discovered yet")}
 	}
 
-	label := "repos"
-	if m.filter != "" {
-		label = "matches"
-	}
 	out := []string{m.sectionRule(label)}
 
 	cols := columnsFor(m.width)
@@ -210,15 +219,15 @@ func (m *Model) repoLines(startY int) []string {
 		}
 	}
 
-	for i := 0; i < len(repos); i += cols {
+	for i := 0; i < len(tiles); i += cols {
 		var cells [][]string
 		height := 0
-		for c := 0; c < cols && i+c < len(repos); c++ {
+		for c := 0; c < cols && i+c < len(tiles); c++ {
 			// Each column starts after the cells before it, plus one space of
 			// separator per gap. Passing the offset is what makes every column
 			// clickable rather than only the first.
 			x0 := c * (cellWidth + 1)
-			lines := m.cardLines(repos[i+c], cellWidth, startY+len(out), x0)
+			lines := m.tileLines(tiles[i+c], cellWidth, startY+len(out), x0)
 			cells = append(cells, lines)
 			if len(lines) > height {
 				height = len(lines)
@@ -245,65 +254,35 @@ func (m *Model) repoLines(startY int) []string {
 	return out
 }
 
-// cardLines renders one repo card.
+// tileLines renders one tile, agent or empty workspace, and claims its lines
+// for the one target the whole tile shares.
 //
-// Every line is built alongside the target it belongs to, then styled from that
-// target's state. Doing it in one pass is what keeps the highlight and the
-// click region identical: they are derived from the same mapping, so a card
-// cannot end up clickable in places it does not light up.
-func (m *Model) cardLines(r model.Repo, width, startY, x0 int) []string {
-	style := repoStyle(r)
+// Every line is built alongside the target it belongs to, then styled from
+// that target's state. Doing it in one pass is what keeps the highlight and
+// the click region identical: they are derived from the same mapping, so a
+// tile cannot end up clickable in places it does not light up.
+func (m *Model) tileLines(t tile, width, startY, x0 int) []string {
+	var (
+		lines []string
+		key   string
+	)
+	if t.isAgent() {
+		lines = m.agentTileLines(t, width)
+		key = "pane:" + t.Agent.PaneID
+	} else {
+		lines = m.emptyTileLines(t, width)
+		key = "ws:" + t.Workspace.ID
+	}
+	ti := m.targetIndex(key)
 
-	type row struct {
-		text   string
-		target int
-	}
-	var rows []row
-
-	head := style.Bold(true).Render(r.Sigil + " " + strings.ToUpper(r.Display))
-	if r.Branch != "" {
-		head += " " + styFaint.Render(truncate(r.Branch, max(6, width-lipgloss.Width(head)-3)))
-	}
-	// The header belongs to the repo target when nothing is running here, and
-	// otherwise to the first agent, so clicking the title does something
-	// sensible either way.
-	headTarget := m.targetIndex("repo:" + r.Key)
-	if len(r.Agents) > 0 {
-		headTarget = m.targetIndex("pane:" + r.Agents[0].PaneID)
-	}
-	rows = append(rows, row{" " + head, headTarget})
-
-	if len(r.Agents) == 0 {
-		rows = append(rows, row{styFaint.Render("   no agents"), headTarget})
-	}
-	for _, a := range r.Agents {
-		ti := m.targetIndex("pane:" + a.PaneID)
-		for _, line := range m.agentLines(a, width) {
-			rows = append(rows, row{line, ti})
-		}
-	}
-
-	if len(r.OtherPanes) > 0 {
-		labels := make([]string, 0, len(r.OtherPanes))
-		for _, p := range r.OtherPanes {
-			labels = append(labels, p.Label)
-		}
-		foot := fmt.Sprintf("   %s · %s", plural(len(r.OtherPanes), "pane"),
-			truncate(strings.Join(labels, " · "), max(6, width-18)))
-		rows = append(rows, row{styFaint.Render(foot), headTarget})
-	}
-	// A blank tail line, still part of the card so the hover block reads as one
-	// shape rather than stopping mid-card.
-	rows = append(rows, row{"", headTarget})
-
-	out := make([]string, 0, len(rows))
-	for i, rw := range rows {
-		m.claim(startY+i, x0, width, rw.target)
-		line := fitLine(rw.text, width)
-		if m.isActive(rw.target) {
+	out := make([]string, len(lines))
+	for i, text := range lines {
+		m.claim(startY+i, x0, width, ti)
+		line := fitLine(text, width)
+		if m.isActive(ti) {
 			line = paint(line, stySel)
 		}
-		out = append(out, line)
+		out[i] = line
 	}
 	return out
 }
@@ -324,39 +303,145 @@ func (m *Model) isActive(target int) bool {
 	return target == m.cursor || target == m.hover
 }
 
-// agentLines renders one agent. Selection styling is applied by the caller, so
-// that a whole card highlights as a block rather than a single row.
-func (m *Model) agentLines(a model.Agent, width int) []string {
-	st := statusStyle(a.Status, m.frame)
-
+// agentTileLines renders one agent tile, four lines at most: the workspace
+// number, status and repo; the workspace label and branch; the task line; and,
+// only when the workspace also holds non-agent panes, the shared footer every
+// agent tile in it carries.
+func (m *Model) agentTileLines(t tile, width int) []string {
+	a := t.Agent
 	marker := " "
 	if a.IsOrchestrator {
 		marker = "⌂"
 	}
-	line := fmt.Sprintf("  %s%s %s %s",
+	st := statusStyle(a.Status, m.frame)
+	repoName := repoStyle(t.Repo).Bold(true).Render(t.Repo.Sigil + " " + t.Repo.Display)
+	head := fmt.Sprintf("%s %s%s %s%s%s",
+		workspaceNumCol(t.Workspace, m.snap.FocusedWorkspace),
 		marker, st.Render(statusIcon(a.Status, m.frame)),
-		styFG.Render(truncate(a.Name, 14)),
-		styMeta.Render(ageText(a.Age(time.Now()), a.AgeKnown)))
-
-	out := []string{line}
-
-	// Task line, dimmed and marked when it came from a lower rung of the
-	// ladder. Showing doubt beats showing false confidence.
-	if task := taskText(a); task != "" {
-		style := styDim
-		if a.TaskSource == model.TaskFromOrchestratorStale {
-			style = styFaint
-		}
-		out = append(out, style.Render("     "+truncate(task, max(6, width-6))))
+		repoName, styFaint.Render("/"), styFG.Bold(true).Render(truncate(a.Name, 14)))
+	age := styMeta.Render(ageText(a.Age(time.Now()), a.AgeKnown))
+	if gap := width - lipgloss.Width(head) - lipgloss.Width(age) - 1; gap > 0 {
+		head += strings.Repeat(" ", gap) + age
 	}
-	return out
+	lines := []string{head}
+
+	line2 := "    " + styDim.Render(truncate(t.Workspace.Label, 16))
+	if t.Repo.Branch != "" {
+		line2 += " " + styFaint.Render("· "+truncate(t.Repo.Branch, max(6, width-lipgloss.Width(line2)-3)))
+	}
+	lines = append(lines, line2)
+
+	if line, ok := m.tileTaskLine(a, width); ok {
+		lines = append(lines, line)
+	}
+	if len(t.Panes) > 0 {
+		lines = append(lines, styFaint.Render("    "+tilePanesFooter(t)))
+	}
+	lines = append(lines, "")
+	return lines
+}
+
+// tileTaskLine is the tile's task line: the blocking question in bright
+// foreground when there is one, the task otherwise, dimmed or marked when it
+// came from a lower rung of the fallback ladder. Showing doubt beats showing
+// false confidence.
+func (m *Model) tileTaskLine(a model.Agent, width int) (string, bool) {
+	task := taskText(a)
+	if task == "" {
+		return "", false
+	}
+	style := styDim
+	switch {
+	case a.Question != "":
+		style = styFG
+	case a.TaskSource == model.TaskFromOrchestratorStale:
+		style = styFaint
+	}
+	return style.Render("    " + truncate(task, max(6, width-4))), true
+}
+
+// tilePanesFooter is the line every agent tile in a workspace shares once it
+// also holds non-agent panes: how many agents and panes, and the pane labels.
+func tilePanesFooter(t tile) string {
+	labels := make([]string, 0, len(t.Panes))
+	for _, p := range t.Panes {
+		labels = append(labels, p.Label)
+	}
+	return fmt.Sprintf("%s · %s · %s", plural(t.Agents, "agent"), plural(len(t.Panes), "pane"), strings.Join(labels, " · "))
+}
+
+// emptyTileLines renders a workspace holding no agent: the number and label,
+// dim and lowercase, then one faint line with the sigils of the repos its
+// panes sit in and the pane labels. One line shorter than an agent tile, and
+// with no bold and no colour except the sigils.
+func (m *Model) emptyTileLines(t tile, width int) []string {
+	num := workspaceNumCol(t.Workspace, m.snap.FocusedWorkspace)
+	line1 := fmt.Sprintf("%s   %s", num, styDim.Render(strings.ToLower(t.Workspace.Label)))
+
+	sigils := emptyTileSigils(t)
+	detail := styFaint.Render(emptyTileDetail(t))
+	line2 := "    " + detail
+	if sigils != "" {
+		line2 = "    " + sigils + " " + detail
+	}
+	return []string{line1, line2, ""}
+}
+
+// emptyTileDetail is an empty tile's second line: the one repo its panes sit
+// in and its branch, or every repo's name when there is more than one, then
+// the pane labels.
+func emptyTileDetail(t tile) string {
+	var parts []string
+	switch len(t.Repos) {
+	case 0:
+	case 1:
+		r := t.Repos[0]
+		s := r.Display
+		if r.Branch != "" {
+			s += " " + r.Branch
+		}
+		parts = append(parts, s)
+	default:
+		for _, r := range t.Repos {
+			parts = append(parts, r.Display)
+		}
+	}
+	for _, p := range t.Panes {
+		parts = append(parts, p.Label)
+	}
+	return strings.Join(parts, " · ")
+}
+
+// emptyTileSigils is each repo an empty workspace's panes sit in, marked in
+// its own colour, run together with no separator.
+func emptyTileSigils(t tile) string {
+	var b strings.Builder
+	for _, r := range t.Repos {
+		b.WriteString(repoStyle(r).Render(r.Sigil))
+	}
+	return b.String()
+}
+
+// workspaceNumCol is the two-column workspace number every tile leads with,
+// marked with ▸ when it is the workspace you are in.
+func workspaceNumCol(ws model.Workspace, focused string) string {
+	s := fmt.Sprintf("%d", ws.Number)
+	if ws.ID != "" && ws.ID == focused {
+		s = "▸" + s
+	} else {
+		s = " " + s
+	}
+	return pad(s, 2)
 }
 
 func (m *Model) viewFilterBar() string {
-	repos := m.visibleRepos()
-	agents := 0
-	for _, r := range repos {
-		agents += len(r.Agents)
+	tiles := m.visibleTiles()
+	agents, workspaces := 0, map[string]bool{}
+	for _, t := range tiles {
+		workspaces[t.Workspace.ID] = true
+		if t.isAgent() {
+			agents++
+		}
 	}
 	cursor := ""
 	if m.filtering {
@@ -366,11 +451,11 @@ func (m *Model) viewFilterBar() string {
 	if m.filtering {
 		hint = "  esc keeps results · enter jumps"
 	}
-	// Count repos as well as agents. A search that matches a repo with nothing
-	// running in it is a hit, and reporting "0 of 2" for it reads as a miss.
+	// Count workspaces as well as agents. A search that matches an empty
+	// workspace is a hit, and reporting "0 of 2" for it reads as a miss.
 	bar := " " + styMeta.Render("search ") + styMatch.Render(m.filter) + cursor +
 		styFaint.Render(fmt.Sprintf("  %s · %s%s",
-			plural(len(repos), "repo"), plural(agents, "agent"), hint))
+			plural(len(workspaces), "workspace"), plural(agents, "agent"), hint))
 	return fitLine(bar, m.width)
 }
 

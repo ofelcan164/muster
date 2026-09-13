@@ -111,7 +111,7 @@ func (m *Model) skillOffer(y int) (string, bool) {
 		styMeta.Render("· the reporting skill is not installed")+" "+
 		styHint.Render("· S installs it"), m.width)
 
-	if ti := m.findTarget("repo:", kindBanner); ti >= 0 {
+	if ti := m.bannerTargetIndex(); ti >= 0 {
 		m.noteRegion(y, 0, m.width-1, ti)
 		if m.isActive(ti) {
 			line = paint(line, stySel)

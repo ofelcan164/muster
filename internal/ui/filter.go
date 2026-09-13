@@ -6,60 +6,55 @@ import (
 	"cmp"
 	"slices"
 	"strings"
-
-	"github.com/ofelcan164/muster/internal/model"
 )
 
-// visibleRepos applies the filter, best match first. Filtering collapses the
+// visibleTiles applies the filter, best match first. Filtering collapses the
 // grid into a flat ranked list, because once you are filtering you already know
 // what you want and spatial memory is not doing any work.
-func (m *Model) visibleRepos() []model.Repo {
+func (m *Model) visibleTiles() []tile {
+	all := buildTiles(m.snap)
 	terms := strings.Fields(strings.ToLower(m.filter))
 	if len(terms) == 0 {
-		return m.snap.Repos
+		return all
 	}
 	type scored struct {
-		repo  model.Repo
+		tile  tile
 		score int
 	}
 	var hits []scored
-	for _, r := range m.snap.Repos {
-		own := []string{r.Display, r.Name, r.Branch}
-		// A repo that matches on its own name or branch is a hit, whether or not
-		// anything is running in it. Requiring a matching agent meant searching
-		// for a repo with no agents found nothing at all, which is exactly the
-		// case you hit when looking for somewhere to start work.
-		if s, ok := scoreTerms(terms, own); ok {
-			hits = append(hits, scored{r, s})
-			continue
-		}
-		var kept []model.Agent
-		best := 0
-		for _, a := range r.Agents {
-			// An agent is searched against its repo's fields as well as its own,
-			// so "web auth" finds the auth agent in the web repo. The terms are
-			// spread across both and neither field set alone holds them all.
-			s, ok := scoreTerms(terms, append([]string{a.Name, a.Task, a.Question, a.PaneID}, own...))
-			if !ok {
-				continue
-			}
-			kept = append(kept, a)
-			if s > best {
-				best = s
-			}
-		}
-		if len(kept) > 0 {
-			r.Agents = kept
-			hits = append(hits, scored{r, best})
+	for _, t := range all {
+		if s, ok := scoreTerms(terms, tileFields(t)); ok {
+			hits = append(hits, scored{t, s})
 		}
 	}
 	slices.SortStableFunc(hits, func(a, b scored) int { return cmp.Compare(b.score, a.score) })
 
-	out := make([]model.Repo, 0, len(hits))
+	out := make([]tile, 0, len(hits))
 	for _, h := range hits {
-		out = append(out, h.repo)
+		out = append(out, h.tile)
 	}
 	return out
+}
+
+// tileFields is what a tile is searched against. An agent tile is searched by
+// its own name and task as well as its repo and workspace, so "web auth" finds
+// the auth agent in the web repo. An empty tile has no agent, so it falls back
+// to the repos and panes sitting in it.
+func tileFields(t tile) []string {
+	if t.isAgent() {
+		return []string{
+			t.Agent.Name, t.Agent.Task, t.Agent.Question, t.Agent.PaneID,
+			t.Repo.Display, t.Repo.Name, t.Repo.Branch, t.Workspace.Label,
+		}
+	}
+	fields := []string{t.Workspace.Label}
+	for _, r := range t.Repos {
+		fields = append(fields, r.Display, r.Name)
+	}
+	for _, p := range t.Panes {
+		fields = append(fields, p.Label)
+	}
+	return fields
 }
 
 // scoreTerms requires every term to hit some field, and totals the best score

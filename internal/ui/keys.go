@@ -5,7 +5,6 @@ package ui
 
 import (
 	"cmp"
-	"fmt"
 	"slices"
 	"unicode/utf8"
 
@@ -165,18 +164,6 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "s":
 		// Cycle the sort. First seen is the default and where it returns to.
 		m.sort = m.sort.Next()
-		// A manual arrangement is layered on top of the sort, and one J or K
-		// records the whole visible order, which pins every card. Sorting then
-		// changed nothing on screen, in this session and every later one, since
-		// the arrangement is saved. Asking for a sort is asking for that
-		// arrangement to go.
-		if len(m.moves) > 0 {
-			m.moves = nil
-			m.notice = "dropped the manual order, sorting by " + m.sort.String()
-			if m.saveOrder != nil {
-				m.saveOrder(nil)
-			}
-		}
 		m.rebuild()
 		if m.saveSort != nil {
 			m.saveSort(m.sort)
@@ -184,11 +171,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "K":
-		m.moveSelectedRepo(-1)
-		return m, nil
+		return m, m.moveSelectedWorkspace(-1)
 	case "J":
-		m.moveSelectedRepo(1)
-		return m, nil
+		return m, m.moveSelectedWorkspace(1)
 
 	case "g", "G":
 		// The ends of the screen, which are the ends of the vertical walk.
@@ -218,6 +203,11 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// activate jumps to the selection: an agent tile's pane, an empty workspace
+// tile's workspace, or whatever the ribbon row or strip points at. Every tile
+// is exactly one jump, so unlike the old repo card there is never a choice to
+// refuse: an empty workspace tile always means workspace.focus, however many
+// panes or repos it holds.
 func (m *Model) activate() (tea.Model, tea.Cmd) {
 	// Every keystroke of a query rebuilds the targets, and a rebuild with
 	// nothing previously selected selects nothing, so enter after typing had no
@@ -226,29 +216,18 @@ func (m *Model) activate() (tea.Model, tea.Cmd) {
 	if m.cursor == noSelection && m.filter != "" && len(m.targets) > 0 {
 		m.cursor = 0
 	}
-	p := m.selectedPane()
-	if p == "" {
-		// A repo card with no agents still has panes behind it: a shell, an
-		// editor, whatever is open there. One of those is an obvious answer and
-		// keeps every tile openable. Nine of them is not an answer at all:
-		// jumping to the first of nine shells spread across nine workspaces
-		// takes the screen somewhere nobody asked to go. The t key already
-		// refuses to guess between several gates for the same reason.
-		r := m.repoByKey(m.selectedRepo())
-		switch len(r.OtherPanes) {
-		case 0:
-			m.notice = shortRepo(r) + " has nothing open to jump to"
-		case 1:
-			p = r.OtherPanes[0].PaneID
-		default:
-			m.notice = fmt.Sprintf("%s has no agent, and %s with nothing to choose between them",
-				shortRepo(r), plural(len(r.OtherPanes), "pane"))
-		}
-	}
-	if p == "" {
+	if m.cursor < 0 || m.cursor >= len(m.targets) {
 		return m, nil
 	}
-	m.jump = p
+	t := m.targets[m.cursor]
+	switch {
+	case t.paneID != "":
+		m.jump = t.paneID
+	case t.workspaceID != "":
+		m.jump = "ws:" + t.workspaceID
+	default:
+		return m, nil
+	}
 	return m, tea.Quit
 }
 

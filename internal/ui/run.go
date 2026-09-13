@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -54,17 +55,7 @@ func Run() (string, error) {
 	}
 
 	m := New(snap, warning)
-	// The arrangement made with J and K, restored from the last time the overlay
-	// was open. A grid you rearrange and that forgets is worse than one you
-	// cannot rearrange at all.
 	ui := state.LoadUI()
-	m.SetManualOrder(ui.RepoOrder)
-	m.SetOrderSaver(func(order []string) {
-		ui.RepoOrder = order
-		// A failed write costs this session's arrangement and nothing else, and
-		// there is nowhere to report it from inside a full-screen overlay.
-		_ = ui.Save()
-	})
 	m.SetSort(SortMode(ui.Sort))
 	m.SetSortSaver(func(s SortMode) {
 		ui.Sort = int(s)
@@ -98,6 +89,12 @@ func Run() (string, error) {
 		}
 		recordTold(paneID, text)
 		return nil
+	})
+	// J and K in herdr sort. The local reorder happens synchronously in the
+	// model; this is only the socket call that makes it stick.
+	m.SetWorkspaceMover(func(workspaceID string, insertIndex int) error {
+		return herdr.NewClient("").Call("workspace.move",
+			map[string]any{"workspace_id": workspaceID, "insert_index": insertIndex}, nil)
 	})
 	// Keep it live. The daemon rewrites the snapshot every few seconds, and an
 	// overlay left open should follow rather than freeze on whatever was true
@@ -147,19 +144,24 @@ func load() (*model.Snapshot, string) {
 	return nil, ""
 }
 
-// Jump focuses a pane and returns. That is the whole of jumping: the popup
-// tears down on process exit and leaves focus where it was put, with no close
-// call and no detached helper.
+// Jump focuses a pane or a workspace and returns. That is the whole of
+// jumping: the popup tears down on process exit and leaves focus where it was
+// put, with no close call and no detached helper.
 //
 // pane.focus, not agent.focus. Since 0.9.0 every attached terminal keeps its
 // own view of which tab it shows, and a socket call only moves those views for
 // workspace.focus, tab.focus and pane.focus. agent.focus moved the session's
 // focus and left the screen where it was, so a jump closed Muster and landed
-// nowhere. pane.focus also takes any pane, which a repo card with no agents
-// needs: its target is a shell or an editor, and agent.focus answered
-// agent_not_found for those.
-func Jump(paneID string) error {
-	return herdr.NewClient("").Call("pane.focus", map[string]any{"pane_id": paneID}, nil)
+// nowhere.
+//
+// A target carrying the "ws:" prefix is an empty workspace tile: it has no
+// pane of its own to focus, however many panes or repos it holds, so the
+// model hands over its workspace id instead of guessing among them.
+func Jump(target string) error {
+	if wsID, ok := strings.CutPrefix(target, "ws:"); ok {
+		return herdr.NewClient("").Call("workspace.focus", map[string]any{"workspace_id": wsID}, nil)
+	}
+	return herdr.NewClient("").Call("pane.focus", map[string]any{"pane_id": target}, nil)
 }
 
 // OpenPane asks herdr to open the overlay as a popup.

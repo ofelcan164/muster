@@ -12,7 +12,6 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
-	"slices"
 	"time"
 )
 
@@ -248,11 +247,6 @@ func UIStatePath() string { return filepath.Join(Dir(), "ui.json") }
 
 // UIState is what the overlay remembers between openings.
 type UIState struct {
-	// RepoOrder is the arrangement made with J and K, as repo keys in drawn
-	// order. Keys that no longer exist are ignored on load rather than pruned,
-	// so a repo you rearranged and then closed keeps its place if it comes back.
-	RepoOrder []string `json:"repo_order"`
-
 	// Sort is the mode cycled with s. The client is short-lived, so without
 	// this every opening started over at first-seen.
 	Sort int `json:"sort"`
@@ -300,9 +294,6 @@ func (u *UIState) Save() error {
 	var loaded UIState
 	_ = json.Unmarshal(u.lastWritten, &loaded)
 	fresh := LoadUI()
-	if !slices.Equal(u.RepoOrder, loaded.RepoOrder) {
-		fresh.RepoOrder = u.RepoOrder
-	}
 	if u.Sort != loaded.Sort {
 		fresh.Sort = u.Sort
 	}

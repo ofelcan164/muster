@@ -5,20 +5,27 @@ import (
 	"slices"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/ofelcan164/muster/internal/model"
 )
 
-// SortMode is how the repo grid is ordered.
+// SortMode is how the grid is ordered.
 //
-// First-seen is the default and the one the design argues for: a repo keeps its
-// cell forever, so you point instead of read. The others exist because a grid
-// you cannot rearrange is one bad first session away from being wrong for good.
+// First-seen is the default and the one the design argues for: a repo keeps
+// its cell forever, so you point instead of read. herdr mirrors the sidebar
+// instead, and is the only mode J and K do anything in.
 type SortMode int
 
 const (
 	SortFirstSeen SortMode = iota
 	SortAlphabetical
 	SortAttention
+	// SortHerdr is appended after SortAttention, not alongside the others in
+	// whatever order reads best: ui.json stores the sort as a bare int, and a
+	// mode inserted earlier in the list would change what every saved file
+	// means.
+	SortHerdr
 	sortModeCount
 )
 
@@ -28,6 +35,8 @@ func (s SortMode) String() string {
 		return "a-z"
 	case SortAttention:
 		return "attention"
+	case SortHerdr:
+		return "herdr"
 	default:
 		return "first seen"
 	}
@@ -36,150 +45,143 @@ func (s SortMode) String() string {
 // Next cycles through the sort modes.
 func (s SortMode) Next() SortMode { return (s + 1) % sortModeCount }
 
-// orderedRepos applies the current sort, then the user's manual moves.
-func (m *Model) orderedRepos(repos []model.Repo) []model.Repo {
-	// While filtering the order is the match ranking and nothing else. A sort or
-	// an arrangement made for the full grid on top of it would push a worse
-	// match above a better one, and position in a filtered list carries no
-	// meaning to preserve.
+// orderedTiles applies the current sort to the grid.
+func (m *Model) orderedTiles(tiles []tile) []tile {
+	// While filtering the order is the match ranking and nothing else. A sort
+	// on top of it would push a worse match above a better one, and position in
+	// a filtered list carries no meaning to preserve.
 	if m.filter != "" {
-		return repos
+		return tiles
 	}
 
-	out := append([]model.Repo(nil), repos...)
+	out := append([]tile(nil), tiles...)
 
 	switch m.sort {
 	case SortAlphabetical:
-		slices.SortStableFunc(out, func(a, b model.Repo) int {
-			return cmp.Compare(strings.ToLower(a.Display), strings.ToLower(b.Display))
+		slices.SortStableFunc(out, func(a, b tile) int {
+			return cmp.Or(
+				cmp.Compare(strings.ToLower(a.label()), strings.ToLower(b.label())),
+				cmp.Compare(a.Agent.Name, b.Agent.Name))
 		})
 	case SortAttention:
-		// Repos holding something that needs you come first, most urgent first.
-		rank := m.repoRanks()
-		slices.SortStableFunc(out, func(a, b model.Repo) int {
-			return cmp.Or(cmp.Compare(rank[a.Key], rank[b.Key]), cmp.Compare(a.GridSlot, b.GridSlot))
+		rank := m.tileRanks()
+		slices.SortStableFunc(out, func(a, b tile) int {
+			return cmp.Or(cmp.Compare(tileRank(a, rank), tileRank(b, rank)), cmp.Compare(a.slot(), b.slot()))
 		})
+	case SortHerdr:
+		// Workspace number is exactly the sidebar's own order, and the busy-first
+		// rule below does not apply here: an empty tile belongs at its sidebar
+		// position, not shuffled to the back, or this mode stops matching the
+		// sidebar it exists to mirror.
+		slices.SortStableFunc(out, func(a, b tile) int {
+			return cmp.Or(cmp.Compare(a.Workspace.Number, b.Workspace.Number), cmp.Compare(a.Agent.PaneID, b.Agent.PaneID))
+		})
+		return out
 	default:
-		slices.SortStableFunc(out, func(a, b model.Repo) int { return cmp.Compare(a.GridSlot, b.GridSlot) })
+		slices.SortStableFunc(out, func(a, b tile) int { return cmp.Compare(a.slot(), b.slot()) })
 	}
 
-	// Repos with agents always come first, whatever the sort. A quiet repo is
-	// still worth a card, but it should never sit between two you are working
+	// Agent tiles always come first, whatever the sort. An empty workspace is
+	// still worth a tile, but it should never sit between two you are working
 	// in. This runs after the sort so it never disturbs the order within each
-	// group, and before manual moves so you can still override it.
-	// A busy repo counts as 1 and a quiet one as 0, compared in reverse so the
-	// busy ones lead.
-	slices.SortStableFunc(out, func(a, b model.Repo) int {
-		return cmp.Compare(min(len(b.Agents), 1), min(len(a.Agents), 1))
+	// group.
+	slices.SortStableFunc(out, func(a, b tile) int {
+		return cmp.Compare(busyRank(b), busyRank(a))
 	})
+	return out
+}
 
-	return applyMoves(out, m.moves)
+func busyRank(t tile) int {
+	if t.isAgent() {
+		return 1
+	}
+	return 0
 }
 
 // Ranks below these come from the ribbon, which uses 1 to 5. Work sits under
 // all of them and above silence: an agent doing its job never reaches the
-// ribbon, so without a rank of its own a repo with three agents mid-work sorted
-// level with an empty one.
+// ribbon, so without a rank of its own it sorted level with an empty tile.
 const (
 	rankWorking = 50
 	rankQuiet   = 99
 )
 
-// repoRanks is the best ribbon rank each repo holds, or where it falls without
-// one: needs you, then working, then everything else.
-func (m *Model) repoRanks() map[string]int {
+// tileRanks is the best ribbon rank each agent holds, keyed by pane id.
+func (m *Model) tileRanks() map[string]int {
 	rank := map[string]int{}
 	for _, a := range m.snap.Attention {
-		if r, ok := rank[a.RepoKey]; !ok || a.Rank < r {
-			rank[a.RepoKey] = a.Rank
-		}
-	}
-	for _, r := range m.snap.Repos {
-		if _, ok := rank[r.Key]; ok {
-			continue
-		}
-		rank[r.Key] = rankQuiet
-		for _, a := range r.Agents {
-			if a.Status == model.StatusWorking {
-				rank[r.Key] = rankWorking
-				break
-			}
+		if r, ok := rank[a.PaneID]; !ok || a.Rank < r {
+			rank[a.PaneID] = a.Rank
 		}
 	}
 	return rank
 }
 
-// applyMoves reorders by the manual moves the user has made this session.
-// Moves are expressed as a repo key and the position it was dragged to, which
-// survives the underlying list changing beneath them.
-func applyMoves(repos []model.Repo, moves []string) []model.Repo {
-	if len(moves) == 0 {
-		return repos
+// tileRank is where a tile falls: needs you, then working, then everything
+// else. An empty tile has no agent and so is always quiet.
+func tileRank(t tile, rank map[string]int) int {
+	if !t.isAgent() {
+		return rankQuiet
 	}
-	byKey := map[string]model.Repo{}
-	for _, r := range repos {
-		byKey[r.Key] = r
+	if r, ok := rank[t.Agent.PaneID]; ok {
+		return r
 	}
-	var out []model.Repo
-	seen := map[string]bool{}
-	for _, key := range moves {
-		if r, ok := byKey[key]; ok && !seen[key] {
-			out = append(out, r)
-			seen[key] = true
-		}
+	if t.Agent.Status == model.StatusWorking {
+		return rankWorking
 	}
-	for _, r := range repos {
-		if !seen[r.Key] {
-			out = append(out, r)
-		}
-	}
-	return out
+	return rankQuiet
 }
 
-// moveSelectedRepo shifts the selected repo one place in the manual order.
+// moveSelectedWorkspace moves the selected tile's workspace one place in
+// herdr's own order, and only in herdr sort: it is the only mode whose tiles
+// are laid out in that order for the move to preserve.
 //
-// Not while filtering. The order is built from what is visible, so a move made
-// against three matches would record an arrangement of three repos and push
-// every other repo behind them. Filtering already collapses the grid into a
-// ranked list where position carries no meaning, so there is nothing to
-// rearrange.
-func (m *Model) moveSelectedRepo(delta int) {
-	if m.filter != "" {
-		return
+// insert_index counts positions in the list as it stood before the move,
+// including the workspace being moved at its old spot: moving it to the
+// index one place away lands it there directly, but moving it further needs
+// the index one past the target, to account for its own removal shifting
+// everything after it back by one. Verified against a throwaway workspace
+// created and closed for the purpose, never one of the user's own.
+func (m *Model) moveSelectedWorkspace(delta int) tea.Cmd {
+	if m.sort != SortHerdr {
+		m.notice = "J and K move workspaces, and only in herdr sort"
+		return nil
 	}
-	key := m.selectedRepo()
-	if key == "" {
-		return
+	wsID := m.selectedWorkspace()
+	if wsID == "" {
+		return nil
 	}
-	order := m.currentOrder()
-	at := -1
-	for i, k := range order {
-		if k == key {
-			at = i
-			break
-		}
-	}
+	at := slices.IndexFunc(m.snap.Workspaces, func(w model.Workspace) bool { return w.ID == wsID })
 	if at < 0 {
-		return
+		return nil
 	}
 	to := at + delta
-	if to < 0 || to >= len(order) {
-		return
+	if to < 0 || to >= len(m.snap.Workspaces) {
+		return nil
 	}
-	order[at], order[to] = order[to], order[at]
-	m.moves = order
-	m.rebuild()
-	if m.saveOrder != nil {
-		m.saveOrder(order)
+	insertIndex := to
+	if to > at {
+		insertIndex++
 	}
-}
 
-// currentOrder is the repo keys as they are drawn right now.
-func (m *Model) currentOrder() []string {
-	repos := m.orderedRepos(m.visibleRepos())
-	out := make([]string, 0, len(repos))
-	for _, r := range repos {
-		out = append(out, r.Key)
+	// Reordered locally so the tiles move before the next snapshot lands: the
+	// daemon reconciles on its own cadence, and waiting for it would make the
+	// key feel like it had done nothing.
+	moved := append([]model.Workspace(nil), m.snap.Workspaces...)
+	ws := moved[at]
+	moved = slices.Delete(moved, at, at+1)
+	moved = slices.Insert(moved, to, ws)
+	m.snap.Workspaces = moved
+	m.rebuild()
+
+	if m.moveWorkspace == nil {
+		return nil
 	}
-	return out
+	move := m.moveWorkspace
+	return func() tea.Msg {
+		if err := move(wsID, insertIndex); err != nil {
+			return noticeMsg("could not move: " + err.Error())
+		}
+		return nil
+	}
 }

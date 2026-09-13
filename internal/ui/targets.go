@@ -7,14 +7,14 @@ import "strconv"
 
 // target is something the selection can land on.
 //
-// A repo with no agents is still a target. Selection used to cover agents only,
-// which meant that with two agents across seven repos, five cards could not be
-// reached at all and the arrow keys looked broken.
+// Every grid target is a tile: an agent, or an empty workspace. Both carry a
+// workspaceID, which is what keyOf uses to identify an empty tile since it has
+// no pane of its own.
 type target struct {
-	// paneID is the agent to jump to, or "" for a repo card with no agents.
+	// paneID is the agent to jump to, or "" for an empty workspace tile.
 	paneID string
-	// repoKey identifies the card the target sits in.
-	repoKey string
+	// workspaceID is the tile's workspace, set on every grid target.
+	workspaceID string
 	// column and row are the grid cell the target is drawn in, used for
 	// left/right and up/down. Rows outside the grid are -1.
 	column, row int
@@ -62,26 +62,20 @@ func (m *Model) rebuild() {
 	// two separate calls, so pressing s or moving a card with J left the cursor
 	// walking one order while the screen showed another, and the column recorded
 	// here disagreed with the column the card was painted in.
-	repos := m.orderedRepos(m.visibleRepos())
+	tiles := m.orderedTiles(m.visibleTiles())
 	cols := columnsFor(m.width)
 	if m.filter != "" {
 		cols = 1 // filtering always collapses to one list
 	}
-	for i, r := range repos {
+	for i, t := range tiles {
 		col, row := 0, i
 		if cols > 1 {
 			col, row = i%cols, i/cols
 		}
-		if len(r.Agents) == 0 {
-			// The card itself. Selecting it does not jump anywhere, but it keeps
-			// every repo reachable and the grid navigable.
-			m.targets = append(m.targets, target{repoKey: r.Key, column: col, row: row})
-			continue
-		}
-		for _, a := range r.Agents {
-			m.targets = append(m.targets,
-				target{paneID: a.PaneID, repoKey: r.Key, column: col, row: row})
-		}
+		m.targets = append(m.targets, target{
+			paneID: t.Agent.PaneID, workspaceID: t.Workspace.ID,
+			column: col, row: row,
+		})
 	}
 
 	m.appendStripTarget()
@@ -120,7 +114,7 @@ func (m *Model) rebuild() {
 }
 
 // selectedKey identifies the current selection for restoring it after a
-// rebuild, whether it is an agent, a bare repo card or the strip.
+// rebuild, whether it is an agent, an empty workspace tile or the strip.
 func (m *Model) selectedKey() string {
 	if m.cursor < 0 || m.cursor >= len(m.targets) {
 		return ""
@@ -142,15 +136,7 @@ func (m *Model) keyOf(t target) string {
 	if t.paneID != "" {
 		return "pane:" + t.paneID
 	}
-	return "repo:" + t.repoKey
-}
-
-// selectedRepo is the repo the cursor is in, for highlighting the whole card.
-func (m *Model) selectedRepo() string {
-	if m.cursor < 0 || m.cursor >= len(m.targets) {
-		return ""
-	}
-	return m.targets[m.cursor].repoKey
+	return "ws:" + t.workspaceID
 }
 
 func (m *Model) selectedPane() string {
@@ -158,6 +144,15 @@ func (m *Model) selectedPane() string {
 		return ""
 	}
 	return m.targets[m.cursor].paneID
+}
+
+// selectedWorkspace is the workspace the cursor's tile belongs to, or "" when
+// nothing is selected. Every grid target carries one, agent tiles included.
+func (m *Model) selectedWorkspace() string {
+	if m.cursor < 0 || m.cursor >= len(m.targets) {
+		return ""
+	}
+	return m.targets[m.cursor].workspaceID
 }
 
 func (m *Model) clampCursor() {
@@ -195,9 +190,20 @@ func (m *Model) stripTargetIndex() int {
 	return -1
 }
 
+// bannerTargetIndex finds the skill-install offer's target, or -1. There is
+// only ever one, found by kind for the same reason the strip is.
+func (m *Model) bannerTargetIndex() int {
+	for i, t := range m.targets {
+		if t.kind == kindBanner {
+			return i
+		}
+	}
+	return -1
+}
+
 // appendStripTarget puts the orchestrator strip last, after the grid, which is
-// where it is drawn. It carries no repoKey: selecting the strip must not also
-// highlight the card the orchestrator happens to live in.
+// where it is drawn. It carries no workspaceID: selecting the strip must not
+// also highlight the tile the orchestrator happens to live in.
 func (m *Model) appendStripTarget() {
 	if m.filter != "" || !m.snap.Orch.Found {
 		return
@@ -215,7 +221,8 @@ func (m *Model) findTarget(key string, kind targetKind) int {
 	return -1
 }
 
-// targetPane is the agent a target jumps to, or "" for a bare repo card.
+// targetPane is the agent a target jumps to, or "" for an empty workspace
+// tile.
 func (m *Model) targetPane(i int) string {
 	if i < 0 || i >= len(m.targets) {
 		return ""
