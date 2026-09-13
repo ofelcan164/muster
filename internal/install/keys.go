@@ -1,8 +1,11 @@
-// Package install writes Muster's keybindings into herdr's config.
+// Package install writes the two things Muster puts outside its own state
+// directory: the keybindings in herdr's config, and the reporting skill in each
+// agent runtime.
 //
-// This is the only place Muster touches a file the user owns, so it backs the
-// file up first, writes a clearly marked block it can find again, and validates
-// the result with herdr's own checker rather than trusting itself.
+// This is the only place Muster touches files the user owns, so it backs the
+// config up first, writes a clearly marked block it can find again, validates
+// the result with herdr's own checker rather than trusting itself, and removes
+// only what it can show it wrote.
 package install
 
 import (
@@ -14,6 +17,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/ofelcan164/muster/internal/state"
 )
 
 const (
@@ -105,6 +110,19 @@ var blockRE = regexp.MustCompile(`(?s)\n*` + regexp.QuoteMeta(beginMarker) + `.*
 // costs one manual edit; guessing costs a config.
 func strayMarker(body string) bool {
 	return strings.Contains(body, beginMarker) || strings.Contains(body, endMarker)
+}
+
+// swallowsStray reports a match that spans a stray begin marker and reaches the
+// end marker of a later block. strayMarker cannot catch this on its own: the
+// match consumes both markers, so the body it inspects comes back clean while
+// every user line between the two has been deleted.
+func swallowsStray(existing string) bool {
+	for _, m := range blockRE.FindAllString(existing, -1) {
+		if strings.Count(m, beginMarker) > 1 {
+			return true
+		}
+	}
+	return false
 }
 
 // installedKeyRE pulls the letter back out of a block a previous run wrote. It
@@ -243,6 +261,9 @@ func Keys(herdrBin, letter string) (*Result, error) {
 	}
 	res := &Result{Path: path}
 
+	if swallowsStray(string(existing)) {
+		return nil, fmt.Errorf("%s has a stray muster marker above the managed block: remove the extra %q line by hand, then run this again", path, beginMarker)
+	}
 	body := strings.TrimRight(blockRE.ReplaceAllString(string(existing), "\n"), "\n")
 	if strayMarker(body) {
 		return nil, fmt.Errorf("%s has an unpaired muster marker: remove the %q line by hand, then run this again", path, beginMarker)
@@ -332,6 +353,14 @@ func Remove() (*Result, error) {
 		return nil, err
 	}
 
+	// A stray marker above the block would make the removal take the user's
+	// lines with it. Leaving the keybindings in place is the lesser harm, so
+	// this says what it found and changes nothing.
+	if swallowsStray(string(existing)) {
+		res.Diagnostic = fmt.Sprintf("left the block in %s: a stray %q line above it would take your own lines with it. Remove that line by hand, then run this again", path, beginMarker)
+		return res, nil
+	}
+
 	// What counts as a change is what the regex actually removed, not whether a
 	// marker is present. Testing for the begin marker alone reported a clean
 	// uninstall for a file the block was still in.
@@ -394,9 +423,18 @@ func OptedOut(stateDir string) bool {
 }
 
 // SetOptOut records a refusal, or clears one when the user installs again.
+//
+// Recording without a state directory is an error rather than a quiet no-op.
+// The refusal is the only thing stopping the startup hook from binding the keys
+// again, so silently dropping it made `uninstall-keys` run from a plain shell
+// look like it worked and undo itself at the next herdr start. Clearing a
+// refusal that cannot exist is genuinely nothing to do.
 func SetOptOut(stateDir string, on bool) error {
 	p := OptOutPath(stateDir)
 	if p == "" {
+		if on {
+			return state.ErrNoStateDir
+		}
 		return nil
 	}
 	if !on {

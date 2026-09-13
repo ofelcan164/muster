@@ -102,6 +102,35 @@ func Ensure() (started bool, err error) {
 	return true, nil
 }
 
+// Stop asks a running daemon to exit and waits for it to let go of the lock.
+//
+// `uninstall --purge` is what needs this. Deleting the state directory under a
+// live daemon does not stop it: its next reconcile recreates the directory
+// through WriteAtomic, and the lock it still holds is by then an unlinked
+// inode, so the next --ensure takes a lock on a fresh file and a second daemon
+// starts alongside the first.
+func Stop(wait time.Duration) error {
+	pid := state.ReadPID(state.LockPath())
+	if pid <= 0 || !running() {
+		return nil
+	}
+	p, err := os.FindProcess(pid)
+	if err != nil {
+		return err
+	}
+	if err := p.Signal(syscall.SIGTERM); err != nil {
+		return err
+	}
+	deadline := time.Now().Add(wait)
+	for time.Now().Before(deadline) {
+		if !running() {
+			return nil
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return fmt.Errorf("daemon pid=%d did not exit within %s", pid, wait)
+}
+
 // daemonBinary resolves the musterd executable.
 //
 // Ensure is called both by musterd itself and by the muster client, which the

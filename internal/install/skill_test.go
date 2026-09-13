@@ -164,11 +164,58 @@ func TestUninstallOnAFreshMachineIsQuiet(t *testing.T) {
 	}
 }
 
-// A wrong CLAUDE_CONFIG_DIR must not turn an uninstall into a recursive delete
-// of somewhere else.
-func TestRemoveRefusesADirectoryThatIsNotOurs(t *testing.T) {
-	if err := refuseForeign(filepath.Join(t.TempDir(), "skills", "something-else")); err == nil {
-		t.Error("remove accepted a directory that is not Muster's")
+// Owning the name muster-report is an assumption. A user who wrote a skill of
+// their own under it keeps it, through both an install and an uninstall.
+func TestSkillRefusesAForeignDirectoryOfTheSameName(t *testing.T) {
+	dir := skillHome(t)
+	theirs := claudeLink(dir)
+	if err := os.MkdirAll(theirs, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(theirs, skillFile), []byte("their own notes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Skill(); err == nil {
+		t.Error("install replaced a skill directory it did not write")
+	}
+	if _, err := RemoveSkill(); err == nil {
+		t.Error("uninstall removed a skill directory it did not write")
+	}
+	body, err := os.ReadFile(filepath.Join(theirs, skillFile))
+	if err != nil || string(body) != "their own notes\n" {
+		t.Errorf("the user's own skill was modified: %q, %v", body, err)
+	}
+}
+
+// ~/.claude/skills symlinked into ~/.agents/skills is a common setup. It makes
+// the link and the canonical copy one directory, and replacing the link then
+// deletes the copy it points at.
+func TestSkillSurvivesASymlinkedSkillsDirectory(t *testing.T) {
+	dir := skillHome(t)
+	agents := filepath.Join(dir, ".agents", "skills")
+	if err := os.MkdirAll(agents, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	claude := filepath.Join(dir, ".claude", "skills")
+	if err := os.RemoveAll(claude); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(agents, claude); err != nil {
+		t.Fatal(err)
+	}
+
+	for i := range 2 {
+		if _, err := Skill(); err != nil {
+			t.Fatalf("install %d: %v", i+1, err)
+		}
+		body, err := os.ReadFile(SkillPath())
+		if err != nil {
+			t.Fatalf("install %d left no readable skill: %v", i+1, err)
+		}
+		if !strings.HasPrefix(string(body), "---\nname: muster-report\n") {
+			t.Fatalf("install %d wrote something that is not the skill", i+1)
+		}
 	}
 }
 
@@ -212,7 +259,10 @@ func TestSkillReplacesAPlainDirectoryFromAnOlderInstall(t *testing.T) {
 	if err := os.MkdirAll(old, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(old, skillFile), []byte("stale\n"), 0o644); err != nil {
+	// What an older Muster wrote: the skill itself, frontmatter and all, as a
+	// plain directory rather than a link. That frontmatter is what marks it as
+	// ours to replace.
+	if err := os.WriteFile(filepath.Join(old, skillFile), []byte("---\nname: muster-report\n---\nstale\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

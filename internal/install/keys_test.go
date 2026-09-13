@@ -268,6 +268,42 @@ func TestKeysRefusesAStrayMarkerAddedAfterInstalling(t *testing.T) {
 	}
 }
 
+// The stray marker above the block is the dangerous side. The match starts at
+// the stray one and runs to the real end marker, so everything the user has in
+// between is inside the match, and the body left afterwards holds no marker at
+// all for strayMarker to catch.
+func TestKeysRefusesAStrayMarkerAboveTheBlock(t *testing.T) {
+	path := setup(t, userConfig)
+	if _, err := Keys("", ""); err != nil {
+		t.Fatal(err)
+	}
+	installed, _ := os.ReadFile(path)
+	tampered := beginMarker + "\nkeep_me = true\n\n" + string(installed)
+	if err := os.WriteFile(path, []byte(tampered), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Keys("", ""); err == nil {
+		t.Fatal("installed across a stray marker instead of refusing")
+	}
+	body, _ := os.ReadFile(path)
+	if !strings.Contains(string(body), "keep_me = true") {
+		t.Errorf("the run ate the settings under the stray marker:\n%s", body)
+	}
+
+	res, err := Remove()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Diagnostic == "" {
+		t.Error("uninstall said nothing about the stray marker")
+	}
+	body, _ = os.ReadFile(path)
+	if !strings.Contains(string(body), "keep_me = true") {
+		t.Errorf("uninstall ate the settings under the stray marker:\n%s", body)
+	}
+}
+
 // Uninstall does not refuse, because its whole job is to leave nothing behind.
 // It removes every complete block and says what it could not resolve.
 func TestRemoveReportsAStrayMarkerRatherThanGuessing(t *testing.T) {
@@ -438,8 +474,14 @@ func TestOptOut(t *testing.T) {
 	if OptedOut("") {
 		t.Fatal("no state dir must not read as a refusal")
 	}
-	if err := SetOptOut("", true); err != nil {
-		t.Fatal(err)
+	// Recording a refusal with nowhere to record it has to be an error. Silence
+	// made `uninstall-keys` outside herdr look like it worked, and the startup
+	// hook put the keys straight back at the next start.
+	if err := SetOptOut("", true); err == nil {
+		t.Fatal("recording a refusal with no state dir reported success")
+	}
+	if err := SetOptOut("", false); err != nil {
+		t.Fatalf("clearing a refusal that cannot exist: %v", err)
 	}
 }
 

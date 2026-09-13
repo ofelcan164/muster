@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/ofelcan164/muster/internal/chain"
 	"github.com/ofelcan164/muster/internal/daemon"
@@ -91,7 +92,8 @@ func main() {
 		// keys on its own now, so without this the next herdr start puts back
 		// what was just removed.
 		if err := install.SetOptOut(state.Dir(), true); err != nil {
-			fmt.Fprintf(os.Stderr, "muster: %v\n", err)
+			fmt.Fprintf(os.Stderr, "muster: could not record the refusal: %v\n", err)
+			fmt.Fprintln(os.Stderr, "the next herdr start will bind the keys again. Run this through herdr, or pass --state-dir.")
 		}
 		if res.Changed {
 			fmt.Printf("removed Muster keybindings from %s\n", res.Path)
@@ -463,7 +465,8 @@ func cmdUninstall(args []string) int {
 	// rest of the state dir, which is correct, since purge means the plugin is
 	// going away entirely.
 	if err := install.SetOptOut(state.Dir(), true); err != nil {
-		fmt.Fprintf(os.Stderr, "muster uninstall: %v\n", err)
+		fmt.Fprintf(os.Stderr, "muster uninstall: could not record the refusal: %v\n", err)
+		fmt.Fprintln(os.Stderr, "the next herdr start will bind the keys again. Run this through herdr, or pass --state-dir.")
 	}
 	res, err := install.Uninstall()
 	switch {
@@ -485,6 +488,7 @@ func cmdUninstall(args []string) int {
 
 	if skill, err := install.RemoveSkill(); err != nil {
 		fmt.Fprintf(os.Stderr, "muster uninstall: skill: %v\n", err)
+		code = 1
 	} else if skill.Changed {
 		fmt.Printf("removed the reporting skill from %s\n", skill.Path)
 		for _, l := range skill.Links {
@@ -492,17 +496,26 @@ func cmdUninstall(args []string) int {
 		}
 	}
 
-	if *purge {
-		dir := state.Dir()
-		if dir == "" {
-			fmt.Fprintln(os.Stderr, "no state directory to purge")
-		} else if err := os.RemoveAll(dir); err != nil {
-			fmt.Fprintf(os.Stderr, "purge state: %v\n", err)
+	switch dir := state.Dir(); {
+	case *purge && dir == "":
+		fmt.Fprintln(os.Stderr, "muster uninstall: no state directory to purge")
+		code = 1
+	case *purge:
+		// Stop the daemon first or it writes the directory straight back.
+		if err := daemon.Stop(2 * time.Second); err != nil {
+			fmt.Fprintf(os.Stderr, "muster uninstall: %v\n", err)
+			code = 1
+		}
+		if err := os.RemoveAll(dir); err != nil {
+			fmt.Fprintf(os.Stderr, "muster uninstall: purge state: %v\n", err)
+			code = 1
 		} else {
 			fmt.Printf("removed state at %s\n", dir)
 		}
-	} else {
-		fmt.Printf("state left at %s (--purge removes it)\n", state.Dir())
+	case dir == "":
+		fmt.Println("no state directory was in use")
+	default:
+		fmt.Printf("state left at %s (--purge removes it)\n", dir)
 	}
 
 	reloadConfig()

@@ -1,6 +1,7 @@
 package install
 
 import (
+	"bytes"
 	"embed"
 	"errors"
 	"fmt"
@@ -149,10 +150,17 @@ func linkSkill(canon, link string) (bool, error) {
 	if cur, err := os.Readlink(link); err == nil && cur == target {
 		return false, nil
 	}
+	// A runtime whose skills directory is itself a symlink into ~/.agents/skills
+	// makes link and canon one directory. Readlink does not see it, because the
+	// symlink is the parent. Removing the link would then delete the canonical
+	// copy this just wrote and leave a link pointing at itself.
+	if aliasOfCanon(link, canon) {
+		return false, nil
+	}
 	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
 		return false, err
 	}
-	if err := os.RemoveAll(link); err != nil {
+	if _, err := removeOurs(link); err != nil {
 		return false, err
 	}
 	if err := os.Symlink(target, link); err == nil {
@@ -189,14 +197,58 @@ func copySkill(src, dst string) error {
 	return nil
 }
 
-// refuseForeign refuses to delete anything that is not the directory this
-// installed. A wrong CLAUDE_CONFIG_DIR must not turn an uninstall into a
-// recursive delete of somewhere else.
-func refuseForeign(dir string) error {
-	if filepath.Base(dir) != skillName {
-		return fmt.Errorf("refusing to remove %s: not Muster's skill directory", dir)
+// aliasOfCanon reports a path that is the canonical directory itself, reached
+// through a symlinked parent, as when ~/.claude/skills links into
+// ~/.agents/skills. Such a path only looks like a per-harness link. Removing it
+// deletes the one real copy, so it is left alone in both directions.
+//
+// A path that is itself a symlink is excluded deliberately: that is an ordinary
+// link of ours, and removing it takes the link and not its target.
+func aliasOfCanon(path, canon string) bool {
+	fi, err := os.Lstat(path)
+	if err != nil || fi.Mode()&os.ModeSymlink != 0 {
+		return false
 	}
-	return nil
+	a, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	b, err := os.Stat(canon)
+	if err != nil {
+		return false
+	}
+	return os.SameFile(a, b)
+}
+
+// removeOurs deletes a skill path, but only one Muster wrote, and reports
+// whether anything was there. Owning the name muster-report is an assumption,
+// not a fact: a user may have written a skill of their own under it, and
+// RemoveAll on a name we merely expect to own is how an install eats someone
+// else's work. A symlink is removed whatever it points at, since that destroys
+// no content.
+func removeOurs(path string) (bool, error) {
+	fi, err := os.Lstat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	if fi.Mode()&os.ModeSymlink == 0 && !isSkillDir(path) {
+		return false, fmt.Errorf("refusing to remove %s: it is not Muster's skill", path)
+	}
+	if err := os.RemoveAll(path); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// isSkillDir reports a directory holding this skill, identified by the name in
+// its frontmatter. Every version of Muster has written that name, so a copy
+// from an older install still counts as ours.
+func isSkillDir(path string) bool {
+	b, err := os.ReadFile(filepath.Join(path, skillFile))
+	return err == nil && bytes.Contains(b, []byte("\nname: "+skillName+"\n"))
 }
 
 // RemoveSkill deletes the canonical copy and every link into it.
@@ -211,15 +263,18 @@ func RemoveSkill() (*Result, error) {
 		return nil, errors.New("cannot locate a home directory")
 	}
 	res := &Result{Path: canon}
-	if err := refuseForeign(canon); err != nil {
-		return nil, err
-	}
 
 	for _, h := range harnesses() {
 		link := filepath.Join(h.skills, skillName)
-		// os.Remove takes the link, never what it points at, so the canonical
-		// copy outlives the loop and gets removed once, below.
-		gone, err := removeIfPresent(link)
+		// Removing a symlink takes the link, never what it points at, so the
+		// canonical copy outlives the loop and gets removed once, below. The
+		// exception is a skills directory that is a symlink into the canonical
+		// one, where the link and canon are the same path; that is left for the
+		// single removal below too.
+		if aliasOfCanon(link, canon) {
+			continue
+		}
+		gone, err := removeOurs(link)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", h.name, err)
 		}
@@ -229,27 +284,12 @@ func RemoveSkill() (*Result, error) {
 		}
 	}
 
-	gone, err := removeIfPresent(canon)
+	gone, err := removeOurs(canon)
 	if err != nil {
 		return nil, err
 	}
 	res.Changed = res.Changed || gone
 	return res, nil
-}
-
-// removeIfPresent deletes a path if it is there, reporting whether it was.
-// Lstat, not Stat: a link whose target is already gone still has to come out.
-func removeIfPresent(path string) (bool, error) {
-	if _, err := os.Lstat(path); err != nil {
-		if os.IsNotExist(err) {
-			return false, nil
-		}
-		return false, err
-	}
-	if err := os.RemoveAll(path); err != nil {
-		return false, err
-	}
-	return true, nil
 }
 
 // SkillDescription is the one-line trigger the skill carries, pulled out of the
