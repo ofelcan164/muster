@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"encoding/json"
 	"regexp"
 	"strings"
 	"testing"
@@ -1128,4 +1129,49 @@ func TestAnimationStopsWhenNothingMoves(t *testing.T) {
 	if cmd := m.startAnimation(); cmd == nil {
 		t.Error("an agent starting work should restart the frame loop")
 	}
+}
+
+// The badge counts what the header counts, so a dismissed row drops out of
+// both, and a snapshot the daemon stopped writing gets the key and no number.
+func TestBadge(t *testing.T) {
+	state.SetDir(t.TempDir())
+	t.Cleanup(func() { state.SetDir("") })
+	write := func(s *model.Snapshot) {
+		t.Helper()
+		b, err := json.Marshal(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := state.WriteAtomic(state.SnapshotPath(), b); err != nil {
+			t.Fatal(err)
+		}
+	}
+	check := func(letter, want string) {
+		t.Helper()
+		if got := Badge(letter); got != want {
+			t.Errorf("Badge(%q) = %q, want %q", letter, got, want)
+		}
+	}
+
+	check("m", "◆ prefix+m")
+
+	snap := testSnapshot()
+	write(snap)
+	check("m", "◆ 2 need you · prefix+m")
+
+	saved := state.LoadUI()
+	saved.Dismissed = map[string]string{"w2:p2": string(model.StatusDone)}
+	if err := saved.Save(); err != nil {
+		t.Fatal(err)
+	}
+	check("g", "◆ 1 needs you · prefix+g")
+
+	snap.Attention = nil
+	snap.Counts.Working = 1
+	write(snap)
+	check("m", "◆ 1 working · prefix+m")
+
+	snap.GeneratedAt = time.Now().Add(-time.Minute)
+	write(snap)
+	check("m", "◆ prefix+m")
 }

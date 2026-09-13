@@ -57,6 +57,7 @@ muster install-skill | uninstall-skill              the orchestrator reporting s
 muster mark-orchestrator                            run on the orchestrator's pane
 muster chain get [--json] | set <spec> [--independent a,b] [--by NAME] | clear
 muster discover                                     make sure the daemon is up; the event hooks call it
+muster badge [letter]                               the tab_bar_right line install writes
 
 musterd --ensure          start a daemon if none is running, then exit at once
 musterd --daemon          run as the daemon
@@ -121,3 +122,9 @@ highlights.
   `herdr plugin install`. `--auto` skips when `keys.optout` is in the state
   dir; `--no-keys` and both uninstalls write that marker, plain `install`
   clears it. Without it every uninstall would undo itself at the next start.
+- `install` also puts a `muster badge` entry at the front of `[ui]
+  tab_bar_right`. TOML allows one `[ui]` and one `tab_bar_right`, so when the
+  user has them the entry goes into their own array, outside the marked block,
+  and `Remove` takes back that exact entry. herdr runs tab bar commands through
+  `/bin/sh` on the server with no plugin env, so the entry carries absolute,
+  single-quoted paths and `--state-dir`. No state dir means no badge.

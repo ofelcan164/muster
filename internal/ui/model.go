@@ -258,12 +258,18 @@ func (m *Model) Jump() string { return m.jump }
 // a row leaves a gap rather than promoting the fifth thing that needs you. Move
 // the cap to the client if that gap ever matters.
 func (m *Model) ribbonRows() []model.Attention {
-	if len(m.dismissed) == 0 {
-		return m.snap.Attention
+	return undismissed(m.snap.Attention, m.dismissed)
+}
+
+// undismissed is the attention rows less any dismissed at their current status.
+// The tab bar badge counts with it too, so the badge and the header agree.
+func undismissed(rows []model.Attention, dismissed map[string]string) []model.Attention {
+	if len(dismissed) == 0 {
+		return rows
 	}
-	out := make([]model.Attention, 0, len(m.snap.Attention))
-	for _, a := range m.snap.Attention {
-		if m.dismissed[a.PaneID] == string(a.Status) {
+	out := make([]model.Attention, 0, len(rows))
+	for _, a := range rows {
+		if dismissed[a.PaneID] == string(a.Status) {
 			continue
 		}
 		out = append(out, a)

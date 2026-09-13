@@ -362,3 +362,21 @@ pointing at a pane entrypoint validates cleanly and then does nothing when
 pressed.
 
 `[ui.toast] delivery` defaults to `off`, so notifications need opting in.
+
+## Tab bar entries
+
+`[ui] tab_bar_right` entries take no style and no click. A `text` entry accepts
+only `text`, a `command` entry only `command`, `interval_seconds` and
+`timeout_seconds`. Anything else is a parse error, and on a parse error herdr
+uses defaults for the whole config.
+
+**Answered 2026-09-13: a `command` entry runs through `/bin/sh -c` on the
+server**, in the server's cwd, with the server's `PATH` and no `HERDR_PLUGIN_*`
+env. A headless `herdr --session <name> server` on a throwaway
+`XDG_CONFIG_HOME` runs them with no client attached, which is how this was
+checked. So Muster's entry carries absolute, single-quoted paths and
+`--state-dir`.
+
+`[[keys.command]]` accepts `description`. `label`, `title`, `name`, `help`,
+`desc` and `summary` are all unknown keys. Whether the `prefix+?` help lists the
+description is not confirmed yet.

@@ -13,6 +13,9 @@ func setup(t *testing.T, body string) string {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
+	// No state dir means no badge, so a run from inside a herdr pane tests the
+	// same config as one from CI.
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", "")
 	path := filepath.Join(dir, "herdr", "config.toml")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
@@ -587,5 +590,50 @@ func TestKeysFailsWhenEveryCandidateIsTaken(t *testing.T) {
 	after, _ := os.ReadFile(path)
 	if string(before) != string(after) {
 		t.Error("a failed install still wrote to the user's config")
+	}
+}
+
+// The badge goes wherever the user's config has room for it, a second install
+// leaves it alone, and uninstall hands back the file byte for byte. herdr falls
+// back to defaults for the whole config on a TOML error, so where herdr is
+// installed its checker has the last word.
+func TestKeysAddsTheBadgeAndRemoveTakesItBack(t *testing.T) {
+	for name, cfg := range map[string]string{
+		"no ui table":         userConfig,
+		"ui without tab bar":  userConfig + "\n[ui]\naccent = \"blue\"\n",
+		"ui as the last line": userConfig + "\n[ui]\n",
+		"existing tab bar":    userConfig + "\n[ui]\ntab_bar_right = [{ type = \"zoom\" }, { type = \"hostname\" }]\ntab_bar_right_separator = \" \"\n",
+		"empty tab bar":       userConfig + "\n[ui]\ntab_bar_right = []\n",
+		"multi-line tab bar":  userConfig + "\n[ui]\ntab_bar_right = [\n  { type = \"zoom\" },\n]\n\n[ui.sidebar.spaces]\nrows = [\n  [\"state_icon\", \"workspace\"],\n]\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := setup(t, cfg)
+			t.Setenv("HERDR_PLUGIN_STATE_DIR", t.TempDir())
+			if _, err := Keys("", ""); err != nil {
+				t.Fatal(err)
+			}
+			body, _ := os.ReadFile(path)
+			if n := strings.Count(string(body), ` badge m"`); n != 1 {
+				t.Fatalf("badge appears %d times, want 1:\n%s", n, body)
+			}
+			if n := strings.Count(string(body), "tab_bar_right ="); n != 1 {
+				t.Errorf("tab_bar_right is set %d times, want 1:\n%s", n, body)
+			}
+			if bin, err := exec.LookPath("herdr"); err == nil {
+				out, _ := exec.Command(bin, "config", "check").CombinedOutput()
+				if strings.TrimSpace(string(out)) != "config: ok" {
+					t.Errorf("herdr rejects it: %s\n%s", out, body)
+				}
+			}
+			if res, err := Keys("", ""); err != nil || res.Changed {
+				t.Errorf("second install changed the file (err %v)", err)
+			}
+			if _, err := Remove(); err != nil {
+				t.Fatal(err)
+			}
+			if got, _ := os.ReadFile(path); string(got) != cfg {
+				t.Errorf("uninstall did not restore the config:\ngot:\n%s\nwant:\n%s", got, cfg)
+			}
+		})
 	}
 }

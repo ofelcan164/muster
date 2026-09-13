@@ -56,7 +56,9 @@ directly from a herdr pane; with `plugin install` the binaries live in herdr's
 own checkout, so use the action.
 
 Install writes: a marked block in your herdr config (with a timestamped backup
-beside it), a detached daemon, that daemon's `musterd.log` and lock files in
+beside it), a `muster badge` entry at the front of `tab_bar_right` in `[ui]`
+that shows `◆ 3 need you · prefix+m` or `◆ 4 working · prefix+m`, a detached
+daemon, that daemon's `musterd.log` and lock files in
 the plugin state dir, and a `server.reload_config` call so the keys go live.
 The daemon adds `snapshot.json` and `state.json` once it reaches herdr.
 `ui.json` appears the first time you rearrange repos, change the sort or dismiss
@@ -128,6 +130,7 @@ muster mark-orchestrator
 muster --help
 muster chain get [--json] | set <spec> [--independent a,b] [--by NAME] | clear
 muster discover
+muster badge [letter]     # the tab bar line install writes
 
 musterd --ensure          # start a daemon if none is running, then exit
 musterd --daemon          # run as the daemon (muster install spawns this)

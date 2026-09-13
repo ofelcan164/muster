@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"time"
 
@@ -17,6 +18,29 @@ import (
 // staleAfter is when a snapshot stops being trustworthy. The daemon rewrites
 // every five seconds, so anything this old means it is not running.
 const staleAfter = 30 * time.Second
+
+// Badge is the line herdr's tab bar shows: how many rows need you, else how
+// many agents are working, then the key that opens the overlay.
+//
+// herdr runs it through sh every few seconds, so it reads files and never the
+// socket, and never starts a daemon. A stale snapshot gets the key alone: a
+// count nobody is keeping current is worse than no count.
+func Badge(letter string) string {
+	key := "prefix+" + letter
+	snap, err := daemon.ReadSnapshot()
+	if err != nil || time.Since(snap.GeneratedAt) >= staleAfter {
+		return "◆ " + key
+	}
+	switch n := len(undismissed(snap.Attention, state.LoadUI().Dismissed)); {
+	case n == 1:
+		return "◆ 1 needs you · " + key
+	case n > 1:
+		return fmt.Sprintf("◆ %d need you · %s", n, key)
+	case snap.Counts.Working > 0:
+		return fmt.Sprintf("◆ %d working · %s", snap.Counts.Working, key)
+	}
+	return "◆ " + key
+}
 
 // Run opens the overlay and returns the pane to jump to, or "".
 //

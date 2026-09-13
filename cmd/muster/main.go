@@ -141,6 +141,15 @@ func main() {
 			os.Exit(1)
 		}
 
+	case "badge":
+		// The tab_bar_right command install writes. herdr runs it through sh on
+		// the server with none of the plugin env, hence the --state-dir in front.
+		letter := install.DefaultLetter
+		if len(args) > 1 {
+			letter = args[1]
+		}
+		fmt.Println(ui.Badge(letter))
+
 	case "":
 		// No arguments means the [[panes]] entrypoint: this process is the
 		// overlay.
@@ -174,6 +183,7 @@ usage:
   muster uninstall-skill           drop the reporting skill
   muster uninstall [--purge]       remove everything Muster wrote outside itself
   muster discover                  make sure the daemon is up, for the event hooks
+  muster badge [letter]            the tab bar line install writes: what needs you, and the key
 
 any command may be preceded by --state-dir <dir>, which is what herdr supplies
 through HERDR_PLUGIN_STATE_DIR. --no-keys installs without touching your herdr

@@ -139,13 +139,92 @@ func installedLetter(existing string) string {
 	return m[1]
 }
 
-// compose is the config file this would write for one letter.
-func compose(body, letter string) string {
-	out := block(letter) + "\n"
+// compose is the config file this would write for one letter. ui is a [ui]
+// table for the block to carry, or "" when the body has one of its own.
+func compose(body, letter, ui string) string {
+	out := block(letter, ui) + "\n"
 	if body != "" {
 		out = body + "\n\n" + out
 	}
 	return out
+}
+
+// The tab bar badge is the one thing Muster writes outside its block. TOML
+// allows one [ui] table and one tab_bar_right in it, so a user who has either
+// gets the entry inside their own, and removal takes back that exact entry.
+//
+// herdr runs a tab_bar_right command through /bin/sh on the server, in the
+// server's cwd and with none of the plugin env. Checked on 0.9.0 on 2026-09-13
+// with a headless session. So the entry names the binary and the state dir by
+// absolute path, quoted for sh.
+const badgeInterval = 5
+
+var (
+	badgeEntryRE = `\{ type = "command", command = "'[^'"\\\n]*' --state-dir '[^'"\\\n]*' badge [a-z0-9]", interval_seconds = \d+ \}`
+	// badgeLineRE is the whole line withBadge adds to a [ui] table that had no
+	// tab_bar_right, and badgeItemRE the entry it puts at the front of one that did.
+	badgeLineRE = regexp.MustCompile(`(?m)\ntab_bar_right = \[` + badgeEntryRE + `\]$`)
+	badgeItemRE = regexp.MustCompile(badgeEntryRE + `, `)
+
+	uiHeaderRE = regexp.MustCompile(`(?m)^[ \t]*\[ui\][ \t]*(#.*)?$`)
+	// A header is a bare name alone on its line, so a line of a multi-line array
+	// such as ["state_icon", "workspace"] does not end the [ui] table early.
+	tableHeaderRE = regexp.MustCompile(`(?m)^[ \t]*\[\[?[A-Za-z0-9_.-]+\]\]?[ \t]*(#.*)?$`)
+	tabBarRightRE = regexp.MustCompile(`(?m)^[ \t]*tab_bar_right[ \t]*=[ \t]*\[`)
+	rootUIKeyRE   = regexp.MustCompile(`(?m)^[ \t]*ui[ \t]*[.=]`)
+)
+
+// badgeEntry is the tab_bar_right entry for one letter, or "" when there is no
+// state dir to name or a path sh quoting cannot carry.
+func badgeEntry(letter string) string {
+	dir := state.Dir()
+	bin, err := os.Executable()
+	if dir == "" || err != nil {
+		return ""
+	}
+	if dir, err = filepath.Abs(dir); err != nil || strings.ContainsAny(bin+dir, "'\"\\\n") {
+		return ""
+	}
+	return fmt.Sprintf(`{ type = "command", command = "'%s' --state-dir '%s' badge %s", interval_seconds = %d }`,
+		bin, dir, letter, badgeInterval)
+}
+
+// withBadge puts the badge into a body that has none. It returns the new body,
+// and the [ui] table the block has to carry when the body has no [ui] of its own.
+//
+// A tab_bar_right it cannot place for certain, such as a dotted ui.tab_bar_right
+// or one outside the [ui] table it found, gets no badge. A second tab_bar_right
+// would be a TOML error, and herdr drops the whole config on one of those.
+func withBadge(body, letter string) (string, string) {
+	entry := badgeEntry(letter)
+	if entry == "" {
+		return body, ""
+	}
+	loc := uiHeaderRE.FindStringIndex(body)
+	if loc == nil {
+		if rootUIKeyRE.MatchString(body) {
+			return body, ""
+		}
+		return body, "[ui]\ntab_bar_right = [" + entry + "]\n"
+	}
+	end := loc[1]
+	section := body[end:]
+	if next := tableHeaderRE.FindStringIndex(section); next != nil {
+		section = section[:next[0]]
+	}
+	if m := tabBarRightRE.FindStringIndex(section); m != nil {
+		at := end + m[1]
+		return body[:at] + entry + ", " + body[at:], ""
+	}
+	if tabBarRightRE.MatchString(body) {
+		return body, ""
+	}
+	return body[:end] + "\ntab_bar_right = [" + entry + "]" + body[end:], ""
+}
+
+// removeBadge takes back what withBadge added to the body, and nothing else.
+func removeBadge(body string) string {
+	return badgeItemRE.ReplaceAllString(badgeLineRE.ReplaceAllString(body, ""), "")
 }
 
 // taken reports whether herdr would disable any of the bindings a letter
@@ -178,7 +257,7 @@ func taken(herdrBin, body, letter string) bool {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return false
 	}
-	if err := os.WriteFile(path, []byte(compose(body, letter)), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(compose(body, letter, "")), 0o600); err != nil {
 		return false
 	}
 
@@ -243,10 +322,12 @@ func chooseLetter(herdrBin, existing, body, want string) (string, error) {
 		strings.Join(letters, ", prefix+"), ConfigPath())
 }
 
-// Keys writes the bindings, replacing any block a previous run left behind.
+// Keys writes the bindings and the tab bar badge, replacing whatever a previous
+// run left behind.
 //
-// It is safe to run repeatedly: the managed block is found and replaced rather
-// than appended, so running it twice does not bind anything twice.
+// It is safe to run repeatedly: the managed block and the badge are found and
+// replaced rather than appended, so running it twice does not bind anything
+// twice.
 //
 // letter is the key to bind, or "" to let chooseLetter work it out.
 func Keys(herdrBin, letter string) (*Result, error) {
@@ -268,6 +349,7 @@ func Keys(herdrBin, letter string) (*Result, error) {
 	if strayMarker(body) {
 		return nil, fmt.Errorf("%s has an unpaired muster marker: remove the %q line by hand, then run this again", path, beginMarker)
 	}
+	body = removeBadge(body)
 	letter, err = chooseLetter(herdrBin, string(existing), body, letter)
 	if err != nil {
 		return nil, err
@@ -275,7 +357,8 @@ func Keys(herdrBin, letter string) (*Result, error) {
 	res.Letter = letter
 	res.Bindings = BindingsFor(letter)
 
-	updated := compose(body, letter)
+	body, ui := withBadge(body, letter)
+	updated := compose(body, letter, ui)
 	if string(existing) == updated {
 		return res, nil
 	}
@@ -309,19 +392,24 @@ func Keys(herdrBin, letter string) (*Result, error) {
 	return res, nil
 }
 
-func block(letter string) string {
+// block is the managed block. description is what herdr's own help lists for a
+// custom command; it is the only label [[keys.command]] accepts.
+func block(letter, ui string) string {
 	var b strings.Builder
 	b.WriteString(beginMarker + "\n")
 	b.WriteString("# Written by `muster install`. Re-running it replaces this block.\n")
+	if ui != "" {
+		b.WriteString("\n# what needs you, and the key that opens Muster, in the tab bar\n" + ui)
+	}
 	for _, bind := range BindingsFor(letter) {
-		fmt.Fprintf(&b, "\n# %s\n[[keys.command]]\nkey = %q\ntype = \"plugin_action\"\ncommand = %q\n",
-			bind.Why, bind.Key, bind.Command)
+		fmt.Fprintf(&b, "\n# %s\n[[keys.command]]\nkey = %q\ntype = \"plugin_action\"\ncommand = %q\ndescription = %q\n",
+			bind.Why, bind.Key, bind.Command, bind.Why)
 	}
 	b.WriteString(endMarker)
 	return b.String()
 }
 
-// Remove takes the managed block back out, for undoing an install.
+// Remove takes the managed block and the badge back out, for undoing an install.
 //
 // The goal is that after unlinking the plugin there is nothing left that only
 // makes sense with Muster installed. herdr has no uninstall hook, so this
@@ -330,7 +418,8 @@ func block(letter string) string {
 //
 // Everything Muster writes goes inside one marked block for exactly this
 // reason: removal is then a single deletion rather than a hunt for scattered
-// keys that might or might not have been ours.
+// keys that might or might not have been ours. The badge is the exception TOML
+// forces, and it is written in one exact shape so it can be taken back exactly.
 func Remove() (*Result, error) {
 	path := ConfigPath()
 	if path == "" {
@@ -361,7 +450,7 @@ func Remove() (*Result, error) {
 	// What counts as a change is what the regex actually removed, not whether a
 	// marker is present. Testing for the begin marker alone reported a clean
 	// uninstall for a file the block was still in.
-	body := blockRE.ReplaceAllString(string(existing), "\n")
+	body := removeBadge(blockRE.ReplaceAllString(string(existing), "\n"))
 
 	// Uninstall says what it could not do rather than refusing outright: the
 	// point of this command is to leave nothing of Muster's behind, so it
