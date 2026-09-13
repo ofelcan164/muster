@@ -119,13 +119,13 @@ func TestRibbonAndGridNeverShareALine(t *testing.T) {
 	}
 }
 
-// One click opens. A card with no agents still sits over panes, so clicking it
-// must jump to one of them rather than only moving the selection.
-func TestOneClickOpensAgentlessCard(t *testing.T) {
+// One click opens. An empty workspace tile has no pane of its own, so
+// clicking it must focus its workspace rather than only moving the selection.
+func TestOneClickOpensAnEmptyWorkspaceTile(t *testing.T) {
 	m, _ := rendered(t, 143)
-	ti := m.targetIndex("repo:acme/infra")
+	ti := m.targetIndex("ws:w9")
 	if ti < 0 {
-		t.Fatal("the agentless repo is not a target")
+		t.Fatal("the empty workspace is not a target")
 	}
 	var hit hitRegion
 	for _, h := range m.hits {
@@ -136,7 +136,7 @@ func TestOneClickOpensAgentlessCard(t *testing.T) {
 	}
 	m.Update(tea.MouseMsg{X: hit.x0 + 1, Y: hit.y,
 		Action: tea.MouseActionRelease, Button: tea.MouseButtonLeft})
-	if got := m.Jump(); got != "acme/infra:p9" {
-		t.Fatalf("one click on an agentless card jumped to %q, want its pane", got)
+	if got := m.Jump(); got != "ws:w9" {
+		t.Fatalf("one click on an empty workspace tile jumped to %q, want its workspace", got)
 	}
 }

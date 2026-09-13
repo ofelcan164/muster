@@ -10,41 +10,28 @@ import (
 	"github.com/ofelcan164/muster/internal/model"
 )
 
-// A card with one pane behind it has an obvious answer. A card with nine does
-// not, and picking the first of nine shells scattered across nine workspaces
-// takes the screen somewhere nobody asked to go.
-func TestActivatingABareCard(t *testing.T) {
-	bare := func(panes int) *model.Snapshot {
-		s := &model.Snapshot{Repos: []model.Repo{{Key: "k", Name: "ofelcan", Display: "ofelcan"}}}
+// An empty workspace tile always focuses its workspace, however many panes it
+// holds: there is no longer a choice among them to refuse.
+func TestActivatingAnEmptyWorkspaceTile(t *testing.T) {
+	withPanes := func(panes int) *model.Snapshot {
+		s := &model.Snapshot{
+			Workspaces: []model.Workspace{{ID: "w1", Number: 1, Label: "ofelcan"}},
+			Repos:      []model.Repo{{Key: "k", Name: "ofelcan", Display: "ofelcan", WorkspaceIDs: []string{"w1"}}},
+		}
 		for i := 0; i < panes; i++ {
 			s.Repos[0].OtherPanes = append(s.Repos[0].OtherPanes,
-				model.Pane{PaneID: "w" + string(rune('1'+i)) + ":p1", Label: "bash"})
+				model.Pane{PaneID: "w" + string(rune('1'+i)) + ":p1", WorkspaceID: "w1", Label: "bash"})
 		}
 		return s
 	}
 
-	one := withSnapshot(t, bare(1), 100)
-	one.cursor = 0
-	one.activate()
-	if one.Jump() != "w1:p1" {
-		t.Errorf("one pane is an obvious answer, jumped to %q", one.Jump())
-	}
-
-	many := withSnapshot(t, bare(9), 100)
-	many.cursor = 0
-	many.activate()
-	if many.Jump() != "" {
-		t.Errorf("nine panes should not pick one, jumped to %q", many.Jump())
-	}
-	if !strings.Contains(many.notice, "9 panes") {
-		t.Errorf("notice = %q, want it to say why it did nothing", many.notice)
-	}
-
-	none := withSnapshot(t, bare(0), 100)
-	none.cursor = 0
-	none.activate()
-	if none.Jump() != "" || !strings.Contains(none.notice, "nothing open") {
-		t.Errorf("jump=%q notice=%q", none.Jump(), none.notice)
+	for _, panes := range []int{0, 1, 9} {
+		m := withSnapshot(t, withPanes(panes), 100)
+		m.cursor = m.targetIndex("ws:w1")
+		m.activate()
+		if m.Jump() != "ws:w1" {
+			t.Errorf("%d panes: jumped to %q, want the workspace", panes, m.Jump())
+		}
 	}
 }
 
@@ -201,37 +188,76 @@ func TestSelectionDoesNotFallOntoTheRibbon(t *testing.T) {
 	}
 }
 
-// One J or K records the whole visible order, which pinned every card, so s
-// changed nothing on screen. The arrangement is saved, so it stayed broken in
-// later sessions too.
-func TestSortAfterAManualMoveActuallySorts(t *testing.T) {
+// J and K move workspaces only in herdr sort. Every other mode leaves the
+// order untouched and says why, since repo_order is gone: there is nothing
+// left for them to do outside it.
+func TestJKDoNothingOutsideHerdrSort(t *testing.T) {
 	m := newSized(143)
-	saved := []string{"unset"}
-	m.SetOrderSaver(func(o []string) { saved = o })
-
+	before := append([]model.Workspace(nil), m.snap.Workspaces...)
 	m.firstGridTarget()
 	key(m, "J")
-	if len(m.moves) == 0 {
-		t.Fatal("J recorded no move")
+	if !slices.Equal(m.snap.Workspaces, before) {
+		t.Errorf("J moved a workspace outside herdr sort: %v", m.snap.Workspaces)
 	}
-	before := m.currentOrder()
+	if !strings.Contains(m.notice, "herdr sort") {
+		t.Errorf("notice = %q, want it to say J and K need herdr sort", m.notice)
+	}
+}
 
-	// One sort mode may happen to agree with where the card was moved, so the
-	// property to check is that the grid is not frozen: somewhere in the cycle
-	// the order has to change.
-	changed := false
-	for range int(sortModeCount) {
-		key(m, "s")
-		if !slices.Equal(before, m.currentOrder()) {
-			changed = true
-			break
-		}
+// In herdr sort, J calls workspace.move and reorders the local snapshot
+// before the next one lands, so the tiles move at once, and the cursor
+// follows the tile rather than the position it moved from.
+func TestJKMoveWorkspacesInHerdrSort(t *testing.T) {
+	m := newSized(143)
+	m.sort = SortHerdr
+	m.rebuild()
+
+	var movedID string
+	var insertIndex int
+	m.SetWorkspaceMover(func(id string, i int) error {
+		movedID, insertIndex = id, i
+		return nil
+	})
+
+	// w1 is workspace number 1, first in herdr sort. Moving it down one swaps
+	// it with w2.
+	m.cursor = m.targetIndex("pane:w1:p1")
+	key(m, "J")
+
+	if m.snap.Workspaces[0].ID != "w2" || m.snap.Workspaces[1].ID != "w1" {
+		t.Fatalf("w1 did not move down one place: %v", m.snap.Workspaces)
 	}
-	if !changed {
-		t.Errorf("every sort mode left the order pinned at %v", before)
+	if movedID != "w1" || insertIndex != 2 {
+		t.Errorf("workspace.move called with (%q, %d), want (w1, 2)", movedID, insertIndex)
 	}
-	if len(saved) != 0 {
-		t.Errorf("the manual order was kept as %v, so the next session is stuck too", saved)
+	if m.selectedPane() != "w1:p1" {
+		t.Errorf("cursor left the moved tile, now on %q", m.selectedPane())
+	}
+}
+
+// herdr sort mirrors the sidebar exactly, so unlike every other mode it must
+// not pull an empty workspace behind a busy one that sits later in the
+// sidebar.
+func TestHerdrSortSkipsBusyFirst(t *testing.T) {
+	snap := &model.Snapshot{
+		Workspaces: []model.Workspace{
+			{ID: "empty", Number: 1, Label: "notes"},
+			{ID: "busy", Number: 2, Label: "hub"},
+		},
+		Repos: []model.Repo{{
+			Key: "acme/hub", Name: "acme/hub", Display: "hub", WorkspaceIDs: []string{"busy"},
+			Agents: []model.Agent{{PaneID: "busy:p1", WorkspaceID: "busy", Name: "claude",
+				Status: model.StatusIdle, AgeKnown: true}},
+		}},
+	}
+	m := New(snap, "")
+	m.Update(tea.WindowSizeMsg{Width: 143, Height: 40})
+	m.sort = SortHerdr
+
+	tiles := m.orderedTiles(m.visibleTiles())
+	if len(tiles) != 2 || tiles[0].Workspace.ID != "empty" {
+		t.Fatalf("herdr sort must keep sidebar order even for an empty workspace ahead of a busy one: %+v",
+			labelsOf(tiles))
 	}
 }
 

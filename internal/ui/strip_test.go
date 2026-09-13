@@ -98,8 +98,8 @@ func TestSelectingTheStripDoesNotHighlightACard(t *testing.T) {
 	m := withSnapshot(t, withOrch(), 143)
 	m.View()
 	m.cursor = m.stripTargetIndex()
-	if got := m.selectedRepo(); got != "" {
-		t.Errorf("selecting the strip also selected repo %q", got)
+	if got := m.selectedWorkspace(); got != "" {
+		t.Errorf("selecting the strip also selected workspace %q", got)
 	}
 }
 

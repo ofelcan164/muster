@@ -26,34 +26,44 @@ func visibleWidth(line string) int {
 	return len([]rune(escapes.ReplaceAllString(line, "")))
 }
 
+// testSnapshot's four workspaces: w1 contracts (one agent), w2 api (two
+// agents), w3 web (one agent), w9 infra (no agent at all, so it draws as an
+// empty tile). Each workspace also holds a "vite" pane, which is what exercises
+// the shared "N agents · M panes" footer and the empty tile's own line.
 func testSnapshot() *model.Snapshot {
 	now := time.Now()
-	agent := func(pane, name string, st model.Status, task string) model.Agent {
+	agent := func(pane, ws, name string, st model.Status, task string) model.Agent {
 		return model.Agent{
-			PaneID: pane, Name: name, Status: st, Task: task,
+			PaneID: pane, WorkspaceID: ws, Name: name, Status: st, Task: task,
 			TaskSource:  model.TaskFromOrchestrator,
 			StatusSince: now.Add(-5 * time.Minute), AgeKnown: true,
 		}
 	}
-	repo := func(slot int, key, display, branch, sigil string, agents ...model.Agent) model.Repo {
+	repo := func(slot int, key, display, branch, sigil, ws string, agents ...model.Agent) model.Repo {
 		return model.Repo{
 			Key: key, Name: key, Display: display, Branch: branch,
 			Sigil: sigil, ColorIndex: slot % 8, GridSlot: slot,
-			IsGit: true, Agents: agents,
-			OtherPanes: []model.Pane{{PaneID: key + ":p9", Label: "vite"}},
+			IsGit: true, Agents: agents, WorkspaceIDs: []string{ws},
+			OtherPanes: []model.Pane{{PaneID: key + ":p9", WorkspaceID: ws, Label: "vite"}},
 		}
 	}
 	return &model.Snapshot{
 		GeneratedAt: now,
+		Workspaces: []model.Workspace{
+			{ID: "w1", Number: 1, Label: "contracts"},
+			{ID: "w2", Number: 2, Label: "api"},
+			{ID: "w3", Number: 3, Label: "web"},
+			{ID: "w9", Number: 4, Label: "infra"},
+		},
 		Repos: []model.Repo{
-			repo(0, "acme/contracts", "contracts", "main", "✦",
-				agent("w1:p1", "bump-v3", model.StatusIdle, "cut v3 types")),
-			repo(1, "acme/api", "api", "feat/billing-migrations", "◆",
-				agent("w2:p1", "migrations", model.StatusBlocked, "add billing schema migration"),
-				agent("w2:p2", "tests", model.StatusDone, "integration suite")),
-			repo(2, "acme/web", "web", "feat/checkout-ui", "▣",
-				agent("w3:p1", "checkout-ui", model.StatusWorking, "parked until api lands")),
-			repo(3, "acme/infra", "infra", "main", "⬡"),
+			repo(0, "acme/contracts", "contracts", "main", "✦", "w1",
+				agent("w1:p1", "w1", "bump-v3", model.StatusIdle, "cut v3 types")),
+			repo(1, "acme/api", "api", "feat/billing-migrations", "◆", "w2",
+				agent("w2:p1", "w2", "migrations", model.StatusBlocked, "add billing schema migration"),
+				agent("w2:p2", "w2", "tests", model.StatusDone, "check the test suite")),
+			repo(2, "acme/web", "web", "feat/checkout-ui", "▣", "w3",
+				agent("w3:p1", "w3", "checkout-ui", model.StatusWorking, "parked until api lands")),
+			repo(3, "acme/infra", "infra", "main", "⬡", "w9"),
 		},
 		Attention: []model.Attention{
 			{Rank: 1, Reason: model.ReasonBlocked, RepoKey: "acme/api", PaneID: "w2:p1",
@@ -63,7 +73,7 @@ func testSnapshot() *model.Snapshot {
 				Agent: "tests", Status: model.StatusDone, Age: 6 * time.Minute,
 				AgeKnown: true, Detail: "finished, unseen"},
 		},
-		Counts: model.Counts{Repos: 4, Agents: 4, NeedsYou: 2},
+		Counts: model.Counts{Repos: 4, Workspaces: 4, Agents: 4, NeedsYou: 2},
 	}
 }
 
@@ -104,8 +114,9 @@ func TestBreakpoints(t *testing.T) {
 
 func TestNarrowCollapsesToOneColumn(t *testing.T) {
 	out := render(t, 53)
-	// In one column every repo header starts its own line, so all four appear.
-	for _, name := range []string{"CONTRACTS", "API", "WEB", "INFRA"} {
+	// In one column every tile starts its own line, so all four repos and the
+	// empty workspace's own label appear.
+	for _, name := range []string{"contracts", "api", "web", "infra"} {
 		if !strings.Contains(out, name) {
 			t.Errorf("narrow layout dropped %s", name)
 		}
@@ -254,10 +265,8 @@ func TestDownMovesDownTheColumn(t *testing.T) {
 		t.Fatal("no card in the top-left cell")
 	}
 	m.cursor = start
-	// Walk out of the card: its own agents come first, which is right.
-	for m.targets[m.cursor].repoKey == m.targets[start].repoKey {
-		key(m, "j")
-	}
+	// One tile is one cell now, so a single down is enough to leave it.
+	key(m, "j")
 	if got := m.targets[m.cursor]; got.column != 0 || got.row != 1 {
 		t.Errorf("down from the top-left card landed in column %d row %d, want 0,1",
 			got.column, got.row)
@@ -374,19 +383,20 @@ func TestEscapeLeavesSearchModeThenClears(t *testing.T) {
 }
 
 // The bug: searching for a repo that has no agents found nothing, because the
-// filter only kept repos with matching agents.
-func TestSearchFindsReposWithNoAgents(t *testing.T) {
+// filter only kept repos with matching agents. Now it is an empty workspace
+// tile the same search has to find.
+func TestSearchFindsWorkspacesWithNoAgent(t *testing.T) {
 	m := newSized(143)
 	key(m, "slash")
 	for _, r := range "infra" {
 		key(m, string(r))
 	}
-	repos := m.visibleRepos()
-	if len(repos) != 1 || repos[0].Display != "infra" {
-		t.Fatalf("searching for an agent-less repo found %d repos: %+v", len(repos), repos)
+	tiles := m.visibleTiles()
+	if len(tiles) != 1 || tiles[0].isAgent() || tiles[0].Workspace.Label != "infra" {
+		t.Fatalf("searching for an agent-less workspace found %d tiles: %+v", len(tiles), tiles)
 	}
 	if len(m.targets) == 0 {
-		t.Error("the matched repo should be selectable")
+		t.Error("the matched workspace should be selectable")
 	}
 }
 
@@ -397,7 +407,7 @@ func TestSearchMatchesBranchAndTask(t *testing.T) {
 		for _, r := range q {
 			key(m, string(r))
 		}
-		if len(m.visibleRepos()) == 0 {
+		if len(m.visibleTiles()) == 0 {
 			t.Errorf("search %q matched nothing", q)
 		}
 	}
@@ -406,63 +416,45 @@ func TestSearchMatchesBranchAndTask(t *testing.T) {
 	for _, r := range "zzzznope" {
 		key(m, string(r))
 	}
-	if len(m.visibleRepos()) != 0 {
+	if len(m.visibleTiles()) != 0 {
 		t.Error("expected no matches")
 	}
 }
 
 // The bug: with two agents across four repos, only the agents were reachable,
 // so the arrow keys appeared to move between two things and stop.
-func TestEveryRepoIsReachable(t *testing.T) {
+func TestEveryWorkspaceIsReachable(t *testing.T) {
 	m := newSized(143)
 	seen := map[string]bool{}
 	for i := 0; i < len(m.targets); i++ {
-		seen[m.targets[i].repoKey] = true
+		if m.targets[i].kind == kindGrid {
+			seen[m.targets[i].workspaceID] = true
+		}
 	}
-	for _, r := range m.snap.Repos {
-		if !seen[r.Key] {
-			t.Errorf("repo %s cannot be reached by the cursor", r.Key)
+	for _, w := range m.snap.Workspaces {
+		if !seen[w.ID] {
+			t.Errorf("workspace %s cannot be reached by the cursor", w.ID)
 		}
 	}
 }
 
-// A repo card with no agents opens the pane behind it, and opens nothing when
-// there is no pane behind it either.
-func TestAgentlessRepoOpensItsPane(t *testing.T) {
+// An empty workspace tile always focuses its workspace, however many panes or
+// repos it holds: there is no longer a choice to refuse between them.
+func TestEmptyWorkspaceTileFocusesItsWorkspace(t *testing.T) {
 	m := newSized(143)
 	for i := range m.targets {
-		if m.targets[i].paneID != "" {
+		if m.targets[i].kind != kindGrid || m.targets[i].paneID != "" {
 			continue
 		}
-		repoKey := m.targets[i].repoKey
+		wsID := m.targets[i].workspaceID
 		m.cursor = i
 		key(m, "enter")
-		if want := repoKey + ":p9"; m.Jump() != want {
-			t.Errorf("enter on %s jumped to %q, want %q", repoKey, m.Jump(), want)
+		if want := "ws:" + wsID; m.Jump() != want {
+			t.Errorf("enter on workspace %s jumped to %q, want %q", wsID, m.Jump(), want)
 		}
 		return
 	}
-	t.Fatal("no agent-less repo target found")
-}
-
-func TestAgentlessRepoWithNoPanesDoesNotJump(t *testing.T) {
-	snap := testSnapshot()
-	for i := range snap.Repos {
-		snap.Repos[i].OtherPanes = nil
-	}
-	m := New(snap, "")
-	m.Update(tea.WindowSizeMsg{Width: 143, Height: 40})
-	for i := range m.targets {
-		if m.targets[i].paneID == "" {
-			m.cursor = i
-			key(m, "enter")
-			if m.Jump() != "" {
-				t.Errorf("nowhere to jump, got %q", m.Jump())
-			}
-			return
-		}
-	}
-	t.Fatal("no agent-less repo target found")
+	t.Fatal("no empty workspace target found")
 }
 
 func TestSortCycles(t *testing.T) {
@@ -486,39 +478,17 @@ func TestSortCycles(t *testing.T) {
 func TestAlphabeticalSort(t *testing.T) {
 	m := newSized(143)
 	m.sort = SortAlphabetical
-	repos := m.orderedRepos(m.visibleRepos())
+	tiles := m.orderedTiles(m.visibleTiles())
 	// Agents-first is the outer key, so alphabetical holds within each group
 	// rather than across the whole list.
-	for i := 1; i < len(repos); i++ {
-		prevBusy := len(repos[i-1].Agents) > 0
-		busy := len(repos[i].Agents) > 0
-		if prevBusy != busy {
+	for i := 1; i < len(tiles); i++ {
+		if tiles[i-1].isAgent() != tiles[i].isAgent() {
 			continue // group boundary
 		}
-		if repos[i-1].Display > repos[i].Display {
+		if tiles[i-1].label() > tiles[i].label() {
 			t.Errorf("not alphabetical within its group: %s before %s",
-				repos[i-1].Display, repos[i].Display)
+				tiles[i-1].label(), tiles[i].label())
 		}
-	}
-}
-
-func TestManualReorderMovesARepo(t *testing.T) {
-	m := newSized(143)
-	before := m.currentOrder()
-	if len(before) < 2 {
-		t.Skip("need two repos")
-	}
-	// Select the second repo's first target, then move it up.
-	for i, tg := range m.targets {
-		if tg.repoKey == before[1] {
-			m.cursor = i
-			break
-		}
-	}
-	key(m, "K")
-	after := m.currentOrder()
-	if after[0] != before[1] {
-		t.Errorf("expected %s to move to the front, order is %v", before[1], after)
 	}
 }
 
@@ -616,27 +586,27 @@ func TestHoverHighlightsWhatAClickWouldTake(t *testing.T) {
 	}
 }
 
-// Quiet repos are still shown, just never above one you are working in.
-func TestReposWithAgentsSortFirst(t *testing.T) {
+// Empty workspace tiles are still shown, just never above one you are working
+// in.
+func TestAgentTilesSortFirst(t *testing.T) {
 	m := newSized(143)
-	repos := m.orderedRepos(m.visibleRepos())
-	if len(repos) < 2 {
-		t.Skip("need several repos")
+	tiles := m.orderedTiles(m.visibleTiles())
+	if len(tiles) < 2 {
+		t.Skip("need several tiles")
 	}
-	seenQuiet := false
-	for _, r := range repos {
-		if len(r.Agents) == 0 {
-			seenQuiet = true
+	seenEmpty := false
+	for _, tl := range tiles {
+		if !tl.isAgent() {
+			seenEmpty = true
 			continue
 		}
-		if seenQuiet {
-			t.Errorf("repo %s has agents but sorts after a quiet one", r.Display)
+		if seenEmpty {
+			t.Errorf("agent tile %s sorts after an empty workspace tile", tl.Agent.Name)
 		}
 	}
 	// And nothing was dropped.
-	if len(repos) != len(m.snap.Repos) {
-		t.Errorf("showing %d of %d repos; quiet repos should still appear",
-			len(repos), len(m.snap.Repos))
+	if want := len(buildTiles(m.snap)); len(tiles) != want {
+		t.Errorf("showing %d of %d tiles; empty workspaces should still appear", len(tiles), want)
 	}
 }
 
@@ -645,12 +615,12 @@ func TestAgentsFirstHoldsAcrossSortModes(t *testing.T) {
 	for _, mode := range []SortMode{SortFirstSeen, SortAlphabetical, SortAttention} {
 		m := newSized(143)
 		m.sort = mode
-		seenQuiet := false
-		for _, r := range m.orderedRepos(m.visibleRepos()) {
-			if len(r.Agents) == 0 {
-				seenQuiet = true
-			} else if seenQuiet {
-				t.Errorf("sort %v put a busy repo after a quiet one", mode)
+		seenEmpty := false
+		for _, tl := range m.orderedTiles(m.visibleTiles()) {
+			if !tl.isAgent() {
+				seenEmpty = true
+			} else if seenEmpty {
+				t.Errorf("sort %v put an agent tile after an empty one", mode)
 				break
 			}
 		}
@@ -726,9 +696,12 @@ func TestClickRegionsLineUpWithWhatWasDrawn(t *testing.T) {
 		}
 	}
 
-	// The first grid card's header text must sit on the first line it claims.
-	for _, r := range m.orderedRepos(m.visibleRepos()) {
-		ti := m.targetIndex("repo:" + r.Key)
+	// The empty workspace tile's own text must sit on the first line it claims.
+	for _, tl := range m.orderedTiles(m.visibleTiles()) {
+		if tl.isAgent() {
+			continue
+		}
+		ti := m.targetIndex("ws:" + tl.Workspace.ID)
 		if ti < 0 {
 			continue
 		}
@@ -742,9 +715,9 @@ func TestClickRegionsLineUpWithWhatWasDrawn(t *testing.T) {
 			continue
 		}
 		plain := escapes.ReplaceAllString(lines[first], "")
-		if !strings.Contains(strings.ToUpper(plain), strings.ToUpper(r.Display)) {
-			t.Errorf("repo %s claims line %d but that line reads %q",
-				r.Display, first, strings.TrimSpace(plain))
+		if !strings.Contains(strings.ToLower(plain), strings.ToLower(tl.Workspace.Label)) {
+			t.Errorf("workspace %s claims line %d but that line reads %q",
+				tl.Workspace.Label, first, strings.TrimSpace(plain))
 		}
 		return
 	}
@@ -820,7 +793,7 @@ func TestAttentionRuleShowsTheCount(t *testing.T) {
 func TestOverlayRefreshesFromTheSnapshot(t *testing.T) {
 	m := newSized(143)
 	before := escapes.ReplaceAllString(m.View(), "")
-	if strings.Contains(before, "SOMETHING NEW") {
+	if strings.Contains(before, "something new") {
 		t.Fatal("fixture already contains the marker")
 	}
 
@@ -830,7 +803,7 @@ func TestOverlayRefreshesFromTheSnapshot(t *testing.T) {
 
 	m.Update(refreshMsg{})
 	after := escapes.ReplaceAllString(m.View(), "")
-	if !strings.Contains(after, "SOMETHING NEW") {
+	if !strings.Contains(after, "something new") {
 		t.Error("the overlay did not pick up the new snapshot")
 	}
 }
@@ -908,9 +881,9 @@ func TestSearchMatchesFuzzily(t *testing.T) {
 	for _, r := range "cnt" {
 		key(m, string(r))
 	}
-	repos := m.visibleRepos()
-	if len(repos) == 0 || repos[0].Display != "contracts" {
-		t.Errorf("cnt should find contracts first, got %v", displaysOf(repos))
+	tiles := m.visibleTiles()
+	if len(tiles) == 0 || tiles[0].label() != "contracts" {
+		t.Errorf("cnt should find contracts first, got %v", labelsOf(tiles))
 	}
 
 	// Two terms spread across a repo and one of its agents. Neither field set
@@ -920,12 +893,9 @@ func TestSearchMatchesFuzzily(t *testing.T) {
 	for _, r := range "web checkout" {
 		key(m, string(r))
 	}
-	repos = m.visibleRepos()
-	if len(repos) != 1 || repos[0].Key != "acme/web" {
-		t.Fatalf("web checkout matched %v, want just web", displaysOf(repos))
-	}
-	if len(repos[0].Agents) != 1 || repos[0].Agents[0].Name != "checkout-ui" {
-		t.Errorf("kept the wrong agents: %+v", repos[0].Agents)
+	tiles = m.visibleTiles()
+	if len(tiles) != 1 || tiles[0].Repo.Key != "acme/web" || tiles[0].Agent.Name != "checkout-ui" {
+		t.Fatalf("web checkout matched %v, want just the web agent", labelsOf(tiles))
 	}
 }
 
@@ -937,14 +907,14 @@ func TestEverySearchTermMustMatch(t *testing.T) {
 	for _, r := range "web zzzznope" {
 		key(m, string(r))
 	}
-	if got := m.visibleRepos(); len(got) != 0 {
-		t.Errorf("a term that matches nothing should empty the results, got %v", displaysOf(got))
+	if got := m.visibleTiles(); len(got) != 0 {
+		t.Errorf("a term that matches nothing should empty the results, got %v", labelsOf(got))
 	}
 }
 
 // The best match sorts first, and neither the grid's sort nor the rule that
-// puts repos with agents first gets to reorder it underneath. infra matches on
-// its own name and has no agents, so both of those would bury it.
+// puts agent tiles first gets to reorder it underneath. infra matches on its
+// own name and has no agent, so both of those would bury it.
 func TestSearchRanksTheBestMatchFirst(t *testing.T) {
 	for _, mode := range []SortMode{SortFirstSeen, SortAlphabetical, SortAttention} {
 		m := newSized(143)
@@ -953,17 +923,17 @@ func TestSearchRanksTheBestMatchFirst(t *testing.T) {
 		for _, r := range "in" {
 			key(m, string(r))
 		}
-		got := m.orderedRepos(m.visibleRepos())
-		if len(got) == 0 || got[0].Key != "acme/infra" {
-			t.Errorf("sort %v: prefix match should rank first, got %v", mode, displaysOf(got))
+		got := m.orderedTiles(m.visibleTiles())
+		if len(got) == 0 || got[0].label() != "infra" {
+			t.Errorf("sort %v: prefix match should rank first, got %v", mode, labelsOf(got))
 		}
 	}
 }
 
-func displaysOf(repos []model.Repo) []string {
-	var out []string
-	for _, r := range repos {
-		out = append(out, r.Display)
+func labelsOf(tiles []tile) []string {
+	out := make([]string, 0, len(tiles))
+	for _, t := range tiles {
+		out = append(out, t.label())
 	}
 	return out
 }

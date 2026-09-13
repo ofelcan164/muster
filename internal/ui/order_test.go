@@ -8,26 +8,33 @@ import (
 	"github.com/ofelcan164/muster/internal/state"
 )
 
-// drawnRepoKeys is the repo order the view actually paints.
-func drawnRepoKeys(m *Model) []string {
+// tileKey identifies a tile the same way a target does, so the two can be
+// compared position by position.
+func tileKey(t tile) string {
+	if t.isAgent() {
+		return "pane:" + t.Agent.PaneID
+	}
+	return "ws:" + t.Workspace.ID
+}
+
+// drawnTileKeys is the tile order the view actually paints.
+func drawnTileKeys(m *Model) []string {
 	var out []string
-	for _, r := range m.orderedRepos(m.visibleRepos()) {
-		out = append(out, r.Key)
+	for _, t := range m.orderedTiles(m.visibleTiles()) {
+		out = append(out, tileKey(t))
 	}
 	return out
 }
 
-// walkedRepoKeys is the repo order the cursor moves through, which is the order
+// walkedTileKeys is the order the cursor moves through, which is the order
 // the targets were built in.
-func walkedRepoKeys(m *Model) []string {
+func walkedTileKeys(m *Model) []string {
 	var out []string
 	for _, t := range m.targets {
-		if t.kind != kindGrid || t.repoKey == "" {
+		if t.kind != kindGrid {
 			continue
 		}
-		if len(out) == 0 || out[len(out)-1] != t.repoKey {
-			out = append(out, t.repoKey)
-		}
+		out = append(out, m.keyOf(t))
 	}
 	return out
 }
@@ -39,18 +46,18 @@ func sized(t *testing.T, width int) *Model {
 	return m
 }
 
-// The cursor has to walk the grid in the order the grid is drawn. They came
-// from two different calls, so any sort or manual move made them disagree and
-// j moved somewhere other than the card below.
+// The cursor has to walk the grid in the order the grid is drawn. They come
+// from two different calls, so any sort made them disagree and j moved
+// somewhere other than the tile below.
 func TestCursorOrderMatchesDrawnOrder(t *testing.T) {
-	for _, mode := range []SortMode{SortFirstSeen, SortAlphabetical, SortAttention} {
+	for _, mode := range []SortMode{SortFirstSeen, SortAlphabetical, SortAttention, SortHerdr} {
 		m := sized(t, 143)
 		m.sort = mode
 		m.rebuild()
 
-		drawn, walked := drawnRepoKeys(m), walkedRepoKeys(m)
+		drawn, walked := drawnTileKeys(m), walkedTileKeys(m)
 		if len(drawn) != len(walked) {
-			t.Fatalf("sort %v: drew %d repos, cursor reaches %d", mode, len(drawn), len(walked))
+			t.Fatalf("sort %v: drew %d tiles, cursor reaches %d", mode, len(drawn), len(walked))
 		}
 		for i := range drawn {
 			if drawn[i] != walked[i] {
@@ -62,7 +69,7 @@ func TestCursorOrderMatchesDrawnOrder(t *testing.T) {
 }
 
 // The column recorded on a target is what left and right navigate by, so it has
-// to be the column the card is drawn in.
+// to be the column the tile is drawn in.
 func TestTargetColumnMatchesDrawnColumn(t *testing.T) {
 	m := sized(t, 143)
 	m.sort = SortAlphabetical
@@ -70,85 +77,21 @@ func TestTargetColumnMatchesDrawnColumn(t *testing.T) {
 
 	cols := columnsFor(m.width)
 	want := map[string]int{}
-	for i, key := range drawnRepoKeys(m) {
+	for i, key := range drawnTileKeys(m) {
 		want[key] = i % cols
 	}
 	for _, tg := range m.targets {
 		if tg.kind != kindGrid {
 			continue
 		}
-		if got := tg.column; got != want[tg.repoKey] {
-			t.Errorf("repo %q drawn in column %d, target says %d", tg.repoKey, want[tg.repoKey], got)
+		key := m.keyOf(tg)
+		if got := tg.column; got != want[key] {
+			t.Errorf("tile %q drawn in column %d, target says %d", key, want[key], got)
 		}
 	}
 }
 
-// A manual move has to survive the overlay closing. It is stored in the
-// overlay's own file rather than the daemon's, which the daemon would overwrite
-// on its next reconcile.
-func TestManualOrderRoundTrips(t *testing.T) {
-	state.SetDir(t.TempDir())
-	t.Cleanup(func() { state.SetDir("") })
-
-	m := sized(t, 143)
-	saved := state.LoadUI()
-	m.SetOrderSaver(func(order []string) {
-		saved.RepoOrder = order
-		if err := saved.Save(); err != nil {
-			t.Errorf("save: %v", err)
-		}
-	})
-
-	// Select the last repo card and move it up one.
-	m.cursor = len(m.targets) - 1
-	moved := m.selectedRepo()
-	m.moveSelectedRepo(-1)
-
-	if len(saved.RepoOrder) == 0 {
-		t.Fatal("moving a repo saved nothing")
-	}
-	want := drawnRepoKeys(m)
-
-	// A fresh overlay, reading the file back.
-	reloaded := state.LoadUI()
-	next := sized(t, 143)
-	next.SetManualOrder(reloaded.RepoOrder)
-	got := drawnRepoKeys(next)
-
-	if len(got) != len(want) {
-		t.Fatalf("restored %d repos, arranged %d", len(got), len(want))
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("moved %q, then restored order %v, wanted %v", moved, got, want)
-		}
-	}
-}
-
-// Rearranging while filtering would record an arrangement of only the matches
-// and push every other repo behind them, which now outlives the session.
-func TestFilteringBlocksManualMoves(t *testing.T) {
-	m := sized(t, 143)
-	saved := 0
-	m.SetOrderSaver(func([]string) { saved++ })
-
-	m.filter = "api"
-	m.rebuild()
-	before := drawnRepoKeys(m)
-	m.moveSelectedRepo(1)
-
-	if saved != 0 {
-		t.Errorf("a move made while filtering saved %d times", saved)
-	}
-	if got := drawnRepoKeys(m); len(got) != len(before) || (len(got) > 0 && got[0] != before[0]) {
-		t.Errorf("filtering changed the order: %v became %v", before, got)
-	}
-	if len(m.moves) != 0 {
-		t.Errorf("filtering recorded an arrangement: %v", m.moves)
-	}
-}
-
-// The sort mode has to survive the overlay closing too. The client is
+// The sort mode has to survive the overlay closing. The client is
 // short-lived, so a mode held only in the model lasted one keypress.
 func TestSortModeRoundTrips(t *testing.T) {
 	state.SetDir(t.TempDir())
@@ -190,19 +133,19 @@ func TestRestoredSortModeIsClamped(t *testing.T) {
 }
 
 // Working agents never reach the ribbon, so the attention sort used to weigh a
-// repo with work in it exactly the same as a silent one.
+// tile with work in it exactly the same as a silent one.
 func TestAttentionSortPutsWorkAboveSilence(t *testing.T) {
 	m := sized(t, 143)
 	m.sort = SortAttention
 	m.rebuild()
 
-	got := drawnRepoKeys(m)
+	got := drawnTileKeys(m)
 	pos := map[string]int{}
 	for i, k := range got {
 		pos[k] = i
 	}
-	// api holds the blocked agent, web is working, contracts is only idle.
-	if !(pos["acme/api"] < pos["acme/web"] && pos["acme/web"] < pos["acme/contracts"]) {
-		t.Errorf("attention order %v, want api before web before contracts", got)
+	// w2:p1 is blocked, w3:p1 is working, w1:p1 is only idle.
+	if !(pos["pane:w2:p1"] < pos["pane:w3:p1"] && pos["pane:w3:p1"] < pos["pane:w1:p1"]) {
+		t.Errorf("attention order %v, want w2:p1 before w3:p1 before w1:p1", got)
 	}
 }
