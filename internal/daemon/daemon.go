@@ -105,7 +105,11 @@ func (d *Daemon) Run(ctx context.Context) error {
 		return err
 	}
 
-	events := d.client.Subscribe(ctx, herdr.GlobalSubscriptions)
+	// Subscribing first and reconciling second is the order herdr's own docs
+	// prescribe: the subscription buffers while the snapshot is in flight, so
+	// nothing that changes in between is missed. The acknowledgement arrives as
+	// an event, which reconciles again on every reconnect.
+	events := d.client.Subscribe(ctx, herdr.GlobalSubscriptions, d.logf)
 
 	// Reconcile once up front so the snapshot is valid before any event
 	// arrives. The overlay may be opened a millisecond after the daemon starts.
@@ -175,9 +179,9 @@ func (d *Daemon) Run(ctx context.Context) error {
 }
 
 // reconcile rebuilds the whole world from an authoritative snapshot and writes
-// the result. It never builds state from the event stream: herdr replays
-// historical events on every subscribe, including events for panes that no
-// longer exist, so the stream cannot be trusted as a log.
+// the result. It never builds state from the event stream: events are a hint
+// that something changed, never the change itself, and 0.8.2 replayed closed
+// panes on every subscribe, so the stream cannot be trusted as a log.
 //
 // ctx is Run's, handed on to the pane reads it launches so none starts once the
 // daemon is shutting down.

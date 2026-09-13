@@ -57,10 +57,10 @@ func (l *LogFile) Write(p []byte) (int, error) {
 
 	if l.n+int64(len(p)) > maxLogBytes {
 		// A rotation that fails is not worth losing the line over: keep writing
-		// to whatever handle is still open and try again on the next write.
-		if err := l.rotate(); err != nil {
-			l.n = 0
-		}
+		// to whatever handle is still open and try again on the next write. The
+		// count is deliberately left where it is, since zeroing it meant the
+		// retry the comment promises waited for another megabyte.
+		_ = l.rotate()
 	}
 	n, err := l.f.Write(p)
 	l.n += int64(n)

@@ -14,7 +14,8 @@ import (
 
 // The first connection streams a line with no end. The client has to drop it
 // and reconnect, and the second connection's events have to arrive with their
-// names normalised and without the subscription_started ack among them.
+// names normalised. Each connection announces itself with a subscription_started
+// event first, which is what makes the daemon reconcile after a reconnect.
 func TestSubscribeNormalisesAndReconnectsPastLongLine(t *testing.T) {
 	var conns atomic.Int32
 	c := fakeServer(t, func(conn net.Conn, id, method string) {
@@ -33,14 +34,19 @@ func TestSubscribeNormalisesAndReconnectsPastLongLine(t *testing.T) {
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
-	ch := c.Subscribe(ctx, GlobalSubscriptions)
+	ch := c.Subscribe(ctx, GlobalSubscriptions, nil)
 	defer func() {
 		cancel()
 		for range ch {
 		}
 	}()
 
-	for _, want := range []string{"pane_agent_status_changed", "pane_updated"} {
+	for _, want := range []string{
+		"subscription_started", // the dropped connection
+		"subscription_started", // the one that replaced it
+		"pane_agent_status_changed",
+		"pane_updated",
+	} {
 		select {
 		case ev := <-ch:
 			if ev.Name != want {
@@ -55,5 +61,40 @@ func TestSubscribeNormalisesAndReconnectsPastLongLine(t *testing.T) {
 	}
 	if n := conns.Load(); n != 2 {
 		t.Fatalf("%d connections, want 2", n)
+	}
+}
+
+// A subscription that keeps being dropped has to keep reconnecting promptly.
+// The backoff used to double on every drop and never reset, because the reset
+// sat after a call that only ever returns an error, so a session that dropped a
+// handful of subscriptions ended up waiting 15s to notice anything at all.
+func TestSubscribeResetsBackoffOnEachConnection(t *testing.T) {
+	var conns atomic.Int32
+	c := fakeServer(t, func(conn net.Conn, id, method string) {
+		if method != "events.subscribe" {
+			return
+		}
+		fmt.Fprintf(conn, `{"id":%q,"result":{"type":"subscription_started"}}`+"\n", id)
+		conns.Add(1)
+		// Drop it immediately, every time.
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	ch := c.Subscribe(ctx, GlobalSubscriptions, nil)
+	defer func() {
+		cancel()
+		for range ch {
+		}
+	}()
+
+	// Six reconnects at the 250ms floor take about 1.5s. Doubling without a
+	// reset would need more than 15s to get this far.
+	deadline := time.After(6 * time.Second)
+	for conns.Load() < 6 {
+		select {
+		case <-ch:
+		case <-deadline:
+			t.Fatalf("only %d connections: the backoff is not resetting", conns.Load())
+		}
 	}
 }

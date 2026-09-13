@@ -112,6 +112,12 @@ func cmdDaemon() int {
 	// The daemon's own handle on the log, so it can rotate mid-run. Ensure also
 	// points the child's stderr here, which stays as it is: a panic writes once
 	// and is exactly what you want in the file.
+	//
+	// ponytail: stderr keeps pointing at the file it was opened on, so after a
+	// rotation a panic trace lands in musterd.log.1 rather than musterd.log. It
+	// is still on disk, and the process dies with the panic, so a second
+	// rotation cannot follow it. Re-pointing fd 2 needs dup2, which differs per
+	// platform; do that if traces ever go missing for real.
 	out := io.Writer(os.Stderr)
 	if logFile, err := state.OpenLog(); err == nil {
 		defer logFile.Close()

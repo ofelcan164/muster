@@ -89,16 +89,13 @@ func Ensure() (started bool, err error) {
 		return false, err
 	}
 
-	// Wait briefly for the daemon to take the lock, so --ensure does not report
-	// success for a daemon that died on startup. Bounded tightly: returning
-	// fast matters more than certainty here, and the overlay self-heals anyway.
-	deadline := time.Now().Add(500 * time.Millisecond)
-	for time.Now().Before(deadline) {
-		if running() {
-			return true, nil
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	// No waiting for the child to take the lock. The only way to ask is to try
+	// the lock, and trying it is the one thing that must not happen while a
+	// daemon is starting: a probe holds the lock for microseconds, and a child
+	// that meets it concludes another daemon won and exits quietly, leaving
+	// none. AcquireDaemonLock retries for that reason, but the cheaper half of
+	// the fix is not to probe at all. Startup failures land in musterd.log, and
+	// the overlay says the daemon is not responding.
 	return true, nil
 }
 
@@ -171,13 +168,30 @@ func running() bool {
 
 // AcquireDaemonLock is called by the daemon process itself and holds the lock
 // for its whole lifetime. A second daemon that loses the race exits quietly.
+//
+// It retries rather than giving up on the first refusal. `musterd status` and
+// Ensure both answer "is a daemon running?" by taking the lock and releasing it
+// again, so a lock held at this instant is not proof of another daemon: it may
+// be a probe that lasts microseconds. Losing that race meant no daemon ran at
+// all until something opened the overlay again.
 func AcquireDaemonLock() (*state.Lock, bool, error) {
 	if _, err := state.EnsureDir(); err != nil {
 		return nil, false, err
 	}
-	l, ok, err := state.TryLock(state.LockPath())
-	if err != nil || !ok {
-		return nil, false, err
+	var l *state.Lock
+	var ok bool
+	var err error
+	for deadline := time.Now().Add(250 * time.Millisecond); ; {
+		if l, ok, err = state.TryLock(state.LockPath()); err != nil {
+			return nil, false, err
+		}
+		if ok || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !ok {
+		return nil, false, nil
 	}
 	if err := l.WritePID(); err != nil {
 		_ = l.Release()

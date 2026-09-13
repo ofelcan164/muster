@@ -82,25 +82,40 @@ func normaliseEvent(name string) string { return strings.ReplaceAll(name, ".", "
 // the subscription stops for good.
 //
 // Callers must treat every event as a hint to reconcile from SessionSnapshot,
-// including during the historical replay that follows each (re)connect.
-func (c *Client) Subscribe(ctx context.Context, types []string) <-chan Event {
+// never as a state log. 0.8.2 replayed the session's whole retained history on
+// every subscribe, out of causal order and including panes that had since
+// closed; 0.9.0 dropped the replay but says nothing about ordering either.
+// logf may be nil. It reports why a stream ended, which is the only way a
+// rejected subscription is visible: herdr refuses a whole batch when one type
+// is invalid, so a herdr that drops a type Muster asks for would otherwise
+// leave the daemon silently running on its five second tick alone.
+func (c *Client) Subscribe(ctx context.Context, types []string, logf func(string, ...any)) <-chan Event {
 	out := make(chan Event, 256)
+	if logf == nil {
+		logf = func(string, ...any) {}
+	}
 	go func() {
 		defer close(out)
 		backoff := 250 * time.Millisecond
+		// The acknowledgement, not a returning stream, is what clears the
+		// backoff. streamOnce only ever returns an error, so a reset after it
+		// returned never ran at all and every dropped subscription doubled the
+		// delay until reconnects stuck at the 15s ceiling.
+		connected := func() { backoff = 250 * time.Millisecond }
 		for ctx.Err() == nil {
-			if err := c.streamOnce(ctx, types, out); err != nil && ctx.Err() == nil {
-				select {
-				case <-ctx.Done():
-					return
-				case <-time.After(backoff):
-				}
-				if backoff < 15*time.Second {
-					backoff *= 2
-				}
-				continue
+			err := c.streamOnce(ctx, types, out, connected)
+			if ctx.Err() != nil {
+				return
 			}
-			backoff = 250 * time.Millisecond
+			logf("subscription ended: %v, retrying in %s", err, backoff)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(backoff):
+			}
+			if backoff < 15*time.Second {
+				backoff *= 2
+			}
 		}
 	}()
 	return out
@@ -113,7 +128,7 @@ func (c *Client) Subscribe(ctx context.Context, types []string) <-chan Event {
 // memory.
 const maxEventLine = 1 << 20
 
-func (c *Client) streamOnce(ctx context.Context, types []string, out chan<- Event) error {
+func (c *Client) streamOnce(ctx context.Context, types []string, out chan<- Event, connected func()) error {
 	conn, err := net.DialTimeout("unix", c.socket, 3*time.Second)
 	if err != nil {
 		return err
@@ -169,7 +184,12 @@ func (c *Client) streamOnce(ctx context.Context, types []string, out chan<- Even
 			if json.Unmarshal(line, &env) == nil && env.Error != nil {
 				return env.Error
 			}
-			continue
+			connected()
+			// Deliver the acknowledgement as an event of its own. Anything that
+			// changed while the subscription was down produced no event anyone
+			// received, so a reconnect has to be a reason to reconcile or those
+			// changes wait for the next tick.
+			ev.Event = "subscription_started"
 		}
 		select {
 		case out <- Event{Name: normaliseEvent(ev.Event), Data: ev.Data}:
