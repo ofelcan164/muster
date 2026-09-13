@@ -20,7 +20,8 @@ func (m *Model) View() string {
 	m.resetRows()
 
 	var lines []string
-	lines = append(lines, strings.TrimRight(m.header(), "\n"), "")
+	lines = append(lines, m.headerLines()...)
+	lines = append(lines, "")
 	lines = append(lines, m.ribbonLines(len(lines))...)
 	lines = append(lines, m.repoLines(len(lines))...)
 	if strip := m.stripLines(len(lines) + 1); len(strip) > 0 {
@@ -30,8 +31,64 @@ func (m *Model) View() string {
 
 	if m.filtering || m.filter != "" {
 		lines = append(lines, "", m.viewFilterBar())
+		// The query line is pinned to the bottom of the window. It is what you
+		// are typing, so scrolling it away leaves you typing blind.
+		body := m.window(lines[:len(lines)-1], m.height-1)
+		return strings.Join(append(body, lines[len(lines)-1]), "\n")
 	}
-	return strings.Join(lines, "\n")
+	return strings.Join(m.window(lines, m.height), "\n")
+}
+
+// window trims the rendered screen to h lines, scrolled to keep the selection
+// visible, and moves the recorded hit regions with it.
+//
+// Without this the overlay handed bubbletea more lines than the terminal has.
+// Its renderer keeps the last ones, so the header and the ribbon were what
+// scrolled off, and every click then landed on whatever had been that many rows
+// lower: on a 24-line terminal showing four repos, nine rows out.
+func (m *Model) window(lines []string, h int) []string {
+	if h <= 0 || len(lines) <= h {
+		return lines
+	}
+	top := 0
+	if y, ok := m.cursorLine(); ok && y >= h {
+		top = y - h + 1
+	}
+	if lastTop := len(lines) - h; top > lastTop {
+		top = lastTop
+	}
+	for i := range m.hits {
+		m.hits[i].y -= top
+	}
+	return lines[top : top+h]
+}
+
+// cursorLine is the first screen line the selection was drawn on, which is what
+// the window scrolls to keep visible. The hit regions already record it, so
+// nothing has to measure the layout twice.
+func (m *Model) cursorLine() (int, bool) {
+	if m.cursor < 0 {
+		return 0, false
+	}
+	y, found := 0, false
+	for _, h := range m.hits {
+		if h.target == m.cursor && (!found || h.y < y) {
+			y, found = h.y, true
+		}
+	}
+	return y, found
+}
+
+// headerLines is the title row, plus the warning on a line of its own when the
+// two do not fit side by side. A warning that the daemon is not answering is
+// the one thing on this screen that must not be dropped for want of room: the
+// whole view behind it is stale.
+func (m *Model) headerLines() []string {
+	head := m.header()
+	if m.warning == "" || strings.Contains(head, m.warning) {
+		return []string{head}
+	}
+	return []string{head, styWarn.Render(fitLine("! "+m.warning, m.width))}
 }
 
 func (m *Model) header() string {
@@ -52,9 +109,11 @@ func (m *Model) header() string {
 
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap < 1 {
-		return left + "\n"
+		// Too narrow for both. headerLines puts a warning on its own line; the
+		// key hints are what get dropped.
+		return fitLine(left, m.width)
 	}
-	return left + strings.Repeat(" ", gap) + right + "\n"
+	return left + strings.Repeat(" ", gap) + right
 }
 
 // ribbonLines renders the ranked ribbon, recording which screen line each row
@@ -319,9 +378,11 @@ func (m *Model) viewFilterBar() string {
 // urgent row, so the section itself signals how bad things are before you read
 // a single line of it.
 func (m *Model) attentionRule(n int) string {
+	// The rows on screen, not the daemon's list: taking the colour from a row
+	// you have dismissed kept the header red for something you had dealt with.
 	accent := colDim
-	if len(m.snap.Attention) > 0 {
-		accent = reasonAccent(m.snap.Attention[0].Reason)
+	if rows := m.ribbonRows(); len(rows) > 0 {
+		accent = reasonAccent(rows[0].Reason)
 	}
 	head := lipgloss.NewStyle().Background(accent).Foreground(colBG).Bold(true).
 		Render(fmt.Sprintf(" NEEDS YOU %d ", n))

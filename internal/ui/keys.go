@@ -7,9 +7,19 @@ import (
 	"cmp"
 	"fmt"
 	"slices"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+// dropLastRune removes one character from the end of an input, which is what
+// backspace means. Cutting a byte instead left half of a multi-byte character
+// behind, so backspacing over "é" produced invalid UTF-8 that went on to be
+// searched with, drawn, and sent to an agent.
+func dropLastRune(s string) string {
+	_, n := utf8.DecodeLastRuneInString(s)
+	return s[:len(s)-n]
+}
 
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.composing {
@@ -31,9 +41,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case tea.KeyEnter:
 			return m.activate()
 		case tea.KeyBackspace:
-			if m.filter != "" {
-				m.filter = m.filter[:len(m.filter)-1]
-			}
+			m.filter = dropLastRune(m.filter)
 			m.rebuild()
 			return m, nil
 		case tea.KeyUp:
@@ -52,10 +60,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if msg.Alt {
 				return m, nil
 			}
+			// KeySpace already carries the space in Runes, so adding one for it
+			// typed every space twice.
 			m.filter += string(msg.Runes)
-			if msg.Type == tea.KeySpace {
-				m.filter += " "
-			}
 			m.rebuild()
 			return m, nil
 		}
@@ -119,7 +126,16 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "i":
-		// Talk to the orchestrator. Only worth opening when there is one.
+		// Talk to the orchestrator. Only worth opening when there is one, and
+		// only when its strip is on screen: a filter hides the strip, and an
+		// input with nothing drawn swallowed every key including q, so the
+		// overlay looked frozen and enter sent whatever had been typed.
+		//
+		// No notice on the refusal: the strip is where notices are drawn, so a
+		// message about the strip being hidden would be hidden too.
+		if m.filter != "" || m.filtering {
+			return m, nil
+		}
 		if m.snap.Orch.Found {
 			m.composing, m.compose = true, ""
 		} else {
@@ -149,6 +165,18 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "s":
 		// Cycle the sort. First seen is the default and where it returns to.
 		m.sort = m.sort.Next()
+		// A manual arrangement is layered on top of the sort, and one J or K
+		// records the whole visible order, which pins every card. Sorting then
+		// changed nothing on screen, in this session and every later one, since
+		// the arrangement is saved. Asking for a sort is asking for that
+		// arrangement to go.
+		if len(m.moves) > 0 {
+			m.moves = nil
+			m.notice = "dropped the manual order, sorting by " + m.sort.String()
+			if m.saveOrder != nil {
+				m.saveOrder(nil)
+			}
+		}
 		m.rebuild()
 		if m.saveSort != nil {
 			m.saveSort(m.sort)
@@ -174,8 +202,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// Digits jump straight to a ribbon row, so the thing that needs you most is
-	// always one keystroke away.
-	if len(msg.Runes) == 1 && msg.Runes[0] >= '1' && msg.Runes[0] <= '9' {
+	// always one keystroke away. Not while filtering: the ribbon is not drawn
+	// then, and jumping by a number nobody can see is a keystroke that takes the
+	// screen somewhere at random.
+	if m.filter == "" && len(msg.Runes) == 1 && msg.Runes[0] >= '1' && msg.Runes[0] <= '9' {
 		n := int(msg.Runes[0] - '1')
 		rows := m.ribbonRows()
 		if n < len(rows) {

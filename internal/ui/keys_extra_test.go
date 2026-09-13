@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -112,5 +113,187 @@ func TestTypingKeepsMAndDropsAltKeys(t *testing.T) {
 	key(c, "m")
 	if c.compose != "m" {
 		t.Errorf("compose = %q, want \"m\" with the alt key dropped", c.compose)
+	}
+}
+
+// Every other test renders at height 40, which no real popup gets. A 24-line
+// terminal showing four repos produced 33 lines, and bubbletea keeps the last
+// ones, so the header and the ribbon scrolled off and every click landed nine
+// rows away from what it hit.
+func TestViewNeverExceedsTheHeight(t *testing.T) {
+	for _, h := range []int{10, 18, 24, 30} {
+		m := New(testSnapshot(), "")
+		out, _ := m.Update(tea.WindowSizeMsg{Width: 53, Height: h})
+		if n := len(strings.Split(out.View(), "\n")); n > h {
+			t.Errorf("height %d: rendered %d lines", h, n)
+		}
+	}
+}
+
+// The window scrolls to whatever is selected, or the selection is unreachable
+// on a short terminal.
+func TestShortTerminalScrollsToTheSelection(t *testing.T) {
+	m := New(testSnapshot(), "")
+	m.Update(tea.WindowSizeMsg{Width: 53, Height: 12})
+	for range 12 {
+		key(m, "down")
+	}
+	// The hit regions, and so the cursor's line, come from a render.
+	m.View()
+	y, ok := m.cursorLine()
+	if !ok {
+		t.Fatal("the selection was not drawn at all")
+	}
+	if y < 0 || y >= 12 {
+		t.Errorf("the selection is drawn on line %d of a 12 line screen", y)
+	}
+}
+
+// A click has to land on what it hit, which on a scrolled screen means the hit
+// regions move with the window.
+func TestClicksLandAfterScrolling(t *testing.T) {
+	m := New(testSnapshot(), "")
+	m.Update(tea.WindowSizeMsg{Width: 53, Height: 12})
+	for range 12 {
+		key(m, "down")
+	}
+	lines := strings.Split(m.View(), "\n")
+	y, ok := m.cursorLine()
+	if !ok {
+		t.Fatal("nothing selected")
+	}
+	want := m.selectedPane()
+	idx, hit := m.targetAt(2, y)
+	if !hit {
+		t.Fatalf("line %d holds no target, though the cursor is drawn there:\n%s",
+			y, plain(strings.Join(lines, "\n")))
+	}
+	if got := m.targets[idx].paneID; got != want {
+		t.Errorf("clicking the selected line hit %q, want %q", got, want)
+	}
+}
+
+// An agent that exits while you have it selected leaves nothing selected.
+// Falling back to index zero meant the ribbon's top row, so enter went to the
+// thing that needs you most rather than nowhere.
+func TestSelectionDoesNotFallOntoTheRibbon(t *testing.T) {
+	m := newSized(143)
+	for range 3 {
+		key(m, "down")
+	}
+	if m.selectedPane() == "" {
+		t.Fatal("nothing selected to begin with")
+	}
+
+	snap := testSnapshot()
+	snap.Repos[0].Agents = nil
+	snap.Repos[1].Agents = nil
+	snap.Repos[2].Agents = nil
+	m.SetSnapshot(snap)
+
+	if m.cursor != noSelection {
+		t.Errorf("cursor = %d after its target vanished, want nothing selected (%q)",
+			m.cursor, m.selectedPane())
+	}
+	key(m, "enter")
+	if m.Jump() != "" {
+		t.Errorf("enter jumped to %q with nothing selected", m.Jump())
+	}
+}
+
+// One J or K records the whole visible order, which pinned every card, so s
+// changed nothing on screen. The arrangement is saved, so it stayed broken in
+// later sessions too.
+func TestSortAfterAManualMoveActuallySorts(t *testing.T) {
+	m := newSized(143)
+	saved := []string{"unset"}
+	m.SetOrderSaver(func(o []string) { saved = o })
+
+	m.firstGridTarget()
+	key(m, "J")
+	if len(m.moves) == 0 {
+		t.Fatal("J recorded no move")
+	}
+	before := m.currentOrder()
+
+	// One sort mode may happen to agree with where the card was moved, so the
+	// property to check is that the grid is not frozen: somewhere in the cycle
+	// the order has to change.
+	changed := false
+	for range int(sortModeCount) {
+		key(m, "s")
+		if !slices.Equal(before, m.currentOrder()) {
+			changed = true
+			break
+		}
+	}
+	if !changed {
+		t.Errorf("every sort mode left the order pinned at %v", before)
+	}
+	if len(saved) != 0 {
+		t.Errorf("the manual order was kept as %v, so the next session is stuck too", saved)
+	}
+}
+
+// Filtering hides the ribbon and the strip. A key that acts on either is a key
+// that acts on something nobody can see.
+func TestFilteringDisablesTheKeysItHides(t *testing.T) {
+	m := withSnapshot(t, withOrch(), 143)
+	key(m, "slash")
+	key(m, "w")
+	key(m, "esc") // leave typing, keep the query
+
+	key(m, "1")
+	if m.Jump() != "" {
+		t.Errorf("a digit jumped to %q while the ribbon was hidden", m.Jump())
+	}
+	key(m, "i")
+	if m.composing {
+		t.Error("i opened an input on a strip that is not drawn")
+	}
+	key(m, "q")
+	if !m.quit {
+		t.Error("q did not close: it was swallowed by the hidden input")
+	}
+}
+
+// Backspace removes a character, not a byte. Cutting a byte left half of one
+// behind, and that went on to be searched with and sent to an agent.
+func TestBackspaceRemovesWholeCharacters(t *testing.T) {
+	m := withSnapshot(t, withOrch(), 143)
+	key(m, "slash")
+	key(m, "é")
+	key(m, "backspace")
+	if m.filter != "" {
+		t.Errorf("filter = %q after backspacing over one character", m.filter)
+	}
+
+	c := withSnapshot(t, withOrch(), 143)
+	key(c, "i")
+	key(c, "é")
+	c.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	if c.compose != "" {
+		t.Errorf("compose = %q after backspacing over one character", c.compose)
+	}
+}
+
+// The lane is a grid column, and a filter collapses the grid to one. A lane
+// left pointing at column two is empty, so up and down stopped working.
+func TestNarrowingTheGridResetsTheLane(t *testing.T) {
+	m := newSized(143)
+	key(m, "down")
+	key(m, "right")
+	if m.laneCol == 0 {
+		t.Skip("nothing in a second column to select")
+	}
+	key(m, "slash")
+	key(m, "z") // matches nothing
+	key(m, "backspace")
+	key(m, "esc")
+	key(m, "esc")
+
+	key(m, "down")
+	if m.cursor == noSelection {
+		t.Error("down does nothing: the lane points at a column that is gone")
 	}
 }

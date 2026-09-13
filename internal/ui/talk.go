@@ -128,21 +128,17 @@ func (m *Model) handleCompose(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.send(m.snap.Orch.PaneID, text, "sent to the orchestrator")
 	case tea.KeyBackspace:
-		if m.compose != "" {
-			m.compose = m.compose[:len(m.compose)-1]
-		}
+		m.compose = dropLastRune(m.compose)
 		return m, nil
 	case tea.KeyCtrlC:
 		m.quit = true
 		return m, tea.Quit
-	case tea.KeyRunes:
-		// Same as the filter: an alt key, herdr's prefix among them, is not text.
+	case tea.KeyRunes, tea.KeySpace:
+		// Same as the filter: an alt key, herdr's prefix among them, is not
+		// text, and KeySpace already carries its space in Runes.
 		if !msg.Alt {
 			m.compose += string(msg.Runes)
 		}
-		return m, nil
-	case tea.KeySpace:
-		m.compose += " "
 		return m, nil
 	}
 	return m, nil

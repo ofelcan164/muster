@@ -114,7 +114,9 @@ func TestInputSendsToTheOrchestrator(t *testing.T) {
 	}
 	for _, r := range "ship it" {
 		if r == ' ' {
-			m.Update(tea.KeyMsg{Type: tea.KeySpace})
+			// As bubbletea delivers it: KeySpace carries the space in Runes
+			// too, which is why nothing may add one of its own.
+			m.Update(tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}})
 			continue
 		}
 		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})

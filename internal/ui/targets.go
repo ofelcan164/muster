@@ -89,9 +89,13 @@ func (m *Model) rebuild() {
 	// Keep the cursor on whatever it was pointing at, so filtering and resizing
 	// do not move the selection out from under you. Nothing selected stays
 	// nothing selected: the overlay opens with no card claimed.
+	//
+	// A selection whose target has gone also ends up with nothing selected. It
+	// used to fall back to index zero, which is the first ribbon row or the
+	// banner, so an agent exiting while you had it selected silently moved the
+	// selection to the thing that needs you most, and enter went there instead.
 	m.cursor = noSelection
 	if prev != "" {
-		m.cursor = 0
 		for i, t := range m.targets {
 			if m.qualifiedKey(t) == prev {
 				m.cursor = i
@@ -99,6 +103,19 @@ func (m *Model) rebuild() {
 			}
 		}
 	}
+
+	// The lane is a grid column, and the grid narrows: one column while
+	// filtering, and fewer when the terminal shrinks. A lane left pointing at a
+	// column that no longer exists is empty, so up and down stopped working
+	// until the cursor next landed on a card.
+	if m.laneCol >= cols {
+		m.laneCol = 0
+	}
+
+	// Hover is an index into the list just rebuilt. Leaving it alone highlighted
+	// whatever inherited that index until the mouse next moved.
+	m.hover = noSelection
+
 	m.clampCursor()
 }
 
