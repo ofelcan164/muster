@@ -96,7 +96,6 @@ type Pane struct {
 	PaneID  string `json:"pane_id"`
 	Label   string `json:"label"`
 	Command string `json:"command,omitempty"`
-	Alive   bool   `json:"alive"`
 }
 
 // Repo is one discovered repository. Identity is keyed on (repo, worktree) from
@@ -124,7 +123,6 @@ type Repo struct {
 
 	ColorIndex int    `json:"color_index"`
 	Sigil      string `json:"sigil"`
-	Border     string `json:"border"`
 	GridSlot   int    `json:"grid_slot"`
 
 	WorkspaceIDs []string `json:"workspace_ids"`
@@ -221,10 +219,6 @@ type Snapshot struct {
 	// twice in quick succession still toggles even if the daemon has not
 	// reconciled in between.
 	FocusHistory []string `json:"focus_history,omitempty"`
-
-	// Warnings are daemon-side problems worth surfacing in the overlay title
-	// bar, such as a degraded subscription.
-	Warnings []string `json:"warnings,omitempty"`
 
 	Counts Counts `json:"counts"`
 }

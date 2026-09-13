@@ -50,7 +50,7 @@ func benchSnapshot(repos, agents int) *model.Snapshot {
 		r := model.Repo{
 			Key: fmt.Sprintf("acme/service-%d", i), Name: fmt.Sprintf("service-%d", i),
 			Display: fmt.Sprintf("service-%d", i), Root: fmt.Sprintf("/home/dev/work/service-%d", i),
-			Branch: "main", IsGit: true, ColorIndex: i % 8, Sigil: "◆", Border: "rounded",
+			Branch: "main", IsGit: true, ColorIndex: i % 8, Sigil: "◆",
 			GridSlot: i, WorkspaceIDs: []string{fmt.Sprintf("w%d", i)},
 		}
 		for j := 0; j < agents/repos; j++ {
@@ -62,7 +62,7 @@ func benchSnapshot(repos, agents int) *model.Snapshot {
 				StateChangeSeq: uint64(j), AgeKnown: true,
 			})
 		}
-		r.OtherPanes = []model.Pane{{PaneID: fmt.Sprintf("w%d:p9", i), Label: "vite", Command: "vite", Alive: true}}
+		r.OtherPanes = []model.Pane{{PaneID: fmt.Sprintf("w%d:p9", i), Label: "vite", Command: "vite"}}
 		s.Repos = append(s.Repos, r)
 	}
 	for i := range min(repos, 6) {

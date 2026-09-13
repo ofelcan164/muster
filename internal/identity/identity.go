@@ -58,32 +58,23 @@ func SigilFor(slot int, taken map[string]bool) string {
 	return Sigils[slot%len(Sigils)]
 }
 
-// Borders are redundant on purpose: a fourth axis costs nothing and any one of
-// the four landing is enough to tell two repos apart.
-var Borders = []string{"solid", "double", "dashed", "dotted"}
-
 func hash(key string) uint32 {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(key))
 	return h.Sum32()
 }
 
-// Look returns the hashed axes for an identity key: the colour slot and the
-// border style. Both are pure functions of the key, so a repo looks the same on
-// every machine. The sigil is not hashed; see Sigil.
-func Look(key string) (colorIndex int, border string) {
-	h := hash(key)
-	colorIndex = int(h % uint32(len(Palette)))
-	// Draw the border off different bits so a colour collision does not imply a
-	// border collision.
-	border = Borders[int((h>>16)%uint32(len(Borders)))]
-	return
+// Look returns the colour slot for an identity key. It is a pure function of
+// the key, so a repo is the same colour on every machine. The sigil is not
+// hashed; see Sigil.
+func Look(key string) int {
+	return int(hash(key) % uint32(len(Palette)))
 }
 
 // Color returns the hex colour for an index produced by Look.
 func Color(i int) string {
 	if i < 0 || i >= len(Palette) {
-		return "#928374" // neutral grey, used for non-git scratch workspaces
+		return NeutralColor
 	}
 	return Palette[i]
 }

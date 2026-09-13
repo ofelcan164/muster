@@ -11,8 +11,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// handleMouse makes the overlay clickable. Click to select, click the selection
-// again to jump, and scroll to move through the list.
+// handleMouse makes the overlay clickable. One click jumps, and the wheel moves
+// through the list.
 func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	switch msg.Button {
 	case tea.MouseButtonWheelUp:
@@ -26,7 +26,6 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	// the same way the keyboard selection does.
 	if msg.Action == tea.MouseActionMotion {
 		idx, ok := m.targetAt(msg.X, msg.Y)
-		m.logMouse(msg, idx, ok)
 		if ok {
 			m.hover = idx
 		} else {
@@ -39,7 +38,6 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	idx, ok := m.targetAt(msg.X, msg.Y)
-	m.logMouse(msg, idx, ok)
 	if !ok {
 		return m, nil
 	}

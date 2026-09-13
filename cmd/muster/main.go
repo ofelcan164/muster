@@ -468,7 +468,7 @@ func cmdUninstall(args []string) int {
 		fmt.Fprintf(os.Stderr, "muster uninstall: could not record the refusal: %v\n", err)
 		fmt.Fprintln(os.Stderr, "the next herdr start will bind the keys again. Run this through herdr, or pass --state-dir.")
 	}
-	res, err := install.Uninstall()
+	res, err := install.Remove()
 	switch {
 	case err != nil:
 		fmt.Fprintf(os.Stderr, "muster uninstall: config: %v\n", err)

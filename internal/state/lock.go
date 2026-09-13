@@ -1,6 +1,7 @@
 package state
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"strconv"
@@ -76,20 +77,9 @@ func ReadPID(path string) int {
 	if err != nil {
 		return 0
 	}
-	n, err := strconv.Atoi(string(trimSpace(b)))
+	n, err := strconv.Atoi(string(bytes.TrimSpace(b)))
 	if err != nil {
 		return 0
 	}
 	return n
-}
-
-func trimSpace(b []byte) []byte {
-	i, j := 0, len(b)
-	for i < j && (b[i] == ' ' || b[i] == '\n' || b[i] == '\t' || b[i] == '\r') {
-		i++
-	}
-	for j > i && (b[j-1] == ' ' || b[j-1] == '\n' || b[j-1] == '\t' || b[j-1] == '\r') {
-		j--
-	}
-	return b[i:j]
 }

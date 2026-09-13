@@ -56,8 +56,6 @@ type Daemon struct {
 	persist  *state.Persisted
 	log      *log.Logger
 
-	herdrVersion string
-
 	// procs is the last foreground-process reading, kept so reconciles arriving
 	// faster than procInterval reuse it instead of re-polling every pane.
 	procs   map[string]string
@@ -191,7 +189,6 @@ func (d *Daemon) reconcile(ctx context.Context) bool {
 		d.logf("snapshot: %v", err)
 		return false
 	}
-	d.herdrVersion = snap.Version
 	now := time.Now()
 
 	agents := d.buildAgents(snap, now)

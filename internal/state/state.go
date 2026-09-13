@@ -75,13 +75,6 @@ type Persisted struct {
 	// agent ever passed through done.
 	LastDoneSeq map[string]uint64 `json:"last_done_seq"`
 
-	// EverHadAgent records repos that have hosted an agent at some point.
-	//
-	// A repo keeps its cell once it has earned one, so closing an agent does not
-	// make the grid shift under you. A repo you have never run anything in has
-	// not earned one, and would otherwise sit there forever taking a fixed slot.
-	EverHadAgent map[string]bool `json:"ever_had_agent"`
-
 	// EverWorked records panes observed in the working state at least once.
 	// Rank 5 turns on this: an agent you opened and never gave work to is idle,
 	// not stalled, and flagging it forever is the noisiest thing the ribbon can
@@ -136,14 +129,13 @@ type StatusStamp struct {
 
 func LoadPersisted() *Persisted {
 	p := &Persisted{
-		GridSlots:    map[string]int{},
-		StatusSince:  map[string]StatusStamp{},
-		LastDoneSeq:  map[string]uint64{},
-		TaskSeenAt:   map[string]TaskStamp{},
-		LastProcess:  map[string]string{},
-		EverWorked:   map[string]bool{},
-		EverHadAgent: map[string]bool{},
-		Stopped:      map[string]StoppedStamp{},
+		GridSlots:   map[string]int{},
+		StatusSince: map[string]StatusStamp{},
+		LastDoneSeq: map[string]uint64{},
+		TaskSeenAt:  map[string]TaskStamp{},
+		LastProcess: map[string]string{},
+		EverWorked:  map[string]bool{},
+		Stopped:     map[string]StoppedStamp{},
 	}
 	b, err := os.ReadFile(PersistPath())
 	if err != nil {
@@ -169,9 +161,6 @@ func LoadPersisted() *Persisted {
 	}
 	if p.EverWorked == nil {
 		p.EverWorked = map[string]bool{}
-	}
-	if p.EverHadAgent == nil {
-		p.EverHadAgent = map[string]bool{}
 	}
 	if p.Stopped == nil {
 		p.Stopped = map[string]StoppedStamp{}

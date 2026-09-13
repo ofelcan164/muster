@@ -52,9 +52,6 @@ func Dump(w io.Writer, s *model.Snapshot, now time.Time) {
 		plural(s.Counts.Repos, "repo"), plural(s.Counts.Agents, "agent"), s.Counts.NeedsYou)
 	fmt.Fprintf(w, "snapshot %s old · herdr %s · daemon pid %d\n",
 		compactDur(age), orDash(s.HerdrVersion), s.DaemonPID)
-	for _, warn := range s.Warnings {
-		fmt.Fprintf(w, "  ! %s\n", warn)
-	}
 	fmt.Fprintln(w)
 
 	// Ranked ribbon. Absent entirely when nothing needs you, which is the

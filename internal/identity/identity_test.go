@@ -6,22 +6,16 @@ import "testing"
 // machine you use.
 func TestLookDeterministic(t *testing.T) {
 	for i := 0; i < 100; i++ {
-		c1, b1 := Look("acme/api")
-		c2, b2 := Look("acme/api")
-		if c1 != c2 || b1 != b2 {
-			t.Fatalf("Look not deterministic: (%d,%s) vs (%d,%s)", c1, b1, c2, b2)
+		if c1, c2 := Look("acme/api"), Look("acme/api"); c1 != c2 {
+			t.Fatalf("Look not deterministic: %d vs %d", c1, c2)
 		}
 	}
 }
 
 func TestLookInRange(t *testing.T) {
 	for _, key := range []string{"a", "acme/api", "otherorg/web", "dir:/tmp/x", ""} {
-		c, b := Look(key)
-		if c < 0 || c >= len(Palette) {
+		if c := Look(key); c < 0 || c >= len(Palette) {
 			t.Errorf("Look(%q) colour %d out of range", key, c)
-		}
-		if b == "" {
-			t.Errorf("Look(%q) empty border", key)
 		}
 	}
 }

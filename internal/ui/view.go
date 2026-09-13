@@ -371,7 +371,7 @@ func (m *Model) viewFilterBar() string {
 	bar := " " + styMeta.Render("search ") + styMatch.Render(m.filter) + cursor +
 		styFaint.Render(fmt.Sprintf("  %s · %s%s",
 			plural(len(repos), "repo"), plural(agents, "agent"), hint))
-	return padLine(bar, m.width)
+	return fitLine(bar, m.width)
 }
 
 // attentionRule heads the ribbon. It carries a count and the colour of the most
@@ -465,11 +465,6 @@ func pad(s string, width int) string {
 	}
 	return s
 }
-
-// padLine pads to exactly width, and trims anything longer. Nothing may
-// overflow: the popup is a fixed size, and a line that runs past it wraps and
-// destroys the layout.
-func padLine(s string, width int) string { return fitLine(s, width) }
 
 // fitLine pads or trims a line to exactly the given width, so grid cells always
 // join cleanly no matter what is in them.

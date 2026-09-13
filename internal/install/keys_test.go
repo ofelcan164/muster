@@ -170,7 +170,7 @@ func TestUninstallLeavesNothingMusterSpecific(t *testing.T) {
 	if _, err := Keys("", ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Uninstall(); err != nil {
+	if _, err := Remove(); err != nil {
 		t.Fatal(err)
 	}
 	body, err := os.ReadFile(path)
@@ -195,10 +195,10 @@ func TestUninstallIsIdempotent(t *testing.T) {
 	if _, err := Keys("", ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Uninstall(); err != nil {
+	if _, err := Remove(); err != nil {
 		t.Fatal(err)
 	}
-	res, err := Uninstall()
+	res, err := Remove()
 	if err != nil {
 		t.Fatal(err)
 	}

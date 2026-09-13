@@ -43,8 +43,6 @@ func NewClient(socket string) *Client {
 	return &Client{socket: socket}
 }
 
-func (c *Client) Socket() string { return c.socket }
-
 type apiError struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`

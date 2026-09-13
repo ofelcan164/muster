@@ -52,7 +52,7 @@ func (d *Daemon) buildRepos(snap *herdr.Snapshot, agents map[string]model.Agent,
 
 		r, ok := byKey[info.Key]
 		if !ok {
-			colorIdx, border := identity.Look(info.Key)
+			colorIdx := identity.Look(info.Key)
 			slot := d.persist.AssignSlot(info.Key)
 			r = &model.Repo{
 				Key:          info.Key,
@@ -64,7 +64,6 @@ func (d *Daemon) buildRepos(snap *herdr.Snapshot, agents map[string]model.Agent,
 				IsGit:        info.IsGit,
 				ColorIndex:   colorIdx,
 				Sigil:        identity.Sigil(slot),
-				Border:       border,
 				GridSlot:     slot,
 			}
 			if !info.IsGit {
@@ -129,9 +128,6 @@ func (d *Daemon) buildRepos(snap *herdr.Snapshot, agents map[string]model.Agent,
 		// Every discovered repo gets a card, whether or not anything is running
 		// in it. Ordering is what keeps the quiet ones out of the way: the
 		// overlay sorts repos with agents ahead of repos without.
-		if len(r.Agents) > 0 {
-			d.persist.EverHadAgent[r.Key] = true
-		}
 		slices.SortStableFunc(r.Agents, func(a, b model.Agent) int { return strings.Compare(a.PaneID, b.PaneID) })
 		slices.SortStableFunc(r.OtherPanes, func(a, b model.Pane) int { return strings.Compare(a.PaneID, b.PaneID) })
 		slices.Sort(r.WorkspaceIDs)
@@ -212,9 +208,9 @@ func shortName(name string) string {
 // the pane label.
 const overlayTitle = "Muster"
 
-// isOverlayPane reports whether a pane is one of Muster's own overlays. A popup
-// is not a pane, so this only matches overlays opened by builds from before the
-// popup, and can go once none of those are left running.
+// isOverlayPane reports whether a pane is one of Muster's own overlays. herdr
+// opens Muster as a popup, which is not a pane and so never reaches this, but
+// the [[panes]] entrypoint is still there to be opened directly.
 func isOverlayPane(p herdr.Pane) bool {
 	return strings.TrimSpace(p.Label) == overlayTitle
 }
