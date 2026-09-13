@@ -33,9 +33,9 @@ internal/ui           overlay
 (the orchestrator strip), `talk` (the `i` and `t` keys), `view`, `theme`.
 
 State dir files: `snapshot.json`, `state.json` (grid slots, learned state),
-`ui.json` (repo order, sort, dismissed) and `ui.json.lock` (serialises two
-overlays saving it), `chain.json`, `keys.optout`, `musterd.log`,
-`musterd.lock`, `musterd.spawn.lock` (serialises concurrent `--ensure`).
+`ui.json` (sort, dismissed) and `ui.json.lock` (serialises two overlays
+saving it), `chain.json`, `keys.optout`, `musterd.log`, `musterd.lock`,
+`musterd.spawn.lock` (serialises concurrent `--ensure`).
 
 ## Build and test
 
@@ -74,13 +74,17 @@ Global keys, once installed (`prefix` is the reader's herdr prefix key):
 letter falls back through `m g u y` when the user already bound one, and
 `--key` overrides.
 
-Overlay: arrows/`hjkl` move, `enter` jumps, `/` searches, `esc` leaves
-search / clears filter / closes, `s` cycles sort, `J`/`K` rearrange, `g`/`G`
-ends, `1`-`9` ribbon row, `x` dismisses one, `o` marks orchestrator, `i`
-messages it, `t` reports a finished agent to it, `S` installs the skill while
-its banner shows, `q`/`ctrl+c` closes, `M` jumps to the orchestrator.
-Mouse: click card jumps, click banner installs skill, wheel moves, hover
-highlights.
+Overlay: one tile per agent, one dim lowercase tile per workspace with no
+agents. arrows/`hjkl` move, `enter` jumps to the tile's pane or focuses its
+workspace, `/` searches, `esc` leaves search / clears filter / closes, `s`
+cycles sort (first seen, a-z, attention, herdr), `J`/`K` move the selected
+tile's workspace one place in herdr's own order and only do anything in herdr
+sort, `g`/`G` ends, `1`-`9` ribbon row, `x` dismisses one, `o` marks
+orchestrator, `i` messages it, `t` reports a finished agent to it, `S`
+installs the skill while its banner shows, `q`/`ctrl+c` closes, `M` jumps to
+the orchestrator.
+Mouse: click a tile jumps or focuses its workspace, click banner installs
+skill, wheel moves, hover highlights.
 
 ## Gotchas
 
