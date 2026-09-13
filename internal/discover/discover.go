@@ -63,10 +63,17 @@ func (r *Resolver) Resolve(cwd string, hint *herdr.WorkspaceWorktree) Info {
 		info = *cached
 	} else {
 		info = resolveUncached(cwd)
-		cp := info
-		r.mu.Lock()
-		r.cache[cwd] = &cp
-		r.mu.Unlock()
+		// Only cache an answer that cannot change. A directory that is not a
+		// repository becomes one the moment someone runs git init, and a cached
+		// "not a repo" left that workspace grey, unkeyed and sigil-less until
+		// the daemon was restarted. Re-resolving costs a handful of stats on the
+		// five second tick.
+		if info.IsGit {
+			cp := info
+			r.mu.Lock()
+			r.cache[cwd] = &cp
+			r.mu.Unlock()
+		}
 	}
 
 	// Branch, fresh every time. herdr's own view wins when it has one.
@@ -108,7 +115,8 @@ func resolveUncached(cwd string) Info {
 		info.WorktreePath = root
 	}
 
-	name := remoteName(filepath.Join(commonDir, "config"))
+	remote := remoteName(filepath.Join(commonDir, "config"))
+	name := remote
 	if name == "" {
 		// No origin: fall back to the basename of the main checkout, not of the
 		// worktree, so every worktree of a repo shares one name.
@@ -123,8 +131,16 @@ func resolveUncached(cwd string) Info {
 	// same repo deliberately share a key: they are the same repo, and the card
 	// header disambiguates them by path.
 	info.Key = name
+	if remote == "" {
+		// Without a remote the name is only a directory basename, and ~/a/api
+		// and ~/b/api are two different repositories. Keyed on the name alone
+		// they merged into one card showing the first one's root, branch and
+		// agents. The git directory is what tells them apart, and it is the same
+		// directory for every worktree of the same repo.
+		info.Key = "local:" + commonDir
+	}
 	if info.IsWorktree {
-		info.Key = name + "@" + filepath.Base(root)
+		info.Key += "@" + filepath.Base(root)
 	}
 	return info
 }
@@ -240,8 +256,10 @@ func NormaliseRemote(url string) string {
 	if url == "" {
 		return ""
 	}
-	url = strings.TrimSuffix(url, ".git")
+	// Slash first: a URL written "…/api.git/" still has to reduce to "acme/api",
+	// and trimming ".git" from something ending in "/" does nothing at all.
 	url = strings.TrimSuffix(url, "/")
+	url = strings.TrimSuffix(url, ".git")
 
 	// scp-style: git@host:owner/name
 	if !strings.Contains(url, "://") {

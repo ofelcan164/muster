@@ -147,3 +147,23 @@ func TestLoadToleratesMissingAndCorrupt(t *testing.T) {
 		t.Error("corrupt chain should load empty rather than fail")
 	}
 }
+
+// The owner prefix is optional, but naming one on both sides is saying which
+// "web" you mean. Comparing short names anyway made a chain written for one org
+// order another org's repo of the same name.
+func TestChainKeepsOrgsApart(t *testing.T) {
+	c := &Chain{Stages: [][]string{{"acme/api"}, {"acme/web"}}}
+	depends := c.Lookup()
+
+	if !depends("acme/web", "acme/api") {
+		t.Error("acme/web should depend on acme/api")
+	}
+	if depends("otherorg/web", "acme/api") {
+		t.Error("otherorg/web is not the acme/web the chain names")
+	}
+	// A repo Muster resolved without an owner still matches: that is the
+	// tolerance the short-name comparison is there for.
+	if !depends("web", "acme/api") {
+		t.Error("a repo with no owner should still match the chain")
+	}
+}

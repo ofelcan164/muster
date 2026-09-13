@@ -41,3 +41,38 @@ func TestSigilNoCollisionWithinSet(t *testing.T) {
 		t.Error("expected sigils to cycle past the end of the set")
 	}
 }
+
+// Slots are pinned for the life of an install and never freed, so a machine
+// that has seen nine repos hands the tenth a sigil already on screen. Two cards
+// carrying the same mark is the one thing the sigil axis exists to prevent.
+func TestSigilsDoNotCollideOnScreen(t *testing.T) {
+	taken := map[string]bool{}
+	seen := map[string]int{}
+	for _, slot := range []int{0, 1, 2, 8, 9, 17} {
+		s := SigilFor(slot, taken)
+		if taken[s] {
+			t.Fatalf("slot %d reused sigil %q", slot, s)
+		}
+		taken[s] = true
+		seen[s] = slot
+	}
+	// The lowest slots keep the sigil they have always had, so a repo's mark
+	// does not move because another one appeared.
+	for slot := range 3 {
+		if got := SigilFor(slot, map[string]bool{}); got != Sigils[slot] {
+			t.Errorf("slot %d took %q rather than its own %q", slot, got, Sigils[slot])
+		}
+	}
+}
+
+// More repos on screen than there are sigils is the one case with no answer.
+// Repeating is better than drawing nothing.
+func TestSigilFallsBackWhenEveryMarkIsTaken(t *testing.T) {
+	taken := map[string]bool{}
+	for _, s := range Sigils {
+		taken[s] = true
+	}
+	if got := SigilFor(3, taken); got != Sigils[3] {
+		t.Errorf("SigilFor with everything taken = %q, want its own %q", got, Sigils[3])
+	}
+}

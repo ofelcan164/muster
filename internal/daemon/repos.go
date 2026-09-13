@@ -156,6 +156,19 @@ func (d *Daemon) buildRepos(snap *herdr.Snapshot, agents map[string]model.Agent,
 	// at the wrong repos by a sort that moved them.
 	slices.SortStableFunc(out, func(a, b model.Repo) int { return cmp.Compare(a.GridSlot, b.GridSlot) })
 
+	// Sigils are handed out in slot order, so the lowest slot keeps the sigil it
+	// has always had and only a repo that would collide with one already on
+	// screen moves. Slots are never freed, so without this two cards visible at
+	// once shared a mark as soon as nine had ever been allocated.
+	taken := make(map[string]bool, len(out))
+	for i := range out {
+		if !out[i].IsGit {
+			continue
+		}
+		out[i].Sigil = identity.SigilFor(out[i].GridSlot, taken)
+		taken[out[i].Sigil] = true
+	}
+
 	// Stopped panes are resolved against the finished repo set, so a stop in a
 	// workspace that no longer maps to a repo is simply dropped.
 	repoByPane := map[string]*model.Repo{}

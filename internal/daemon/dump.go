@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -178,8 +179,17 @@ func orDash(s string) string {
 }
 
 func dimPath(p string) string {
-	if home, err := os.UserHomeDir(); err == nil && strings.HasPrefix(p, home) {
-		return "~" + strings.TrimPrefix(p, home)
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return p
+	}
+	// The separator matters: a plain prefix test turns /home/ana2/x into ~2/x
+	// for the user /home/ana.
+	if p == home {
+		return "~"
+	}
+	if rest, ok := strings.CutPrefix(p, home+string(filepath.Separator)); ok {
+		return "~" + string(filepath.Separator) + rest
 	}
 	return p
 }

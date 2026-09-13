@@ -131,7 +131,16 @@ func (c *Chain) Lookup() func(downstream, upstream string) bool {
 // Muster resolved a repo to "api" or "acme/api".
 func matches(configured, repo string) bool {
 	configured, repo = strings.ToLower(configured), strings.ToLower(repo)
-	return configured == repo || short(configured) == short(repo)
+	if configured == repo {
+		return true
+	}
+	// Tolerance only goes one way: when both sides name an owner, they are
+	// saying which "web" they mean, and comparing the short names anyway made a
+	// chain written for acme/web treat otherherd/web as downstream of it.
+	if strings.Contains(configured, "/") && strings.Contains(repo, "/") {
+		return false
+	}
+	return short(configured) == short(repo)
 }
 
 func short(name string) string {

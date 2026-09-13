@@ -190,13 +190,13 @@ func needsYouRegardless(a model.Agent) bool {
 	return a.Status == model.StatusBlocked
 }
 
-// detectGates finds the failure the plan calls the most valuable thing Muster
-// can show: an agent finished, the orchestrator has not learned of it, and work
-// downstream is sitting idle waiting on a gate that already opened.
+// detectGates finds the most valuable thing Muster can show: an agent finished,
+// the orchestrator has not learned of it, and work downstream is sitting idle
+// waiting on a gate that already opened.
 //
 // Three facts, all of which herdr already has:
 //   - an agent is done
-//   - the orchestrator has been idle since before that agent finished, so it
+//   - the orchestrator has been resting since before that agent finished, so it
 //     cannot have reacted to it
 //   - some other repo has an agent idle for longer than the finished one, so it
 //     is waiting rather than merely between tasks
@@ -204,7 +204,12 @@ func needsYouRegardless(a model.Agent) bool {
 // Without a marked orchestrator the middle fact is unavailable and the rule
 // stays silent rather than guessing.
 func detectGates(in Input, all []agentRef) []model.Attention {
-	if !in.Orch.Found || in.Orch.Status != model.StatusIdle || in.Orch.StatusSince.IsZero() {
+	// Idle or done, both of which mean the orchestrator is not working. done is
+	// herdr's word for an agent that finished its turn while you were looking at
+	// another pane, which is the usual state of an orchestrator you walked away
+	// from, so testing for idle alone missed the case this rule exists for.
+	resting := in.Orch.Status == model.StatusIdle || in.Orch.Status == model.StatusDone
+	if !in.Orch.Found || !resting || in.Orch.StatusSince.IsZero() {
 		return nil
 	}
 	// Without a recorded chain there is no way to know which idle agent is

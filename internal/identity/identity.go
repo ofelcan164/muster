@@ -36,6 +36,28 @@ func Sigil(slot int) string {
 	return Sigils[slot%len(Sigils)]
 }
 
+// SigilFor is Sigil, skipping past anything already on screen.
+//
+// Slots are pinned for the life of an install and never freed, so every scratch
+// directory and every worktree that has ever existed spends one. Once nine have
+// been handed out, the tenth repo wraps onto the first repo's sigil, and two
+// cards visible at the same time carried the same mark: exactly the collision
+// the sigil exists to rule out. Preferring the slot's own sigil keeps it stable
+// while the set of repos on screen is, and only the card that would collide
+// moves.
+func SigilFor(slot int, taken map[string]bool) string {
+	if slot < 0 {
+		return NeutralSigil
+	}
+	for i := range Sigils {
+		s := Sigils[(slot+i)%len(Sigils)]
+		if !taken[s] {
+			return s
+		}
+	}
+	return Sigils[slot%len(Sigils)]
+}
+
 // Borders are redundant on purpose: a fourth axis costs nothing and any one of
 // the four landing is enough to tell two repos apart.
 var Borders = []string{"solid", "double", "dashed", "dotted"}

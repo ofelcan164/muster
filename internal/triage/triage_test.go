@@ -426,3 +426,49 @@ func TestDetailCutsCharactersNotBytes(t *testing.T) {
 		t.Errorf("want 80 characters, got %d", n)
 	}
 }
+
+// herdr says done, not idle, for an agent that finished its turn while you were
+// looking at another pane. That is the ordinary state of an orchestrator you
+// have walked away from, which is exactly when a gate goes unnoticed, so
+// testing for idle alone missed the case the rule exists for.
+func TestGateOpenWhileOrchestratorIsDone(t *testing.T) {
+	in := Input{
+		Now: now,
+		Repos: []model.Repo{
+			repo("api", agent("migrations", model.StatusDone, 6*time.Minute)),
+			repo("web", agent("checkout-ui", model.StatusIdle, 18*time.Minute)),
+		},
+		Orch: model.Orchestrator{
+			Found:       true,
+			Status:      model.StatusDone,
+			StatusSince: ago(20 * time.Minute),
+		},
+		Chain: linear(),
+	}
+	got := Rank(in)
+	if len(got) == 0 || got[0].Reason != model.ReasonGateUntold {
+		t.Fatalf("expected a gate row first, got %+v", got)
+	}
+}
+
+// A working orchestrator is reacting to something, so nothing is untold yet.
+func TestGateSilentWhileOrchestratorIsWorking(t *testing.T) {
+	in := Input{
+		Now: now,
+		Repos: []model.Repo{
+			repo("api", agent("migrations", model.StatusDone, 6*time.Minute)),
+			repo("web", agent("checkout-ui", model.StatusIdle, 18*time.Minute)),
+		},
+		Orch: model.Orchestrator{
+			Found:       true,
+			Status:      model.StatusWorking,
+			StatusSince: ago(20 * time.Minute),
+		},
+		Chain: linear(),
+	}
+	for _, r := range Rank(in) {
+		if r.Reason == model.ReasonGateUntold {
+			t.Fatal("a working orchestrator produced a gate row")
+		}
+	}
+}
