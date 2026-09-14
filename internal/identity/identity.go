@@ -7,18 +7,31 @@ package identity
 
 import "hash/fnv"
 
-// Palette is the fixed eight-slot colour set. Hues are snapped to these slots
+// Palette is the fixed twenty-slot colour set. Hues are snapped to these slots
 // rather than spread continuously so two repos can never land close enough to
-// be confused at the edge of vision.
+// be confused at the edge of vision. Every entry is picked to hold up on the
+// overlay's dark background rather than to match it.
 var Palette = []string{
-	"#83a598", // blue
-	"#b8bb26", // green
-	"#d3869b", // purple
-	"#fe8019", // orange
-	"#8ec07c", // aqua
-	"#fabd2f", // yellow
 	"#fb4934", // red
-	"#d5c4a1", // fg2
+	"#ff6b6b", // coral
+	"#fe8019", // orange
+	"#fab387", // peach
+	"#fabd2f", // yellow
+	"#f9e2af", // cream
+	"#b8bb26", // olive
+	"#a6e3a1", // mint
+	"#8ec07c", // aqua
+	"#94e2d5", // teal
+	"#89dceb", // sky
+	"#74c7ec", // sapphire
+	"#89b4fa", // blue
+	"#b4befe", // lavender
+	"#cba6f7", // mauve
+	"#d3869b", // plum
+	"#f5c2e7", // pink
+	"#ff79c6", // magenta
+	"#83a598", // slate
+	"#d5c4a1", // sand
 }
 
 // Sigils survive colourblindness and a bad terminal palette. They are assigned
@@ -26,7 +39,16 @@ var Palette = []string{
 // collide until there are more repos than sigils. That is the point of having
 // the axis at all: hue is hashed and may collide, and the sigil is what still
 // tells two same-coloured repos apart.
-var Sigils = []string{"✦", "◆", "▣", "⬢", "⬡", "◈", "▲", "●"}
+//
+// None of these is a status icon. The overlay's working spinner, blocked
+// triangle, done dot and idle ring own those shapes, so a repo mark reusing
+// one read as a state at a glance.
+var Sigils = []string{
+	"✦", "◆", "▣", "⬢", "⬡", "◈",
+	"◇", "■", "□", "▤", "▥", "▦",
+	"⬣", "✧", "★", "☆", "◎", "◉",
+	"✚", "╳",
+}
 
 // Sigil returns the sigil for a grid slot, cycling once slots exceed the set.
 func Sigil(slot int) string {
@@ -39,12 +61,12 @@ func Sigil(slot int) string {
 // SigilFor is Sigil, skipping past anything already on screen.
 //
 // Slots are pinned for the life of an install and never freed, so every scratch
-// directory and every worktree that has ever existed spends one. Once nine have
-// been handed out, the tenth repo wraps onto the first repo's sigil, and two
-// cards visible at the same time carried the same mark: exactly the collision
-// the sigil exists to rule out. Preferring the slot's own sigil keeps it stable
-// while the set of repos on screen is, and only the card that would collide
-// moves.
+// directory and every worktree that has ever existed spends one. Once twenty-one
+// have been handed out, the twenty-second repo wraps onto the first repo's sigil,
+// and two cards visible at the same time carried the same mark: exactly the
+// collision the sigil exists to rule out. Preferring the slot's own sigil keeps
+// it stable while the set of repos on screen is, and only the card that would
+// collide moves.
 func SigilFor(slot int, taken map[string]bool) string {
 	if slot < 0 {
 		return NeutralSigil

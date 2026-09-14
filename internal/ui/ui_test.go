@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
+	"github.com/ofelcan164/muster/internal/identity"
 	"github.com/ofelcan164/muster/internal/model"
 	"github.com/ofelcan164/muster/internal/state"
 )
@@ -42,7 +43,7 @@ func testSnapshot() *model.Snapshot {
 	repo := func(slot int, key, display, branch, sigil, ws string, agents ...model.Agent) model.Repo {
 		return model.Repo{
 			Key: key, Name: key, Display: display, Branch: branch,
-			Sigil: sigil, ColorIndex: slot % 8, GridSlot: slot,
+			Sigil: sigil, ColorIndex: slot % len(identity.Palette), GridSlot: slot,
 			IsGit: true, Agents: agents, WorkspaceIDs: []string{ws},
 			OtherPanes: []model.Pane{{PaneID: key + ":p9", WorkspaceID: ws, Label: "vite"}},
 		}
@@ -773,6 +774,56 @@ func TestTilesDrawBothEndsOfAnEdge(t *testing.T) {
 	web.LandedAt = time.Now().Add(-5 * time.Minute)
 	if out := plain(withSnapshot(t, s, 143).View()); !strings.Contains(out, "⧗ after ◆ api · landed 5m ago") {
 		t.Errorf("a landed edge does not say so:\n%s", out)
+	}
+}
+
+// Every tile field keeps its row: workspace and pane on line 1, repo and
+// branch on line 2, agent and status on line 3, the question or task on
+// line 4, behind the repo-colour bar.
+func TestTilesZoneEachFieldToItsRow(t *testing.T) {
+	s := testSnapshot()
+	blocked := &s.Repos[1].Agents[0]
+	blocked.Kind = "codex"
+	blocked.Question = "Drop the legacy table?"
+	blocked.BlockedOn, blocked.After = "api#412", "acme/api"
+	out := plain(withSnapshot(t, s, 143).View())
+
+	for _, want := range []string{
+		"[p1]",                     // the pane chip: where enter lands
+		"[codex]",                  // the kind chip
+		"? Drop the legacy table?", // the question marks its own row
+		"⧗ after ◆ api",            // BlockedOn resolved to the repo on screen
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("zoned tile is missing %q:\n%s", want, out)
+		}
+	}
+
+	var where, says string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "[p1]") && strings.Contains(line, "contracts") {
+			where = line
+		}
+		if strings.Contains(line, "? Drop the legacy table?") {
+			says = line
+		}
+	}
+	if where == "" {
+		t.Fatalf("no tile line holds the workspace and its pane chip:\n%s", out)
+	}
+	// The bar, the workspace and the chip compose line 1; the repo sigil
+	// lives on line 2.
+	if !strings.Contains(where, "▌") {
+		t.Errorf("line 1 lost the repo bar: %q", where)
+	}
+	if strings.Contains(where, "✦") {
+		t.Errorf("the repo sigil leaked onto the workspace row: %q", where)
+	}
+	if says == "" {
+		t.Fatalf("no tile line holds the marked question:\n%s", out)
+	}
+	if strings.Contains(says, "[p1]") || strings.Contains(says, "contracts") {
+		t.Errorf("workspace fields leaked onto the question row: %q", says)
 	}
 }
 

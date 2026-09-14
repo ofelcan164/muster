@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ofelcan164/muster/internal/identity"
 	"github.com/ofelcan164/muster/internal/model"
 	"github.com/ofelcan164/muster/internal/state"
 )
@@ -50,7 +51,7 @@ func benchSnapshot(repos, agents int) *model.Snapshot {
 		r := model.Repo{
 			Key: fmt.Sprintf("acme/service-%d", i), Name: fmt.Sprintf("service-%d", i),
 			Display: fmt.Sprintf("service-%d", i), Root: fmt.Sprintf("/home/dev/work/service-%d", i),
-			Branch: "main", IsGit: true, ColorIndex: i % 8, Sigil: "◆",
+			Branch: "main", IsGit: true, ColorIndex: i % len(identity.Palette), Sigil: "◆",
 			GridSlot: i, WorkspaceIDs: []string{fmt.Sprintf("w%d", i)},
 		}
 		for j := 0; j < agents/repos; j++ {

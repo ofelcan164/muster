@@ -261,24 +261,31 @@ func (m *Model) gridLines(startY int) []string {
 // that target's state. Doing it in one pass is what keeps the highlight and
 // the click region identical: they are derived from the same mapping, so a
 // tile cannot end up clickable in places it does not light up.
+// barWidth is the repo bar plus its trailing space: the two columns every
+// tile line spends before its content starts.
+const barWidth = 2
+
 func (m *Model) tileLines(t tile, width, startY, x0 int) []string {
 	var (
 		lines []string
 		key   string
+		bar   string
 	)
 	if t.isAgent() {
-		lines = m.agentTileLines(t, width)
+		lines = m.agentTileLines(t, width-barWidth)
 		key = "pane:" + t.Agent.PaneID
+		bar = repoStyle(t.Repo).Render("▌")
 	} else {
-		lines = m.emptyTileLines(t, width)
+		lines = m.emptyTileLines(t, width-barWidth)
 		key = "ws:" + t.Workspace.ID
+		bar = styFaint.Render("▌")
 	}
 	ti := m.targetIndex(key)
 
 	out := make([]string, len(lines))
 	for i, text := range lines {
 		m.claim(startY+i, x0, width, ti)
-		line := fitLine(text, width)
+		line := fitLine(bar+" "+text, width)
 		if m.isActive(ti) {
 			line = paint(line, stySel)
 		}
@@ -303,33 +310,46 @@ func (m *Model) isActive(target int) bool {
 	return target == m.cursor || target == m.hover
 }
 
-// agentTileLines renders one agent tile: the workspace number, status and repo;
-// the workspace label and branch; the task line; a line for each end of a
-// dependency the agent sits on; and, only when the workspace also holds
-// non-agent panes, the shared footer every agent tile in it carries.
+// agentTileLines renders one agent tile in zones: line 1 is where (workspace
+// and pane), line 2 is which checkout (repo and branch), line 3 is who
+// (status, agent and kind), line 4 is what it says (question or task); then
+// the dependency lines, the shared panes footer, and a blank separator. Every
+// field keeps its row, so the eye learns positions instead of parsing slashes
+// and dots.
 func (m *Model) agentTileLines(t tile, width int) []string {
 	a := t.Agent
+
+	// Where. The snapshot carries no pane or tab labels, so the pane renders
+	// as its short id: the chip says where enter lands.
+	chip := styFaint.Render("[" + shortPane(a.PaneID) + "]")
+	line1 := workspaceNumCol(t.Workspace, m.snap.FocusedWorkspace) + " " +
+		styDim.Render(truncate(t.Workspace.Label, max(4, width-lipgloss.Width(chip)-4))) + " " + chip
+	lines := []string{line1}
+
+	// Which checkout: the repo in its own colour, the branch faint behind it.
+	line2 := repoStyle(t.Repo).Bold(true).Render(t.Repo.Sigil + " " + truncate(t.Repo.Display, max(4, width-8)))
+	if t.Repo.Branch != "" {
+		line2 += " " + styFaint.Render("· "+truncate(t.Repo.Branch, max(4, width-lipgloss.Width(line2)-2)))
+	}
+	lines = append(lines, line2)
+
+	// Who: orchestrator mark, status icon, name and kind, with the age
+	// right-aligned. What it waits on has its own line below the task.
 	marker := " "
 	if a.IsOrchestrator {
 		marker = "⌂"
 	}
 	st := statusStyle(a.Status, m.frame)
-	repoName := repoStyle(t.Repo).Bold(true).Render(t.Repo.Sigil + " " + t.Repo.Display)
-	head := fmt.Sprintf("%s %s%s %s%s%s",
-		workspaceNumCol(t.Workspace, m.snap.FocusedWorkspace),
-		marker, st.Render(statusIcon(a.Status, m.frame)),
-		repoName, styFaint.Render("/"), styFG.Bold(true).Render(truncate(a.Name, 14)))
-	age := styMeta.Render(ageText(a.Age(time.Now()), a.AgeKnown))
-	if gap := width - lipgloss.Width(head) - lipgloss.Width(age) - 1; gap > 0 {
-		head += strings.Repeat(" ", gap) + age
+	left := fmt.Sprintf("%s%s %s%s", marker, st.Render(statusIcon(a.Status, m.frame)),
+		styFG.Bold(true).Render(truncate(a.Name, 14)), kindChip(a.Kind))
+	right := styMeta.Render(ageText(a.Age(time.Now()), a.AgeKnown))
+	line3 := left
+	if gap := width - lipgloss.Width(left) - lipgloss.Width(right) - 1; gap > 0 {
+		line3 += strings.Repeat(" ", gap) + right
+	} else {
+		line3 += " " + right
 	}
-	lines := []string{head}
-
-	line2 := "    " + styDim.Render(truncate(t.Workspace.Label, 16))
-	if t.Repo.Branch != "" {
-		line2 += " " + styFaint.Render("· "+truncate(t.Repo.Branch, max(6, width-lipgloss.Width(line2)-3)))
-	}
-	lines = append(lines, line2)
+	lines = append(lines, line3)
 
 	if line, ok := m.tileTaskLine(a, width); ok {
 		lines = append(lines, line)
@@ -342,20 +362,37 @@ func (m *Model) agentTileLines(t tile, width int) []string {
 	return lines
 }
 
-// tileTaskLine is the tile's task line: the blocking question in bright
-// foreground when there is one, the task otherwise, dimmed or marked when it
-// came from a lower rung of the fallback ladder. Showing doubt beats showing
-// false confidence.
+// shortPane trims "w1:p1" to "p1" for the tile's pane chip.
+func shortPane(id string) string {
+	if _, after, ok := strings.Cut(id, ":"); ok && after != "" {
+		return after
+	}
+	return id
+}
+
+// kindChip is the agent's kind in faint brackets, or nothing when herdr sent
+// none, which older snapshots and bare panes do.
+func kindChip(kind string) string {
+	if kind == "" {
+		return ""
+	}
+	return " " + styFaint.Render("["+truncate(kind, 12)+"]")
+}
+
+// tileTaskLine is the tile's says line: the blocking question in bright
+// foreground with a "? " prefix when there is one, the task otherwise, dimmed
+// or marked when it came from a lower rung of the fallback ladder. Showing
+// doubt beats showing false confidence.
 func (m *Model) tileTaskLine(a model.Agent, width int) (string, bool) {
 	task := taskText(a)
 	if task == "" {
 		return "", false
 	}
 	style := styDim
-	switch {
-	case a.Question != "":
+	if a.Question != "" {
 		style = styFG
-	case a.TaskSource == model.TaskFromOrchestratorStale:
+		task = "? " + task
+	} else if a.TaskSource == model.TaskFromOrchestratorStale {
 		style = styFaint
 	}
 	return style.Render("    " + truncate(task, max(6, width-4))), true

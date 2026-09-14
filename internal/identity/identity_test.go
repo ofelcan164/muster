@@ -37,8 +37,8 @@ func TestSigilNoCollisionWithinSet(t *testing.T) {
 }
 
 // Slots are pinned for the life of an install and never freed, so a machine
-// that has seen nine repos hands the tenth a sigil already on screen. Two cards
-// carrying the same mark is the one thing the sigil axis exists to prevent.
+// that has seen twenty-one repos hands the twenty-second a sigil already on
+// screen. Two cards carrying the same mark is the one thing the sigil axis exists to prevent.
 func TestSigilsDoNotCollideOnScreen(t *testing.T) {
 	taken := map[string]bool{}
 	seen := map[string]int{}
