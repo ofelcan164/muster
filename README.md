@@ -151,6 +151,7 @@ muster open | jump orchestrator | jump previous
 muster install [--key <letter>] [--no-keys] [--auto] | uninstall [--purge]
 muster install-skill | uninstall-skill | uninstall-keys
 muster mark-orchestrator
+muster doctor [--yes]     # check health, ask before restarting a stuck daemon
 muster --help
 muster chain get [--json] | set <spec> [--independent a,b] [--by NAME] | clear
 muster discover
@@ -253,6 +254,11 @@ state dir, which is right when the plugin is going away.
 - Muster closed without landing where you picked, or flashed and closed on
   open: the error is in `musterd.log` in the state dir. The popup is gone
   before anything it prints could be read.
+- Wrong or empty after a reinstall (0 workspaces with agents up, stale tiles):
+  run the **Check Muster's health** action. It restarts a daemon stranded on a
+  deleted checkout or no longer writing its snapshot, and says how to fix
+  anything else. It never touches the state dir. From a herdr pane in a source
+  checkout, `./bin/muster doctor` does the same but asks first.
 - Tiles show terminal titles instead of task lines: the reporting skill is
   missing. Press `S` while its banner is up, or run `muster install-skill`.
 - A new binding does nothing: an old overlay binary keeps running after a

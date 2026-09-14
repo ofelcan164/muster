@@ -414,6 +414,27 @@ func block(letter, ui string) string {
 	return b.String()
 }
 
+// BlockPresent reports whether the managed block is in herdr's config, and
+// which letter it binds. A missing config file reads as absent rather than an
+// error: nobody having run install is a state, not a failure.
+func BlockPresent() (letter string, present bool, err error) {
+	path := ConfigPath()
+	if path == "" {
+		return "", false, errors.New("cannot locate herdr config")
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	if blockRE.FindString(string(body)) == "" {
+		return "", false, nil
+	}
+	return installedLetter(string(body)), true, nil
+}
+
 // Remove takes the managed block and the badge back out, for undoing an install.
 //
 // The goal is that after unlinking the plugin there is nothing left that only

@@ -5,7 +5,7 @@
 //	muster jump <target>       the orchestrator, or the previous agent
 //	muster mark-orchestrator   mark the pane this runs in
 //	muster discover            make sure the daemon is up after a workspace appears
-//	muster install | uninstall | install-skill | uninstall-skill | uninstall-keys
+//	muster install | uninstall | install-skill | uninstall-skill | uninstall-keys | doctor
 //	muster chain get | set | clear
 //
 // Bare invocation is the overlay itself, one process per opening rather than
@@ -26,6 +26,7 @@ import (
 
 	"github.com/ofelcan164/muster/internal/chain"
 	"github.com/ofelcan164/muster/internal/daemon"
+	"github.com/ofelcan164/muster/internal/doctor"
 	"github.com/ofelcan164/muster/internal/herdr"
 	"github.com/ofelcan164/muster/internal/install"
 	"github.com/ofelcan164/muster/internal/state"
@@ -65,6 +66,9 @@ func main() {
 
 	case "uninstall":
 		os.Exit(cmdUninstall(args[1:]))
+
+	case "doctor":
+		os.Exit(cmdDoctor(args[1:]))
 
 	case "install-skill":
 		os.Exit(cmdInstallSkill())
@@ -182,6 +186,7 @@ usage:
   muster uninstall-keys            drop the keybindings, keep everything else
   muster uninstall-skill           drop the reporting skill
   muster uninstall [--purge]       remove everything Muster wrote outside itself
+  muster doctor [--yes]            check the daemon, snapshot and state dir, explain the fixes, ask before applying
   muster discover                  make sure the daemon is up, for the event hooks
   muster badge [letter]            the tab bar line install writes: what needs you, and the key
 
@@ -555,6 +560,27 @@ func cmdUninstall(args []string) int {
 	reloadConfig()
 	fmt.Println("\nunlink the plugin with: herdr plugin unlink muster")
 	return code
+}
+
+// cmdDoctor checks Muster's health, explains the fixes, and asks before
+// applying them. --yes skips the question, which is what the action-menu entry
+// passes: actions run without a terminal to ask in. Without either, it
+// diagnoses and stops.
+func cmdDoctor(args []string) int {
+	fs := flag.NewFlagSet("doctor", flag.ExitOnError)
+	yes := fs.Bool("yes", false, "apply fixes without asking")
+	_ = fs.Parse(args)
+
+	dir := state.Dir()
+	if dir == "" {
+		fmt.Fprintln(os.Stderr, "muster: no state directory: run through herdr, or pass --state-dir")
+		return 1
+	}
+	canPrompt := false
+	if fi, err := os.Stdin.Stat(); err == nil && fi.Mode()&os.ModeCharDevice != 0 {
+		canPrompt = true
+	}
+	return doctor.Run(os.Stdout, os.Stdin, doctor.Options{Dir: dir, Yes: *yes, CanPrompt: canPrompt})
 }
 
 func ensure() {

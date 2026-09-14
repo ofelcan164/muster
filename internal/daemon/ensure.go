@@ -50,7 +50,7 @@ func Ensure() (started bool, err error) {
 		return false, nil
 	}
 
-	exe, err := daemonBinary()
+	exe, err := Binary()
 	if err != nil {
 		return false, err
 	}
@@ -128,14 +128,14 @@ func Stop(wait time.Duration) error {
 	return fmt.Errorf("daemon pid=%d did not exit within %s", pid, wait)
 }
 
-// daemonBinary resolves the musterd executable.
+// Binary resolves the musterd executable.
 //
 // Ensure is called both by musterd itself and by the muster client, which the
 // install and event actions run. Spawning os.Executable() unconditionally would
 // make the client try to run itself as a daemon, so the musterd binary is
 // resolved by name from the directory the running binary sits in. The manifest
 // builds both into the same bin/ directory.
-func daemonBinary() (string, error) {
+func Binary() (string, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return "", err

@@ -105,6 +105,15 @@ description = "Remove Muster's config block and the reporting skill. Run before 
 contexts = ["global"]
 command = ["./bin/muster", "uninstall"]
 
+# --yes because actions run without a terminal to ask in. That is safe: the only
+# fixes stop and start musterd, never a file. In a terminal `muster doctor` asks.
+[[actions]]
+id = "doctor"
+title = "Check Muster's health"
+description = "Diagnose the daemon and snapshot, restart a stranded or stuck daemon, and say how to fix the rest."
+contexts = ["global"]
+command = ["./bin/muster", "doctor", "--yes"]
+
 # Rare events only. Status and output events are far too chatty for a
 # process-per-event hook; musterd subscribes to those over the socket.
 [[events]]

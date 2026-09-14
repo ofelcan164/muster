@@ -16,10 +16,6 @@ import (
 	"github.com/ofelcan164/muster/internal/state"
 )
 
-// staleAfter is when a snapshot stops being trustworthy. The daemon rewrites
-// every five seconds, so anything this old means it is not running.
-const staleAfter = 30 * time.Second
-
 // Badge is the line herdr's tab bar shows: how many rows need you, else how
 // many agents are working, then the key that opens the overlay.
 //
@@ -29,7 +25,7 @@ const staleAfter = 30 * time.Second
 func Badge(letter string) string {
 	key := "prefix+" + letter
 	snap, err := daemon.ReadSnapshot()
-	if err != nil || time.Since(snap.GeneratedAt) >= staleAfter {
+	if err != nil || time.Since(snap.GeneratedAt) >= model.StaleAfter {
 		return "◆ " + key
 	}
 	switch n := len(undismissed(snap.Attention, state.LoadUI().Dismissed)); {
@@ -118,7 +114,7 @@ func Run() (string, error) {
 // load reads the snapshot, healing a dead daemon on the way.
 func load() (*model.Snapshot, string) {
 	snap, err := daemon.ReadSnapshot()
-	if err == nil && time.Since(snap.GeneratedAt) < staleAfter {
+	if err == nil && time.Since(snap.GeneratedAt) < model.StaleAfter {
 		return snap, ""
 	}
 
@@ -133,7 +129,7 @@ func load() (*model.Snapshot, string) {
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		if fresh, err := daemon.ReadSnapshot(); err == nil &&
-			time.Since(fresh.GeneratedAt) < staleAfter {
+			time.Since(fresh.GeneratedAt) < model.StaleAfter {
 			return fresh, "daemon was restarted"
 		}
 		time.Sleep(25 * time.Millisecond)

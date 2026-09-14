@@ -212,6 +212,10 @@ type Orchestrator struct {
 	StatusSince time.Time `json:"status_since,omitempty"`
 }
 
+// StaleAfter is when a snapshot stops being trustworthy. The daemon rewrites
+// every five seconds, so anything this old means it is not running.
+const StaleAfter = 30 * time.Second
+
 // Snapshot is the file at $HERDR_PLUGIN_STATE_DIR/snapshot.json.
 type Snapshot struct {
 	GeneratedAt  time.Time `json:"generated_at"`

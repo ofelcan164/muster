@@ -49,10 +49,10 @@ func icon(s model.Status) string {
 func Dump(w io.Writer, s *model.Snapshot, now time.Time) {
 	age := now.Sub(s.GeneratedAt)
 	fmt.Fprintf(w, "MUSTER  %s · %s · %s  %d need you\n",
-		plural(s.Counts.Repos, "repo"), plural(s.Counts.Workspaces, "workspace"),
-		plural(s.Counts.Agents, "agent"), s.Counts.NeedsYou)
+		Plural(s.Counts.Repos, "repo"), Plural(s.Counts.Workspaces, "workspace"),
+		Plural(s.Counts.Agents, "agent"), s.Counts.NeedsYou)
 	fmt.Fprintf(w, "snapshot %s old · herdr %s · daemon pid %d\n",
-		compactDur(age), orDash(s.HerdrVersion), s.DaemonPID)
+		CompactDur(age), orDash(s.HerdrVersion), s.DaemonPID)
 	fmt.Fprintln(w)
 
 	// Ranked ribbon. The overlay drops it entirely when nothing needs you,
@@ -115,7 +115,7 @@ func Dump(w io.Writer, s *model.Snapshot, now time.Time) {
 				labels = append(labels, p.Label)
 			}
 			slices.Sort(labels)
-			fmt.Fprintf(w, "      %s · %s\n", plural(len(r.OtherPanes), "pane"), strings.Join(labels, " · "))
+			fmt.Fprintf(w, "      %s · %s\n", Plural(len(r.OtherPanes), "pane"), strings.Join(labels, " · "))
 		}
 		fmt.Fprintln(w)
 	}
@@ -125,7 +125,7 @@ func Dump(w io.Writer, s *model.Snapshot, now time.Time) {
 		fmt.Fprintln(w, "  none marked · run the mark-orchestrator action on its pane")
 	} else {
 		fmt.Fprintf(w, "  ⌂ %s · %s %s · via %s · %s\n",
-			s.Orch.Name, s.Orch.Status, compactDur(now.Sub(s.Orch.StatusSince)),
+			s.Orch.Name, s.Orch.Status, CompactDur(now.Sub(s.Orch.StatusSince)),
 			s.Orch.DetectedBy, s.Orch.PaneID)
 		if s.Orch.LastMessage != "" {
 			fmt.Fprintf(w, "    told  \"%s\"\n", s.Orch.LastMessage)
@@ -163,7 +163,8 @@ func repoName(s *model.Snapshot, key string) string {
 	return key
 }
 
-func plural(n int, noun string) string {
+// Plural writes a count with its noun: 1 agent, 3 agents.
+func Plural(n int, noun string) string {
 	if n == 1 {
 		return fmt.Sprintf("%d %s", n, noun)
 	}
@@ -199,18 +200,18 @@ func ageText(a model.Agent, now time.Time) string {
 	if !a.AgeKnown {
 		return "-"
 	}
-	return compactDur(a.Age(now))
+	return CompactDur(a.Age(now))
 }
 
 func attnAge(a model.Attention) string {
 	if !a.AgeKnown {
 		return "-"
 	}
-	return compactDur(a.Age)
+	return CompactDur(a.Age)
 }
 
-// compactDur formats an age the way the design writes them: 4m, 22m, 3h.
-func compactDur(d time.Duration) string {
+// CompactDur formats an age the way the design writes them: 4m, 22m, 3h.
+func CompactDur(d time.Duration) string {
 	if d < 0 {
 		d = 0
 	}
