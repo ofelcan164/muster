@@ -24,6 +24,7 @@ internal/triage       attention ranking that fills the ribbon
 internal/state        state dir, lock, atomic writes. No invented fallback:
                       HERDR_PLUGIN_STATE_DIR or --state-dir, else ErrNoStateDir
 internal/install      the only code that writes files the user owns
+internal/doctor       health check; its only fixes stop and start musterd
 internal/model        snapshot types both sides share
 internal/ui           overlay
 ```
@@ -58,6 +59,7 @@ muster mark-orchestrator                            run on the orchestrator's pa
 muster chain get [--json] | set <spec> [--independent a,b] [--by NAME] | clear
 muster discover                                     make sure the daemon is up; the event hooks call it
 muster badge [letter]                               the tab_bar_right line install writes
+muster doctor [--yes]                               health check; the action passes --yes
 
 musterd --ensure          start a daemon if none is running, then exit at once
 musterd --daemon          run as the daemon
@@ -110,6 +112,11 @@ skill, wheel moves, hover highlights.
   lock, so the daemon watches its own binary on the 5s tick and execs the new
   one once it has looked the same twice. Without that an old daemon kept
   writing an old-shape snapshot under a new overlay for days.
+- `/proc/pid/exe` lies about a reinstalled daemon: `go build` unlinks the old
+  binary, and `herdr plugin install` moves the old checkout aside before
+  deleting it, so the link reads `(deleted)` in a directory that is gone while
+  the install path already holds the new build. `doctor` judges the daemon by
+  argv[0], the path its watch stats; only a missing argv[0] is an orphan.
 - herdr disables a conflicting key silently rather than rejecting it, and the
   managed block is appended last, so a collision always disables Muster's. So
   `install` asks first: it renders each candidate into a throwaway
