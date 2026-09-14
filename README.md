@@ -46,23 +46,23 @@ herdr plugin install ofelcan164/muster
 ```
 
 That is the whole install. There are no release tags yet, so this tracks the
-default branch. Muster binds its keys itself: the startup hook runs
-`muster install --auto`, which starts the daemon and writes the keybindings.
+default branch. Muster binds its keys itself: at every start herdr runs its
+startup hook, `./bin/muster install --auto` from the plugin's checkout, which
+starts the daemon and writes the keybindings.
 Installing mid-session gets no startup hook, so opening the overlay once from
 herdr's action menu does the same job.
 
 To keep the overlay and skip the global keys, use the **Remove Muster's
-keybindings, keep the overlay** action, or run `muster install --no-keys`
-before the first install. Either records the refusal in the state dir, and
-`--auto` honours it from then on, so the startup hook stops putting them back.
-The **Install Muster's keybindings** action asks for them again. (The
-**Uninstall Muster's keybindings and skill** action is the full removal, skill
-included.)
+keybindings, keep the overlay** action. It records the refusal in the state
+dir, so the startup hook stops putting them back. The **Install Muster's
+keybindings** action asks for them again. (The **Uninstall Muster's keybindings
+and skill** action is the full removal, skill included.)
 
-The actions matter here because `herdr plugin install` puts the binaries in
-herdr's own checkout rather than on your `PATH`. Every `muster` command below
-is reachable that way; from a source checkout you can run `./bin/muster`
-directly instead.
+Everything you do with an installed Muster goes through herdr: the keys,
+herdr's action menu, or `herdr plugin action invoke muster.<action>` from a
+shell (see [Actions](#actions)). `herdr plugin install` puts the binaries in
+herdr's own checkout rather than on your `PATH`, and only herdr hands them the
+state dir and socket they need, so there is no `muster` command to type.
 
 From source instead, if you want to hack on it:
 
@@ -94,13 +94,10 @@ symlinks it into every runtime you actually have: `~/.claude/skills`,
 `~/.codex/skills` (`CODEX_HOME` honoured) and `~/.config/opencode/skill`. A
 runtime you have not installed is left alone rather than created. The copy
 names the absolute path to `muster` and its state dir, which an agent pane has
-no other way to find, so every install rewrites it. `muster uninstall-skill`
-removes it and records the refusal, so the startup hook stops putting it back;
-`muster install-skill` asks for it again.
-
-Commands that touch state (`install`, `show`, `chain`, `musterd dump`) run inside a
-herdr pane, where `HERDR_PLUGIN_STATE_DIR` is set. From a plain shell they fail
-with "no state directory": pass `--state-dir <dir>`.
+no other way to find, so every install rewrites it. The **Uninstall Muster's
+keybindings and skill** action removes it and records the refusal, so the
+startup hook stops putting it back, and **Install the reporting skill for the
+orchestrator** asks for it again. No action removes the skill on its own.
 
 ## Requirements
 
@@ -120,10 +117,14 @@ Global, once installed: `prefix+m` opens Muster, `prefix+shift+m` jumps
 straight to the orchestrator, `prefix+ctrl+m` goes back to the previous agent.
 
 If you have already bound `prefix+m` yourself, yours wins and Muster takes the
-next free letter, saying which one. Name your own with
-`muster install --key <letter>`; that choice sticks across restarts. Muster
-never installs without a key, because the overlay would then only be reachable
-from herdr's action menu.
+next free letter out of `m g u y`, saying which one. To pick the letter
+yourself, change it in `key = "prefix+m"` inside Muster's marked block in your
+herdr config, then run the **Install Muster's keybindings** action. Install
+reads that letter back, rewrites the other two bindings and the badge to match,
+and the startup hook keeps it from then on. If the letter you picked is already
+bound, install moves to the next free one instead. Muster never installs
+without a key, because the overlay would then only be reachable from herdr's
+action menu.
 
 In the overlay:
 
@@ -150,25 +151,25 @@ In the overlay:
 
 There is no `?` binding and no in-app legend, so this list is the reference.
 
-## Commands
+## Actions
+
+Everything an installed Muster offers is an action. Pick one from herdr's
+action menu, or run it from a shell:
 
 ```sh
-muster open | jump orchestrator | jump previous
-muster install [--key <letter>] [--no-keys] [--auto] | uninstall [--purge]
-muster install-skill | uninstall-skill | uninstall-keys
-muster mark-orchestrator
-muster doctor [--yes]     # check health, ask before restarting a stuck daemon
-muster --help
-muster show [target]      # the usual order, and where parked work stands
-muster chain get [--json] | set <spec> [--by NAME] | clear
-muster discover
-muster badge [letter]     # the tab bar line install writes
-
-musterd --ensure          # start a daemon if none is running, then exit
-musterd --daemon          # run as the daemon (muster install spawns this)
-musterd dump [--json]     # the supported way to read the snapshot
-musterd status
+herdr plugin action invoke muster.open                # open the overlay
+herdr plugin action invoke muster.jump-orchestrator   # focus the orchestrator
+herdr plugin action invoke muster.back                # back to the previous agent
+herdr plugin action invoke muster.install             # bind the keys, start the daemon, write the skill
+herdr plugin action invoke muster.install-skill       # write the reporting skill
+herdr plugin action invoke muster.uninstall-keys      # drop the keys, keep the overlay
+herdr plugin action invoke muster.uninstall           # remove the keys and the skill
+herdr plugin action invoke muster.doctor              # check health, restart a stuck daemon
 ```
+
+**Mark this agent as the orchestrator** acts on a pane, so pick it from that
+pane's action menu, or press `o` on the agent's tile. For a named herdr
+session, put `--session <name>` straight after `herdr`.
 
 There is nothing to configure. Muster reads no config of its own.
 
@@ -197,23 +198,27 @@ So when you tell the orchestrator the PR merged and main is pulled, it writes
 then ends its turn without moving web on, a `GATE OPEN` row reaches the top of
 the ribbon, and `t` sends it the reminder.
 
-The usual order between repos lives in the state dir as `chain.json`:
+The orchestrator also keeps a usual order between repos for the session, as
+`chain.json` in the state dir, and asks Muster where parked work stands. No
+action does either. An agent pane has neither `muster` on its `PATH` nor the
+state dir, so install writes the full command into the reporting skill, and the
+orchestrator runs it from there:
 
 ```sh
-muster chain set "contracts > api > web,mobile" --by orchestrator
-muster show            # the order, then every agent on either end of an edge
-muster show web        # one repo; repo/agent or a pane id also work
+<muster> chain set "contracts > api > web,mobile" --by orchestrator
+<muster> show          # the order, then every agent on either end of an edge
+<muster> show web      # one repo; repo/agent or a pane id also work
 ```
 
-`>` is sequence, `,` is parallel. It is a default the orchestrator reads before
-it writes `blocked_on`, and Muster draws nothing from it: an order that holds
-for one feature can reverse for the next.
+`<muster>` is that full command, as written in
+`~/.agents/skills/muster-report/SKILL.md`, and it works the same from any herdr
+pane. `>` is sequence, `,` is parallel. The order is a default the orchestrator
+reads before it writes `blocked_on`, and Muster draws nothing from it: an order
+that holds for one feature can reverse for the next.
 
-An agent pane has neither `muster` on its `PATH` nor the state dir, so the
-reporting skill carries the full command for `show` and `chain`. The skill also
-teaches the orchestrator to write the task lines at dispatch time and rewrite
-them when the work changes. Without them Muster falls back to terminal titles,
-then branch and directory, labelled as guesses.
+The skill also teaches the orchestrator to write the task lines at dispatch
+time and rewrite them when the work changes. Without them Muster falls back to
+terminal titles, then branch and directory, labelled as guesses.
 
 ## How it works
 
@@ -276,29 +281,26 @@ check and asks before restarting anything.
 ## Uninstall
 
 ```sh
-muster uninstall             # removes the key block and the skill, leaves state
-muster uninstall --purge     # also deletes the state dir
-herdr plugin unlink muster
+herdr plugin action invoke muster.uninstall   # removes the key block and the skill, leaves state
+herdr plugin uninstall muster                 # herdr plugin unlink muster, for a source checkout
 ```
 
-`uninstall` removes the marked block from your herdr config (backup beside it),
-removes `~/.agents/skills/muster-report/` along with every runtime symlink
-into it, and reloads the config.
+The uninstall action removes the marked block from your herdr config (backup
+beside it), removes `~/.agents/skills/muster-report/` along with every runtime
+symlink into it, and reloads the config. It also records the refusal, so the
+startup hook does not rebind the keys or rewrite the skill at the next herdr
+start.
 
-It also records the refusal, so the startup hook does not rebind the keys or
-rewrite the skill at the next herdr start. `--purge` deletes that record along with the rest of the
-state dir, which is right when the plugin is going away.
+No action deletes the learned state. Once the plugin is gone and herdr has
+restarted, so no daemon is left to write it back, remove the state dir if it is
+still there: `~/.local/state/herdr/plugins/muster`, or the same path under
+`$XDG_STATE_HOME`.
 
 ## Troubleshooting
 
-- `muster: no state directory` from a plain shell: run through herdr, or pass
-  `--state-dir`. herdr sets `HERDR_PLUGIN_STATE_DIR` for its own panes and
-  plugin actions, and nothing else does.
-- `musterd dump` from a plain shell shows the wrong session: outside herdr it
-  reads the default session. Set `HERDR_SESSION=<name>` for a named one.
 - The daemon is gone after herdr was down: by design it exits after 60s of an
-  unreachable server and lives and dies with herdr. Re-run the install action
-  or `musterd --ensure`.
+  unreachable server and lives and dies with herdr. Run the install action or
+  the health check, and either starts it again.
 - Linked the plugin and nothing happens: startup hooks do not fire on
   `plugin link` mid-session. Open the overlay once from herdr's action menu,
   which starts the daemon and binds the keys, or run the install action.
@@ -308,10 +310,12 @@ state dir, which is right when the plugin is going away.
 - Wrong or empty after a reinstall (0 workspaces with agents up, stale tiles):
   run the **Check Muster's health** action, see [Health check](#health-check).
 - Tiles show terminal titles instead of task lines: the reporting skill is
-  missing. Press `S` while its banner is up, or run `muster install-skill`.
-- The orchestrator's `muster show` fails with "no such file" after the plugin
-  moved, say from a linked checkout to an installed one: the skill still names
-  the old path. Run the **Install Muster's keybindings** action to rewrite it.
+  missing. Press `S` while its banner is up, or run the **Install the reporting
+  skill for the orchestrator** action.
+- The orchestrator's `show` or `chain` fails with "no such file" after the
+  plugin moved, say from a linked checkout to an installed one: the skill still
+  names the old path. Run the **Install Muster's keybindings** action to
+  rewrite it.
 - A new binding does nothing: an old overlay binary keeps running after a
   rebuild, so reopen it. A key you bound yourself is not the cause; install
   checks with `herdr config check` before writing and moves to a free letter
@@ -330,6 +334,28 @@ herdr reads `herdr-plugin.toml` when the plugin is linked, so a manifest change
 (the popup's size, say) needs an unlink and a link. A rebuilt binary needs
 nothing: the next open runs it.
 
+In a source checkout the binaries are yours to run. From a herdr pane, which
+sets the state dir, socket and session:
+
+```sh
+./bin/muster open | jump orchestrator | jump previous
+./bin/muster install [--key <letter>] [--no-keys] [--auto] | uninstall [--purge]
+./bin/muster install-skill | uninstall-skill | uninstall-keys
+./bin/muster mark-orchestrator
+./bin/muster doctor [--yes]   # asks before restarting a stuck daemon
+./bin/muster show [target]
+./bin/muster chain get [--json] | set <spec> [--by NAME] | clear
+./bin/muster discover         # what the workspace and worktree hooks run
+./bin/muster badge [letter]   # what the tab bar entry runs
+./bin/musterd --ensure        # start a daemon if none is running, then exit
+./bin/musterd dump [--json]   # the supported way to read the snapshot
+./bin/musterd status
+```
+
+From a plain shell they fail with "no state directory": pass `--state-dir <dir>`
+before the command, and set `HERDR_SESSION=<name>` to read a named session
+rather than the default one.
+
 No toolchain manager required, here or anywhere else. `go.mod` is the only
 place a Go version is written down, and CI reads it with
 `setup-go: go-version-file`.
@@ -339,7 +365,7 @@ from an agent session will hang it, so drive it from the CLI. A named session
 keeps that away from your real one: `herdr --session scratch server` starts one
 headless, `herdr --session scratch <command>` drives it, and Muster keeps its
 state for it in `sessions/scratch/`. Read it with
-`HERDR_SESSION=scratch musterd --state-dir <dir> dump`. That covers less
+`HERDR_SESSION=scratch ./bin/musterd --state-dir <dir> dump`. That covers less
 than it used to: the popup has no pane id, so the CLI can open and kill it but
 not read it or type into it. A server with no terminal attached also cannot show
 whether a jump moves what you see, which is how a jump that landed nowhere

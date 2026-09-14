@@ -572,6 +572,46 @@ func TestExplicitKeySurvivesALaterAutoRun(t *testing.T) {
 	}
 }
 
+// No action passes --key, so an installed copy picks its letter by editing the
+// plain binding in Muster's block and running the install action. Install has
+// to read that letter back and carry it to the rest of the block.
+func TestHandEditedLetterSurvivesAnInstall(t *testing.T) {
+	bin := herdrBin(t)
+	path := setup(t, userConfig)
+
+	if _, err := Keys(bin, ""); err != nil {
+		t.Fatal(err)
+	}
+	body, _ := os.ReadFile(path)
+	plain := `key = "prefix+` + DefaultLetter + `"`
+	if !strings.Contains(string(body), plain) {
+		t.Fatalf("no %s binding to edit:\n%s", plain, body)
+	}
+	edited := strings.Replace(string(body), plain, `key = "prefix+u"`, 1)
+	if err := os.WriteFile(path, []byte(edited), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Keys(bin, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Letter != "u" {
+		t.Fatalf("letter = %q, want the u edited in", res.Letter)
+	}
+	after, _ := os.ReadFile(path)
+	for _, b := range BindingsFor("u") {
+		if !strings.Contains(string(after), `key = "`+b.Key+`"`) {
+			t.Errorf("the block lacks %s after the install:\n%s", b.Key, after)
+		}
+	}
+	for _, b := range BindingsFor(DefaultLetter) {
+		if strings.Contains(string(after), `key = "`+b.Key+`"`) {
+			t.Errorf("the old %s binding survived the install:\n%s", b.Key, after)
+		}
+	}
+}
+
 // Every candidate bound is the case where Muster cannot do its job. It has to
 // say so, not write a block herdr will disable and call that an install.
 func TestKeysFailsWhenEveryCandidateIsTaken(t *testing.T) {

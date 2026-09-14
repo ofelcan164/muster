@@ -454,7 +454,7 @@ func cmdInstallKeys(args []string) int {
 	if res.Letter != install.DefaultLetter {
 		fmt.Printf("\nprefix+%s was already bound, so Muster took prefix+%s instead.\n",
 			install.DefaultLetter, res.Letter)
-		fmt.Println("choose a different one with: muster install --key <letter>")
+		fmt.Println(`choose a different one: change the letter in key = "prefix+...", inside Muster's block in your herdr config, then run the Install Muster's keybindings action`)
 	}
 
 	// A conflicting key is disabled rather than rejected, so the diagnostic is

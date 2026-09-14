@@ -340,7 +340,7 @@ func chooseLetter(herdrBin, existing, body, want string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf(
-		"every key Muster tries (prefix+%s) is already bound in %s: free one, or choose another with `muster install --key <letter>`",
+		"every key Muster tries (prefix+%s) is already bound in %s: free one, or put a free letter in Muster's block there, then run the Install Muster's keybindings action again",
 		strings.Join(letters, ", prefix+"), ConfigPath())
 }
 
