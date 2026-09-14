@@ -10,11 +10,12 @@ lists, workspaces here and agents there, with little visible state. No sorting
 or searching, and no single place to land and see the whole picture.
 
 Muster is that landing place. One tile per agent, and a dim one for each
-workspace with no agent in it. Each agent tile shows what that agent is doing and how long it has sat quiet. Blocked ones show the
-question they are asking. Finished ones stay visible until seen, and parked
-ones say which repo has to land first. The ribbon on
-top pulls forward the ones that need attention now. Sort, search, rearrange,
-and jump straight to the pick. The strip along the bottom keeps the
+workspace with no agent in it. Each agent tile shows what that agent is doing
+and how long it has sat quiet, and marks a task line the agent has since moved
+on from as stale. Blocked ones show the question they are asking. Finished ones
+stay visible until seen, and parked ones say which repo has to land first. The
+ribbon on top pulls forward the ones that need attention now. Sort, search,
+rearrange, and jump straight to the pick. The strip along the bottom keeps the
 orchestrator and its last message in view, with keys to talk to it directly.
 
 Task lines come from the reporting skill. It asks the orchestrator to write
@@ -31,8 +32,9 @@ Future intro material, not ready yet. Revisit once this feels solid.
 -->
 
 ![The Muster overlay: a ribbon of the agents that need you, above one tile per
-agent showing its status, age and task line, with the orchestrator's
-last message along the bottom, beside herdr's own sidebar](docs/overlay.png)
+agent showing its status, age, task line and what it waits on, with the
+orchestrator's last message along the bottom, beside herdr's own
+sidebar](docs/overlay.png)
 
 ## Install
 
@@ -235,7 +237,8 @@ Colour is a pure hash of the repo key, so it matches on any machine. Sigils are
 not: they follow the grid slot, skipping any mark already on screen, so two
 repos on screen at once never carry the same one. Grid slots are pinned in
 `state.json` on first sight. First-seen sort orders tiles by them, and a repo
-keeps its sigil while the set of repos on screen stays the same.
+keeps its sigil while the set of repos on screen stays the same. No sigil is
+round or shaped like a status icon, so a repo's mark never reads as a state.
 
 `docs/herdr-api-notes.md` has the verified herdr mechanics the daemon is built
 on, including why events are a hint and never a log.
@@ -332,7 +335,11 @@ place a Go version is written down, and CI reads it with
 `setup-go: go-version-file`.
 
 Testing needs a running herdr server with a few agents; launching the herdr TUI
-from an agent session will hang it, so drive it from the CLI. That covers less
+from an agent session will hang it, so drive it from the CLI. A named session
+keeps that away from your real one: `herdr --session scratch server` starts one
+headless, `herdr --session scratch <command>` drives it, and Muster keeps its
+state for it in `sessions/scratch/`. Read it with
+`HERDR_SESSION=scratch musterd --state-dir <dir> dump`. That covers less
 than it used to: the popup has no pane id, so the CLI can open and kill it but
 not read it or type into it. A server with no terminal attached also cannot show
 whether a jump moves what you see, which is how a jump that landed nowhere
