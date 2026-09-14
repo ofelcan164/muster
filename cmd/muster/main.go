@@ -535,7 +535,7 @@ func cmdInstallSkill() int {
 	}
 	fmt.Println("\nit triggers on:")
 	fmt.Printf("  %s\n", install.SkillDescription())
-	fmt.Println("\nremove it with: muster uninstall-skill")
+	fmt.Println("\nremove it with the Uninstall Muster's keybindings and skill action, which takes the keys out too")
 	return 0
 }
 

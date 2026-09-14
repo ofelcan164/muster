@@ -183,7 +183,7 @@ func check(d deps) report {
 		if orphans := orphanAgents(d.Snapshot); len(orphans) > 0 {
 			bad("%s reference workspaces missing from the snapshot, so the grid has nowhere to draw them", daemon.Plural(len(orphans), "agent"))
 			if len(r.fixes) == 0 && d.Exe != exeElsewhere {
-				advise("the daemon is healthy but herdr reports agents outside any workspace: update with `herdr plugin install ofelcan164/muster --yes`, and if it persists report it with `musterd dump --json`")
+				advise("the daemon is healthy but herdr reports agents outside any workspace: update with `herdr plugin install ofelcan164/muster --yes`, and if it persists report it with %s attached", filepath.Join(d.Dir, "snapshot.json"))
 			}
 		}
 	}
@@ -203,10 +203,10 @@ func check(d deps) report {
 		ok("keybindings declined earlier (refusal recorded, startup hook leaves them alone)")
 	default:
 		bad("no keybindings installed")
-		advise("run the Install Muster's keybindings action, or `muster install`")
+		advise("run the Install Muster's keybindings action")
 	}
 	if !d.SkillInstalled {
-		advise("reporting skill missing: tiles fall back to terminal titles. Run the Install the reporting skill action, or `muster install-skill`")
+		advise("reporting skill missing: tiles fall back to terminal titles. Run the Install the reporting skill for the orchestrator action")
 	} else {
 		ok("reporting skill installed")
 	}
@@ -319,7 +319,8 @@ func runWith(w io.Writer, stdin io.Reader, opts Options, gather func(string) dep
 	after := check(gather(opts.Dir))
 	printReport(w, after)
 	if len(after.fixes) > 0 {
-		fmt.Fprintln(w, "still broken: update with `herdr plugin install ofelcan164/muster --yes` and report it with `musterd dump --json`")
+		fmt.Fprintf(w, "still broken: update with `herdr plugin install ofelcan164/muster --yes`, and report it with %s attached\n",
+			filepath.Join(opts.Dir, "snapshot.json"))
 		return 1
 	}
 	return exitFor(after)

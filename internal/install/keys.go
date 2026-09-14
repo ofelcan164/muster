@@ -421,7 +421,8 @@ func Keys(herdrBin, letter string) (*Result, error) {
 func block(letter, ui string) string {
 	var b strings.Builder
 	b.WriteString(beginMarker + "\n")
-	b.WriteString("# Written by `muster install`. Re-running it replaces this block.\n")
+	b.WriteString("# Written by Muster. The Install Muster's keybindings action rewrites this block.\n")
+	b.WriteString("# For another key, change the letter in the first key = \"prefix+...\" below, then run that action.\n")
 	if ui != "" {
 		b.WriteString("\n# what needs you, and the key that opens Muster, in the tab bar\n" + ui)
 	}
