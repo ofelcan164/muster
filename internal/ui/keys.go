@@ -88,7 +88,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// sees this key, so it cannot collide with a herdr binding.
 	case "M":
 		if !m.snap.Orch.Found {
-			m.notice = "no orchestrator marked: press o on its card first"
+			m.notice = "no orchestrator marked: press o on its tile first"
 			return m, nil
 		}
 		m.jump = m.snap.Orch.PaneID
