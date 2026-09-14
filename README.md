@@ -11,7 +11,8 @@ or searching, and no single place to land and see the whole picture.
 
 Muster is that landing place. One tile per agent, and a dim one for each
 workspace with no agent in it. Each agent tile shows what that agent is doing and how long it has sat quiet. Blocked ones show the
-question they are asking. Finished ones stay visible until seen. The ribbon on
+question they are asking. Finished ones stay visible until seen, and parked
+ones say which repo has to land first. The ribbon on
 top pulls forward the ones that need attention now. Sort, search, rearrange,
 and jump straight to the pick. The strip along the bottom keeps the
 orchestrator and its last message in view, with keys to talk to it directly.
@@ -22,11 +23,11 @@ instead of guessing from terminal titles.
 
 <!--
 Future intro material, not ready yet. Revisit once this feels solid.
-- The quiet finish story. An agent finishes, the orchestrator never
-  learns, downstream work waits behind an open gate. Muster spots it
-  and the t key reports it back.
+- The landing story. Work in one repo waits for another to land on
+  main, the orchestrator records the landing and never moves the parked
+  work on. Muster spots it and the t key reports it back.
 - The dependency vision. Home base showing how work depends on other
-  work, with chains as the recorded order.
+  work, with blocked_on edges on agents and a usual order behind them.
 -->
 
 ![The Muster overlay: a ribbon of the agents that need you, above one tile per
@@ -243,7 +244,9 @@ herdr plugin install ofelcan164/muster --yes
 herdr has no update command, so installing again is the update. It pulls the
 default branch and rebuilds `bin/`; `--ref <ref>` pins something else. The next
 overlay you open runs the new build. The daemon checks its own binary every few
-seconds and restarts itself on the new one, so nothing else needs running.
+seconds and restarts itself on the new one. The reporting skill is the one
+thing that waits: installing again runs no hook, so run the **Install Muster's
+keybindings** action, or restart herdr, to rewrite it for the new build.
 
 ## Health check
 
@@ -272,11 +275,10 @@ herdr plugin unlink muster
 
 `uninstall` removes the marked block from your herdr config (backup beside it),
 removes `~/.agents/skills/muster-report/` along with every runtime symlink
-into it, and reloads the config. Note the skill goes with it even though
-installing it was opt-in.
+into it, and reloads the config.
 
-It also records the refusal, so the startup hook does not rebind the keys at
-the next herdr start. `--purge` deletes that record along with the rest of the
+It also records the refusal, so the startup hook does not rebind the keys or
+rewrite the skill at the next herdr start. `--purge` deletes that record along with the rest of the
 state dir, which is right when the plugin is going away.
 
 ## Troubleshooting
@@ -297,6 +299,9 @@ state dir, which is right when the plugin is going away.
   run the **Check Muster's health** action, see [Health check](#health-check).
 - Tiles show terminal titles instead of task lines: the reporting skill is
   missing. Press `S` while its banner is up, or run `muster install-skill`.
+- The orchestrator's `muster show` fails with "no such file" after the plugin
+  moved, say from a linked checkout to an installed one: the skill still names
+  the old path. Run the **Install Muster's keybindings** action to rewrite it.
 - A new binding does nothing: an old overlay binary keeps running after a
   rebuild, so reopen it. A key you bound yourself is not the cause; install
   checks with `herdr config check` before writing and moves to a free letter
