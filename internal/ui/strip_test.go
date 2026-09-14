@@ -181,6 +181,9 @@ func TestRepairKeyReportsTheOpenGate(t *testing.T) {
 	var toPane, sent string
 	m.SetPrompter(func(pane, text string) error { toPane, sent = pane, text; return nil })
 
+	if out := plain(m.View()); !strings.Contains(out, "t tells it api landed") {
+		t.Errorf("the strip hint does not say what landed:\n%s", out)
+	}
 	key(m, "t")
 
 	if toPane != "w4:p1" {

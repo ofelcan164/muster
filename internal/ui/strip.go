@@ -184,8 +184,10 @@ func (m *Model) stripFooter() string {
 // selection makes possible.
 func (m *Model) stripHint() string {
 	if repair := m.repairTarget(); repair != nil {
-		return fmt.Sprintf(" › i tells it something · t reports %s/%s finished",
-			shortRepo(m.repoByKey(repair.RepoKey)), repair.Agent)
+		// The row lands on a parked agent, which is what knows the upstream.
+		_, parked, _ := m.agentByPane(repair.PaneID)
+		return fmt.Sprintf(" › i tells it something · t tells it %s landed",
+			shortRepo(m.repoByKey(parked.After)))
 	}
 	return " › press i to tell it something"
 }
