@@ -1,20 +1,41 @@
 # Muster
 
 A [herdr](https://herdr.dev) plugin. One overlay, one keystroke, showing every
-agent across every repo you have work in: what each is doing, which ones need
-you, and which finished without anyone noticing.
+agent across every repo you have work in.
 
-That last one is why it exists. An agent finishes, the orchestrator never
-learns, and three downstream agents idle against a gate that already opened.
-Muster shows you that and gives you one key to repair it.
+herdr's sidebar handles the straightforward case well. One workspace, one
+agent, everything visible. That breaks down with many agents across many
+repos, especially with an orchestrator handing work between them. Two flat
+lists, workspaces here and agents there, with little visible state. No sorting
+or searching, and no single place to land and see the whole picture.
 
-![The Muster overlay: a ribbon of the agents that need you, above one card per
-repo showing each agent's status, age and task line, with the orchestrator's
-last message along the bottom](docs/overlay.png)
+Muster is that landing place. One tile per agent, and a dim one for each
+workspace with no agent in it. Each agent tile shows what that agent is doing and how long it has sat quiet. Blocked ones show the
+question they are asking. Finished ones stay visible until seen. The ribbon on
+top pulls forward the ones that need attention now. Sort, search, rearrange,
+and jump straight to the pick. The strip along the bottom keeps the
+orchestrator and its last message in view, with keys to talk to it directly.
+
+Task lines come from the reporting skill. It asks the orchestrator to write
+down what each agent is doing at dispatch time, so the overlay shows real work
+instead of guessing from terminal titles.
+
+<!--
+Future intro material, not ready yet. Revisit once this feels solid.
+- The quiet finish story. An agent finishes, the orchestrator never
+  learns, downstream work waits behind an open gate. Muster spots it
+  and the t key reports it back.
+- The dependency vision. Home base showing how work depends on other
+  work, with chains as the recorded order.
+-->
+
+![The Muster overlay: a ribbon of the agents that need you, above one tile per
+agent showing its status, age and task line, with the orchestrator's
+last message along the bottom, beside herdr's own sidebar](docs/overlay.png)
 
 ## Install
 
-Needs herdr 0.9.0 and Go on `PATH`; herdr builds plugins from source. Full list
+Needs herdr 0.8.2 or newer and Go on `PATH`; herdr builds plugins from source. Full list
 under [Requirements](#requirements).
 
 ```sh
@@ -77,8 +98,8 @@ with "no state directory": pass `--state-dir <dir>`.
 
 ## Requirements
 
-- herdr 0.8.2 or newer. Since Muster became a popup, only 0.9.0 has been
-  tested
+- herdr 0.8.2 or newer. The manifest refuses anything older. 0.8.0 and 0.8.1
+  were never tried
 - Go on `PATH`, any version from 1.21. `go.mod` asks for 1.24 and the default
   `GOTOOLCHAIN=auto` fetches it, so an older Go still builds this. A Go with
   `GOTOOLCHAIN=local` set, which some distro packages do, needs 1.24 itself
@@ -100,7 +121,8 @@ from herdr's action menu.
 
 In the overlay:
 
-- arrows or `hjkl` move, `enter` jumps, `/` searches
+- arrows or `hjkl` move, `/` searches, `enter` jumps to the tile's agent or
+  focuses an empty tile's workspace
 - `esc` leaves search, then clears the filter, then closes; `q` or `ctrl+c`
   closes
 - `s` cycles sort (first seen, a-z, attention, herdr); `J`/`K` move the
@@ -109,14 +131,14 @@ In the overlay:
 - digits `1`-`9` jump to a ribbon row, `x` dismisses one until its status
   changes
 - `o` marks the selected agent as the orchestrator
-- `i` messages the orchestrator, `t` reports a finished agent to it (the repair
-  key from the second paragraph)
+- `i` messages the orchestrator, `t` reports a finished agent to it, for when
+  the orchestrator never heard it finish
 - `S` installs the reporting skill, but only while its banner is on screen
 - `M` jumps to the orchestrator. Muster opens as a herdr popup, which gets
   every key while it is open, your prefix included, so this is what keeps
   `prefix+shift+m` working. `prefix+m` does nothing inside; close with `q` or
-  `esc`. `prefix+ctrl+m` arrives as `enter` and jumps to the selected card
-- mouse: click a card to jump, click the banner to install the skill, wheel
+  `esc`. `prefix+ctrl+m` arrives as `enter` and jumps to the selected tile
+- mouse: click a tile to jump to it or focus its workspace, click the banner to install the skill, wheel
   scrolls, hover highlights. A click outside Muster does nothing: herdr keeps
   clicks outside a popup to itself
 
@@ -182,12 +204,23 @@ and decoding the snapshot is all the overlay does at open time;
 
 Colour is a pure hash of the repo key, so it matches on any machine. Sigils are
 not: they follow the grid slot, skipping any mark already on screen, so two
-cards visible at once never carry the same one. Grid slots are
-pinned in `state.json` on first sight, so a repo keeps its cell and its look
-for as long as your state file lives and the grid does not move under you.
+repos on screen at once never carry the same one. Grid slots are pinned in
+`state.json` on first sight. First-seen sort orders tiles by them, and a repo
+keeps its sigil while the set of repos on screen stays the same.
 
 `docs/herdr-api-notes.md` has the verified herdr mechanics the daemon is built
 on, including why events are a hint and never a log.
+
+## Updating
+
+```sh
+herdr plugin install ofelcan164/muster --yes
+```
+
+herdr has no update command, so installing again is the update. It pulls the
+default branch and rebuilds `bin/`; `--ref <ref>` pins something else. The next
+overlay you open runs the new build. The daemon checks its own binary every few
+seconds and restarts itself on the new one, so nothing else needs running.
 
 ## Uninstall
 
@@ -220,7 +253,7 @@ state dir, which is right when the plugin is going away.
 - Muster closed without landing where you picked, or flashed and closed on
   open: the error is in `musterd.log` in the state dir. The popup is gone
   before anything it prints could be read.
-- Cards show terminal titles instead of task lines: the reporting skill is
+- Tiles show terminal titles instead of task lines: the reporting skill is
   missing. Press `S` while its banner is up, or run `muster install-skill`.
 - A new binding does nothing: an old overlay binary keeps running after a
   rebuild, so reopen it. A key you bound yourself is not the cause; install

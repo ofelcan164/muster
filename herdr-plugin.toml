@@ -43,7 +43,7 @@ command = ["./bin/muster"]
 [[actions]]
 id = "open"
 title = "Open Muster"
-description = "Open the overlay. Every agent in the session gets one card."
+description = "Open the overlay, with one tile per agent and one per workspace that has none."
 contexts = ["global"]
 command = ["./bin/muster", "open"]
 
