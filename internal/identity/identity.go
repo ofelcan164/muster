@@ -42,12 +42,13 @@ var Palette = []string{
 //
 // None of these is a status icon. The overlay's working spinner, blocked
 // triangle, done dot and idle ring own those shapes, so a repo mark reusing
-// one read as a state at a glance.
+// one read as a state at a glance. Nothing round either: at tile size the
+// hexagons, the bullseye and the fisheye rendered as that same dot and ring,
+// and a blocked agent in a repo marked ⬡ read as idle.
 var Sigils = []string{
-	"✦", "◆", "▣", "⬢", "⬡", "◈",
-	"◇", "■", "□", "▤", "▥", "▦",
-	"⬣", "✧", "★", "☆", "◎", "◉",
-	"✚", "╳",
+	"✦", "◆", "▣", "◈", "◇",
+	"■", "□", "▤", "▥", "▦",
+	"✧", "★", "☆", "✚", "╳",
 }
 
 // Sigil returns the sigil for a grid slot, cycling once slots exceed the set.
@@ -61,8 +62,8 @@ func Sigil(slot int) string {
 // SigilFor is Sigil, skipping past anything already on screen.
 //
 // Slots are pinned for the life of an install and never freed, so every scratch
-// directory and every worktree that has ever existed spends one. Once twenty-one
-// have been handed out, the twenty-second repo wraps onto the first repo's sigil,
+// directory and every worktree that has ever existed spends one. Once fifteen
+// have been handed out, the sixteenth repo wraps onto the first repo's sigil,
 // and two cards visible at the same time carried the same mark: exactly the
 // collision the sigil exists to rule out. Preferring the slot's own sigil keeps
 // it stable while the set of repos on screen is, and only the card that would

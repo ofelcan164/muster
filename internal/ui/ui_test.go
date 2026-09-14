@@ -64,7 +64,7 @@ func testSnapshot() *model.Snapshot {
 				agent("w2:p2", "w2", "tests", model.StatusDone, "check the test suite")),
 			repo(2, "acme/web", "web", "feat/checkout-ui", "▣", "w3",
 				agent("w3:p1", "w3", "checkout-ui", model.StatusWorking, "parked until api lands")),
-			repo(3, "acme/infra", "infra", "main", "⬡", "w9"),
+			repo(3, "acme/infra", "infra", "main", "◈", "w9"),
 		},
 		Attention: []model.Attention{
 			{Rank: 1, Reason: model.ReasonBlocked, RepoKey: "acme/api", PaneID: "w2:p1",
@@ -848,6 +848,18 @@ func TestSelectingOneEndLightsTheOther(t *testing.T) {
 	m.hover = m.targetIndex("pane:w3:p1")
 	if edge(apiTile) == dimAPI {
 		t.Error("hovering web did not light api's holds line")
+	}
+}
+
+// A tile cuts a long task line at its width, so the stale marker has to lead
+// or it is the first thing to go.
+func TestStaleMarkerSurvivesALongTaskLine(t *testing.T) {
+	s := testSnapshot()
+	a := &s.Repos[0].Agents[0]
+	a.TaskSource = model.TaskFromOrchestratorStale
+	a.Task = strings.Repeat("rolling staging onto the new node pool ", 4)
+	if out := plain(withSnapshot(t, s, 143).View()); !strings.Contains(out, "(stale) rolling staging") {
+		t.Errorf("the stale marker was cut off a long task line:\n%s", out)
 	}
 }
 

@@ -151,7 +151,7 @@ func (d *Daemon) buildRepos(snap *herdr.Snapshot, agents map[string]model.Agent,
 	// Sigils are handed out in slot order, so the lowest slot keeps the sigil it
 	// has always had and only a repo that would collide with one already on
 	// screen moves. Slots are never freed, so without this two cards visible at
-	// once shared a mark as soon as twenty-one had ever been allocated.
+	// once shared a mark as soon as fifteen had ever been allocated.
 	taken := make(map[string]bool, len(out))
 	for i := range out {
 		if !out[i].IsGit {

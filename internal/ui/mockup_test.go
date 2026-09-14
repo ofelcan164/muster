@@ -64,14 +64,14 @@ func mockupSnapshot() *model.Snapshot {
 			},
 			{
 				Key: "acme/mobile", Name: "acme/mobile", Display: "mobile",
-				Branch: "main", Sigil: "⬢", GridSlot: 3, IsGit: true,
+				Branch: "main", Sigil: "◈", GridSlot: 3, IsGit: true,
 				WorkspaceIDs: []string{"w2"},
 				Agents:       []model.Agent{a("w2:p1", "w2", "claude", model.StatusWorking)},
 				OtherPanes:   []model.Pane{p("w2:p2", "w2", "tail")},
 			},
 			{
 				Key: "acme/hub", Name: "acme/hub", Display: "hub",
-				Branch: "main", Sigil: "⬡", GridSlot: 4, IsGit: true,
+				Branch: "main", Sigil: "◇", GridSlot: 4, IsGit: true,
 				WorkspaceIDs: []string{"w6"},
 				Agents: []model.Agent{func() model.Agent {
 					ag := a("w6:p1", "w6", "orchestrator", model.StatusIdle)

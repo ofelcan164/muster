@@ -1,6 +1,9 @@
 package identity
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // Identity must be a pure function of the key so a repo looks the same on every
 // machine you use.
@@ -36,9 +39,20 @@ func TestSigilNoCollisionWithinSet(t *testing.T) {
 	}
 }
 
+// A repo mark that looks like a status icon reads as a state: a blocked agent in
+// a repo marked ⬡ looked idle, because at tile size the hexagon was a ring.
+func TestNoSigilLooksLikeAStatus(t *testing.T) {
+	for _, s := range Sigils {
+		if strings.ContainsAny(s, "●○◌◐◑◒◓▲◎◉⬢⬡⬣") {
+			t.Errorf("sigil %q reads as a status icon or renders as a dot or ring", s)
+		}
+	}
+}
+
 // Slots are pinned for the life of an install and never freed, so a machine
-// that has seen twenty-one repos hands the twenty-second a sigil already on
-// screen. Two cards carrying the same mark is the one thing the sigil axis exists to prevent.
+// that has seen fifteen repos hands the sixteenth a sigil already on screen.
+// Two cards carrying the same mark is the one thing the sigil axis exists to
+// prevent.
 func TestSigilsDoNotCollideOnScreen(t *testing.T) {
 	taken := map[string]bool{}
 	seen := map[string]int{}

@@ -605,7 +605,9 @@ func taskText(a model.Agent) string {
 	}
 	switch a.TaskSource {
 	case model.TaskFromOrchestratorStale:
-		return a.Task + " (stale)"
+		// In front: a tile cuts a long task line at its width, and a marker at
+		// the end was the first thing to go.
+		return "(stale) " + a.Task
 	case model.TaskFromNone:
 		return ""
 	default:
