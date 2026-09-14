@@ -106,6 +106,10 @@ skill, wheel moves, hover highlights.
   Manifest commands resolve through `PATH`, not the plugin root, hence the
   leading `./`.
 - Daemon exits after 60s of unreachable server, by design.
+- Reinstalling rebuilds `bin/` but runs no hook, and `--ensure` only checks the
+  lock, so the daemon watches its own binary on the 5s tick and execs the new
+  one once it has looked the same twice. Without that an old daemon kept
+  writing an old-shape snapshot under a new overlay for days.
 - herdr disables a conflicting key silently rather than rejecting it, and the
   managed block is appended last, so a collision always disables Muster's. So
   `install` asks first: it renders each candidate into a throwaway

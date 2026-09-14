@@ -12,6 +12,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -97,6 +98,10 @@ func cmdEnsure() int {
 }
 
 func cmdDaemon() int {
+	// Resolved now: once a rebuild replaces the file, Linux reports this path
+	// with " (deleted)" appended.
+	exe, exeErr := os.Executable()
+
 	lock, ok, err := daemon.AcquireDaemonLock()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "musterd: lock: %v\n", err)
@@ -133,7 +138,14 @@ func cmdDaemon() int {
 	defer stop()
 
 	d := daemon.New(herdr.NewClient(""), logger)
-	if err := d.Run(ctx); err != nil && ctx.Err() == nil {
+	err = d.Run(ctx)
+	if errors.Is(err, daemon.ErrReplaced) && exeErr == nil {
+		_ = lock.Release()
+		err = syscall.Exec(exe, os.Args, os.Environ())
+		logger.Printf("exec %s: %v", exe, err)
+		return 1
+	}
+	if err != nil && ctx.Err() == nil {
 		logger.Printf("exit: %v", err)
 		return 1
 	}

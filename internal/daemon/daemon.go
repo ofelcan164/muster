@@ -117,6 +117,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 
 	ticker := time.NewTicker(fullInterval)
 	defer ticker.Stop()
+	bin := watchBinary()
 
 	// Coalescing loop: events set a dirty flag, and the flag is drained no more
 	// often than minInterval. Events are only ever a hint that something
@@ -173,7 +174,11 @@ func (d *Daemon) Run(ctx context.Context) error {
 				d.savePersisted()
 				return nil
 			}
-
+			if bin.replaced() {
+				d.logf("%s was rebuilt, restarting on the new build", bin.path)
+				d.savePersisted()
+				return ErrReplaced
+			}
 		}
 	}
 }
