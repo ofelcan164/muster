@@ -15,8 +15,8 @@ import (
 func TestActivatingAnEmptyWorkspaceTile(t *testing.T) {
 	withPanes := func(panes int) *model.Snapshot {
 		s := &model.Snapshot{
-			Workspaces: []model.Workspace{{ID: "w1", Number: 1, Label: "ofelcan"}},
-			Repos:      []model.Repo{{Key: "k", Name: "ofelcan", Display: "ofelcan", WorkspaceIDs: []string{"w1"}}},
+			Workspaces: []model.Workspace{{ID: "w1", Number: 1, Label: "notes"}},
+			Repos:      []model.Repo{{Key: "k", Name: "notes", Display: "notes", WorkspaceIDs: []string{"w1"}}},
 		}
 		for i := 0; i < panes; i++ {
 			s.Repos[0].OtherPanes = append(s.Repos[0].OtherPanes,
@@ -40,7 +40,7 @@ func TestActivatingAnEmptyWorkspaceTile(t *testing.T) {
 func TestNoticeShowsWithNoOrchestrator(t *testing.T) {
 	m := withSnapshot(t, testSnapshot(), 100)
 	m.snap.Orch = model.Orchestrator{Found: false}
-	m.notice = "ofelcan has nothing open to jump to"
+	m.notice = "notes has nothing open to jump to"
 	if !strings.Contains(plain(m.View()), "nothing open to jump to") {
 		t.Errorf("the notice never reached the screen:\n%s", plain(m.View()))
 	}

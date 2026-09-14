@@ -22,15 +22,6 @@ Task lines come from the reporting skill. It asks the orchestrator to write
 down what each agent is doing at dispatch time, so the overlay shows real work
 instead of guessing from terminal titles.
 
-<!--
-Future intro material, not ready yet. Revisit once this feels solid.
-- The landing story. Work in one repo waits for another to land on
-  main, the orchestrator records the landing and never moves the parked
-  work on. Muster spots it and the t key reports it back.
-- The dependency vision. Home base showing how work depends on other
-  work, with blocked_on edges on agents and a usual order behind them.
--->
-
 ![The Muster overlay: a ribbon of the agents that need you, above one tile per
 agent showing its status, age, task line and what it waits on, with the
 orchestrator's last message along the bottom, beside herdr's own
@@ -45,8 +36,8 @@ under [Requirements](#requirements).
 herdr plugin install ofelcan164/muster
 ```
 
-That is the whole install. There are no release tags yet, so this tracks the
-default branch. Muster binds its keys itself: at every start herdr runs its
+That is the whole install. It tracks the default branch, and `--ref v0.1.0`
+pins a release instead. Muster binds its keys itself: at every start herdr runs its
 startup hook, `./bin/muster install --auto` from the plugin's checkout, which
 starts the daemon and writes the keybindings.
 Installing mid-session gets no startup hook, so opening the overlay once from

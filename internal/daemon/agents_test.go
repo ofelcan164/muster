@@ -196,8 +196,8 @@ func TestPaneLabelPrefersLabelThenProcess(t *testing.T) {
 		want string
 	}{
 		{herdr.Pane{Label: "dev"}, "vite", "dev"},
-		{herdr.Pane{TerminalTitleStripped: "ofelcan@box:~/work"}, "vite", "vite"},
-		{herdr.Pane{TerminalTitleStripped: "ofelcan@box:~/work"}, "", "shell"},
+		{herdr.Pane{TerminalTitleStripped: "dev@box:~/work"}, "vite", "vite"},
+		{herdr.Pane{TerminalTitleStripped: "dev@box:~/work"}, "", "shell"},
 		{herdr.Pane{PaneID: "w1:p1"}, "", "w1:p1"},
 	}
 	for _, c := range cases {

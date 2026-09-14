@@ -71,13 +71,12 @@ command = ["./bin/muster", "mark-orchestrator"]
 [[actions]]
 id = "install"
 title = "Install Muster's keybindings"
-description = "Bind the three Muster keys in your herdr config, back the config up first, and start the daemon."
+description = "Back up your herdr config, bind the three Muster keys in it, start the daemon and write the reporting skill."
 contexts = ["global"]
 command = ["./bin/muster", "install"]
 
-# Separate from install on purpose. Keybindings go in herdr's config, which is
-# Muster's business. A skill goes in the user's agent directories, which are
-# not, so installing it stays something they ask for.
+# install writes the skill too. This writes only the skill and clears
+# skill.optout, so someone who removed the keys can still ask for it back.
 [[actions]]
 id = "install-skill"
 title = "Install the reporting skill for the orchestrator"

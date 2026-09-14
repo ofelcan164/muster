@@ -46,7 +46,7 @@ herdr api snapshot    # live session state
    resolves to the shim, and the shim obeys whatever the repo pins. Measured
    here at over two minutes of silent toolchain download.
 
-4. **Startup hooks do not fire on `plugin link` mid-session.** They fire after
+5. **Startup hooks do not fire on `plugin link` mid-session.** They fire after
    session restore on server start, and again on `herdr update --handoff`.
    So the daemon must be startable by the install action too, and `--ensure`
    must be idempotent under a lock. Re-checked on 0.9.0 on 2026-09-10 by

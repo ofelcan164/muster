@@ -1,10 +1,5 @@
 bin/
 
-# local scratch that is not part of the plugin: the publish review and its
-# working notes. Ignored rather than deleted, since they are still useful here.
-docs/publish-audit.html
-docs/TODOs.md
-
 # what the daemon writes, in case a state dir is pointed at the checkout
 snapshot.json
 state.json

@@ -10,7 +10,7 @@ import (
 	"github.com/ofelcan164/muster/internal/model"
 )
 
-// mockupSnapshot is the session docs/workspace-tiles.html renders by hand:
+// mockupSnapshot is the session the workspace tiles were designed against:
 // seven workspaces, nine tiles. rollout has three agents in three different
 // repos, api-bugs and spike share the api and web repos rollout uses, and
 // notes is a scratch workspace with no repository at all.
@@ -90,7 +90,7 @@ func mockupSnapshot() *model.Snapshot {
 	}
 }
 
-// One render of the mockup session, checked against docs/workspace-tiles.html:
+// One render of the mockup session:
 // nine tiles, rollout's three agents each carrying their own repo, and the
 // three empty workspaces each showing what their panes sit in.
 func TestMockupSessionRendersNineTiles(t *testing.T) {
