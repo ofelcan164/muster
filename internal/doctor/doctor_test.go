@@ -187,6 +187,20 @@ func TestClassify(t *testing.T) {
 	}
 }
 
+func TestStartedFrom(t *testing.T) {
+	// herdr install moves the old checkout aside, then deletes it.
+	path, deleted := startedFrom("/p/.tmp-install-1/previous-checkout/bin/musterd (deleted)",
+		"/p/github/muster/bin/musterd\x00--state-dir\x00/s\x00--daemon\x00")
+	if path != "/p/github/muster/bin/musterd" || !deleted {
+		t.Errorf("moved checkout: got %q, %v", path, deleted)
+	}
+	// A hand-started daemon with a relative argv[0]: the link is all there is.
+	path, deleted = startedFrom("/src/bin/musterd", "./bin/musterd\x00--daemon\x00")
+	if path != "/src/bin/musterd" || deleted {
+		t.Errorf("relative argv[0]: got %q, %v", path, deleted)
+	}
+}
+
 func TestConfirm(t *testing.T) {
 	for _, yes := range []string{"y\n", "Y\n", "yes\n", " Yes \n"} {
 		if !confirm(strings.NewReader(yes)) {

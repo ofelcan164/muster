@@ -381,8 +381,22 @@ func exeState(pid int, musterd string) (string, string) {
 	if err != nil {
 		return exeUnknown, ""
 	}
-	path, deleted := strings.CutSuffix(target, " (deleted)")
+	cmdline, _ := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
+	path, deleted := startedFrom(target, string(cmdline))
 	return classify(path, deleted, musterd), path
+}
+
+// startedFrom is the path the daemon's own watch stats, which is argv[0] when
+// absolute, as Ensure always passes it. The exe link is no substitute: herdr
+// install moves the old checkout aside before deleting it, and the link
+// follows the move, naming a directory that is gone while the install path
+// already holds the new build.
+func startedFrom(target, cmdline string) (string, bool) {
+	path, deleted := strings.CutSuffix(target, " (deleted)")
+	if argv0, _, _ := strings.Cut(cmdline, "\x00"); filepath.IsAbs(argv0) {
+		path = argv0
+	}
+	return path, deleted
 }
 
 func classify(path string, deleted bool, musterd string) string {
