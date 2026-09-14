@@ -191,9 +191,11 @@ func badgeEntry(letter string) string {
 
 // musterCommand is this binary and the state dir it runs against, absolute and
 // single-quoted for sh. It is for text that runs with none of the plugin env:
-// herdr's tab bar, and an orchestrator following the reporting skill.
+// herdr's tab bar, and an orchestrator following the reporting skill. The base
+// dir, since one tab bar entry and one skill serve every session, and the tab
+// bar or pane that runs them names its own session in HERDR_SESSION.
 func musterCommand() (string, error) {
-	dir := state.Dir()
+	dir := state.BaseDir()
 	if dir == "" {
 		return "", state.ErrNoStateDir
 	}

@@ -19,6 +19,7 @@ import (
 	"github.com/ofelcan164/muster/internal/daemon"
 	"github.com/ofelcan164/muster/internal/install"
 	"github.com/ofelcan164/muster/internal/model"
+	"github.com/ofelcan164/muster/internal/state"
 )
 
 // States of the binary a running daemon was started from, read from /proc.
@@ -242,7 +243,8 @@ func gather(dir string) deps {
 	}
 	d.KeysLetter, d.KeysPresent, d.KeysErr = install.BlockPresent()
 	d.SkillInstalled = install.SkillInstalled()
-	d.OptedOut = install.OptedOut(dir)
+	// A refusal is the user's, not the session's, so it sits in the base dir.
+	d.OptedOut = install.OptedOut(state.BaseDir())
 	snap, err := daemon.ReadSnapshot()
 	if err != nil {
 		d.SnapshotErr = err

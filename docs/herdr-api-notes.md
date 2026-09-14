@@ -328,6 +328,13 @@ HERDR_PLUGIN_CONTEXT_JSON
 
 Always call herdr through `HERDR_BIN_PATH`, not a bare `herdr`.
 
+**Answered 2026-09-14: sessions share a plugin state dir.** A plugin linked
+into a throwaway config got the same `HERDR_PLUGIN_STATE_DIR` from its startup
+hook in a named session and in the default one. In a named session herdr sets
+`HERDR_SESSION=<name>` for panes, plugin commands and `tab_bar_right` commands
+alike, next to that session's `HERDR_SOCKET_PATH`, and leaves it unset in the
+default session. Neither server process carries it in its own environment.
+
 ## herdr config, and what Muster writes into it
 
 `[ui.sidebar.agents] rows` takes multi-row layouts. Builtins: `state_icon`,

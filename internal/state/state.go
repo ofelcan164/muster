@@ -26,18 +26,43 @@ func SetDir(dir string) { override = dir }
 var ErrNoStateDir = errors.New(
 	"no state directory: run through herdr, or pass --state-dir")
 
-// Dir resolves Muster's state directory.
+// BaseDir is the directory herdr gives the plugin, or the one --state-dir names.
 //
 // herdr sets HERDR_PLUGIN_STATE_DIR for every plugin command and creates the
 // directory itself, so under herdr this is always the sanctioned location.
 // There is deliberately no invented fallback: writing to a directory the user
 // never asked for, that herdr does not know about and nothing cleans up, is not
 // Muster's call to make. Outside a plugin context the caller must say where.
-func Dir() string {
+//
+// herdr hands every session this same directory, so only what belongs to the
+// user rather than to one session lives directly in it: the refusals.
+func BaseDir() string {
 	if override != "" {
 		return override
 	}
 	return os.Getenv("HERDR_PLUGIN_STATE_DIR")
+}
+
+// Dir is the state directory for the herdr session this runs in.
+//
+// herdr names a session in HERDR_SESSION for every pane, plugin command and tab
+// bar command it starts, and leaves it unset in the default session. Keyed on
+// the base directory alone, a second session's overlay drew the first session's
+// agents: both read one snapshot, written by whichever daemon started first.
+// The default session keeps the base directory, so an install from before
+// sessions were told apart finds its state where it left it.
+//
+// A name that is not a single path element is refused rather than folded into
+// the base, which would mix two sessions again.
+func Dir() string {
+	base, session := BaseDir(), os.Getenv("HERDR_SESSION")
+	switch {
+	case base == "" || session == "" || session == "default":
+		return base
+	case session == "." || session == ".." || filepath.Base(session) != session:
+		return ""
+	}
+	return filepath.Join(base, "sessions", session)
 }
 
 func EnsureDir() (string, error) {

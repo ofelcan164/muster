@@ -23,7 +23,8 @@ internal/chain        usual order between repos (chain.json): a default the
                       orchestrator reads, never an edge
 internal/triage       attention ranking that fills the ribbon
 internal/state        state dir, lock, atomic writes. No invented fallback:
-                      HERDR_PLUGIN_STATE_DIR or --state-dir, else ErrNoStateDir
+                      HERDR_PLUGIN_STATE_DIR or --state-dir, else ErrNoStateDir;
+                      a named session's files go under sessions/<HERDR_SESSION>
 internal/install      the only code that writes files the user owns
 internal/doctor       health check; its only fixes stop and start musterd
 internal/model        snapshot types both sides share
@@ -34,10 +35,12 @@ internal/ui           overlay
 (what the selection can land on), `keys`, `mouse`, `filter`, `order`, `strip`
 (the orchestrator strip), `talk` (the `i` and `t` keys), `view`, `theme`.
 
-State dir files: `snapshot.json`, `state.json` (grid slots, learned state),
-`ui.json` (sort, dismissed) and `ui.json.lock` (serialises two overlays
-saving it), `chain.json`, `keys.optout`, `skill.optout`, `musterd.log`, `musterd.lock`,
-`musterd.spawn.lock` (serialises concurrent `--ensure`).
+State dir files, one set per herdr session (the default session uses the base
+dir, a named one `sessions/<HERDR_SESSION>/` inside it): `snapshot.json`,
+`state.json` (grid slots, learned state), `ui.json` (sort, dismissed) and
+`ui.json.lock` (serialises two overlays saving it), `chain.json`,
+`musterd.log`, `musterd.lock`, `musterd.spawn.lock` (serialises concurrent
+`--ensure`). In the base dir only: `keys.optout`, `skill.optout`.
 
 ## Build and test
 
@@ -154,3 +157,10 @@ skill, wheel moves, hover highlights.
   and `Remove` takes back that exact entry. herdr runs tab bar commands through
   `/bin/sh` on the server with no plugin env, so the entry carries absolute,
   single-quoted paths and `--state-dir`. No state dir means no badge.
+- herdr gives every session the same `HERDR_PLUGIN_STATE_DIR`, and sets
+  `HERDR_SESSION` in a named session for panes, plugin commands and tab bar
+  commands (unset in the default one). `state.Dir()` is the session's
+  directory, `state.BaseDir()` the shared one. `Ensure` hands the daemon the
+  base and lets it re-derive the session from the env it inherits, and the
+  skill and badge carry the base for the same reason. From a plain shell
+  `musterd dump` reads the default session unless `HERDR_SESSION` is set.

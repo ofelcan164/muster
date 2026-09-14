@@ -81,7 +81,7 @@ func main() {
 		}
 		// Same reason as uninstall-keys: install --auto writes the skill at every
 		// herdr start, so without this it comes straight back.
-		if err := install.SetSkillOptOut(state.Dir(), true); err != nil {
+		if err := install.SetSkillOptOut(state.BaseDir(), true); err != nil {
 			fmt.Fprintf(os.Stderr, "muster: could not record the refusal: %v\n", err)
 			fmt.Fprintln(os.Stderr, "the next herdr start will write the skill again. Run this through herdr, or pass --state-dir.")
 		}
@@ -103,7 +103,7 @@ func main() {
 		// Record the refusal before reporting it. The startup hook binds the
 		// keys on its own now, so without this the next herdr start puts back
 		// what was just removed.
-		if err := install.SetOptOut(state.Dir(), true); err != nil {
+		if err := install.SetOptOut(state.BaseDir(), true); err != nil {
 			fmt.Fprintf(os.Stderr, "muster: could not record the refusal: %v\n", err)
 			fmt.Fprintln(os.Stderr, "the next herdr start will bind the keys again. Run this through herdr, or pass --state-dir.")
 		}
@@ -388,7 +388,7 @@ func logFailure(format string, args ...any) {
 // not a reason to refuse to draw. The install action stays the loud version.
 // This runs before the alt screen, so a stray write cannot corrupt the frame.
 func bindKeysQuietly() {
-	if install.OptedOut(state.Dir()) {
+	if install.OptedOut(state.BaseDir()) {
 		return
 	}
 	res, err := install.Keys(herdrBin(), "")
@@ -414,18 +414,18 @@ func cmdInstallKeys(args []string) int {
 	installSkill(*auto)
 
 	if *skipKeys {
-		if err := install.SetOptOut(state.Dir(), true); err != nil {
+		if err := install.SetOptOut(state.BaseDir(), true); err != nil {
 			fmt.Fprintf(os.Stderr, "muster install: %v\n", err)
 		}
 		fmt.Println("daemon ensured; keybindings skipped")
 		return 0
 	}
 	if *auto {
-		if install.OptedOut(state.Dir()) {
+		if install.OptedOut(state.BaseDir()) {
 			fmt.Println("keybindings declined earlier, leaving them alone")
 			return 0
 		}
-	} else if err := install.SetOptOut(state.Dir(), false); err != nil {
+	} else if err := install.SetOptOut(state.BaseDir(), false); err != nil {
 		fmt.Fprintf(os.Stderr, "muster install: %v\n", err)
 	}
 
@@ -484,7 +484,7 @@ func herdrBin() string { return os.Getenv("HERDR_BIN_PATH") }
 // hook's --auto honours an uninstall-skill the way it honours uninstall-keys;
 // run by hand, install means the user asked, so it clears that refusal too.
 func installSkill(auto bool) {
-	dir := state.Dir()
+	dir := state.BaseDir()
 	if auto && install.SkillOptedOut(dir) {
 		return
 	}
@@ -507,7 +507,7 @@ func installSkill(auto bool) {
 // it too; this is the loud version, and it takes back an earlier
 // uninstall-skill.
 func cmdInstallSkill() int {
-	if err := install.SetSkillOptOut(state.Dir(), false); err != nil {
+	if err := install.SetSkillOptOut(state.BaseDir(), false); err != nil {
 		fmt.Fprintf(os.Stderr, "muster install-skill: %v\n", err)
 	}
 	res, err := install.Skill()
@@ -555,11 +555,11 @@ func cmdUninstall(args []string) int {
 	// them at the next herdr start. --purge deletes the marker along with the
 	// rest of the state dir, which is correct, since purge means the plugin is
 	// going away entirely.
-	if err := install.SetOptOut(state.Dir(), true); err != nil {
+	if err := install.SetOptOut(state.BaseDir(), true); err != nil {
 		fmt.Fprintf(os.Stderr, "muster uninstall: could not record the refusal: %v\n", err)
 		fmt.Fprintln(os.Stderr, "the next herdr start will bind the keys again. Run this through herdr, or pass --state-dir.")
 	}
-	if err := install.SetSkillOptOut(state.Dir(), true); err != nil {
+	if err := install.SetSkillOptOut(state.BaseDir(), true); err != nil {
 		fmt.Fprintf(os.Stderr, "muster uninstall: could not record the skill refusal: %v\n", err)
 	}
 	res, err := install.Remove()
@@ -590,12 +590,15 @@ func cmdUninstall(args []string) int {
 		}
 	}
 
-	switch dir := state.Dir(); {
+	switch dir := state.BaseDir(); {
 	case *purge && dir == "":
 		fmt.Fprintln(os.Stderr, "muster uninstall: no state directory to purge")
 		code = 1
 	case *purge:
 		// Stop the daemon first or it writes the directory straight back.
+		// ponytail: only this session's daemon. A daemon in another running
+		// session writes its sessions/<name> folder back until that session
+		// stops; stop each lock's pid if that ever matters.
 		if err := daemon.Stop(2 * time.Second); err != nil {
 			fmt.Fprintf(os.Stderr, "muster uninstall: %v\n", err)
 			code = 1

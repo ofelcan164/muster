@@ -71,7 +71,10 @@ func Ensure() (started bool, err error) {
 
 	// Pass the state dir through explicitly. The child may not inherit a
 	// plugin environment, and it must land in the same directory as its parent.
-	cmd := exec.Command(exe, "--state-dir", state.Dir(), "--daemon")
+	// The base, not the session's directory: the child inherits HERDR_SESSION
+	// below and derives that itself, and handing it the session's directory
+	// would nest a second session folder inside the first.
+	cmd := exec.Command(exe, "--state-dir", state.BaseDir(), "--daemon")
 	cmd.Stdin = devNull
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile

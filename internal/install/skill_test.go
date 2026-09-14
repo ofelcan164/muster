@@ -87,6 +87,9 @@ func TestSkillDocumentsTheTokensMusterReads(t *testing.T) {
 // command to write, so there is no skill either.
 func TestSkillCarriesTheCommandThatReachesMuster(t *testing.T) {
 	dir := skillHome(t)
+	// One skill serves every session, and the pane that runs it names its own,
+	// so the command carries the base dir even when installed from a session.
+	t.Setenv("HERDR_SESSION", "demo")
 	if _, err := Skill(); err != nil {
 		t.Fatal(err)
 	}

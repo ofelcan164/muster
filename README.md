@@ -226,6 +226,11 @@ free, and because something has to watch while the overlay is closed. Reading
 and decoding the snapshot is all the overlay does at open time;
 `go test ./internal/daemon -bench ReadSnapshot` measures it on your machine.
 
+Each herdr session gets a daemon, snapshot, sort and usual order of its own.
+herdr hands every session the same plugin state dir, so a named session keeps
+its files in `sessions/<name>/` inside it, and the default session keeps the
+top level.
+
 Colour is a pure hash of the repo key, so it matches on any machine. Sigils are
 not: they follow the grid slot, skipping any mark already on screen, so two
 repos on screen at once never carry the same one. Grid slots are pinned in
@@ -286,6 +291,8 @@ state dir, which is right when the plugin is going away.
 - `muster: no state directory` from a plain shell: run through herdr, or pass
   `--state-dir`. herdr sets `HERDR_PLUGIN_STATE_DIR` for its own panes and
   plugin actions, and nothing else does.
+- `musterd dump` from a plain shell shows the wrong session: outside herdr it
+  reads the default session. Set `HERDR_SESSION=<name>` for a named one.
 - The daemon is gone after herdr was down: by design it exits after 60s of an
   unreachable server and lives and dies with herdr. Re-run the install action
   or `musterd --ensure`.
