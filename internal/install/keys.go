@@ -181,16 +181,33 @@ var (
 // badgeEntry is the tab_bar_right entry for one letter, or "" when there is no
 // state dir to name or a path sh quoting cannot carry.
 func badgeEntry(letter string) string {
+	cmd, err := musterCommand()
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf(`{ type = "command", command = "%s badge %s", interval_seconds = %d }`,
+		cmd, letter, badgeInterval)
+}
+
+// musterCommand is this binary and the state dir it runs against, absolute and
+// single-quoted for sh. It is for text that runs with none of the plugin env:
+// herdr's tab bar, and an orchestrator following the reporting skill.
+func musterCommand() (string, error) {
 	dir := state.Dir()
+	if dir == "" {
+		return "", state.ErrNoStateDir
+	}
 	bin, err := os.Executable()
-	if dir == "" || err != nil {
-		return ""
+	if err != nil {
+		return "", err
 	}
-	if dir, err = filepath.Abs(dir); err != nil || strings.ContainsAny(bin+dir, "'\"\\\n") {
-		return ""
+	if dir, err = filepath.Abs(dir); err != nil {
+		return "", err
 	}
-	return fmt.Sprintf(`{ type = "command", command = "'%s' --state-dir '%s' badge %s", interval_seconds = %d }`,
-		bin, dir, letter, badgeInterval)
+	if strings.ContainsAny(bin+dir, "'\"\\\n") {
+		return "", fmt.Errorf("%s or %s holds a character sh quoting cannot carry", bin, dir)
+	}
+	return fmt.Sprintf("'%s' --state-dir '%s'", bin, dir), nil
 }
 
 // withBadge puts the badge into a body that has none. It returns the new body,
@@ -504,29 +521,41 @@ func Remove() (*Result, error) {
 	return res, nil
 }
 
-// The startup hook binds the keys on its own, so a refusal has to persist
-// somewhere or `muster uninstall` undoes itself at the next herdr start. The
-// marker is one file in Muster's own state dir, which is the one place Muster
-// may write without asking, and its presence is the whole signal.
-const optOutFile = "keys.optout"
+// The startup hook binds the keys and writes the reporting skill on its own, so
+// a refusal of either has to persist somewhere or uninstalling it undoes itself
+// at the next herdr start. Each marker is one file in Muster's own state dir,
+// which is the one place Muster may write without asking, and its presence is
+// the whole signal.
+const (
+	optOutFile      = "keys.optout"
+	skillOptOutFile = "skill.optout"
+)
 
-// OptOutPath is the marker, or "" when there is no state directory to put it
-// in. Outside a herdr pane there is nowhere to record a refusal, and a relative
-// path would drop the file in whatever directory the command happened to run
-// from.
-func OptOutPath(stateDir string) string {
+// OptOutPath is the keys marker, or "" when there is no state directory to put
+// it in. Outside a herdr pane there is nowhere to record a refusal, and a
+// relative path would drop the file in whatever directory the command happened
+// to run from.
+func OptOutPath(stateDir string) string { return markerPath(stateDir, optOutFile) }
+
+func markerPath(stateDir, name string) string {
 	if stateDir == "" {
 		return ""
 	}
-	return filepath.Join(stateDir, optOutFile)
+	return filepath.Join(stateDir, name)
 }
 
 // OptedOut reports whether the user has said no to the keybindings.
 //
 // No state directory reads as no refusal. The only caller that can reach this
 // without one is a hand-run command, which is someone asking for the keys.
-func OptedOut(stateDir string) bool {
-	p := OptOutPath(stateDir)
+func OptedOut(stateDir string) bool { return marked(stateDir, optOutFile) }
+
+// SkillOptedOut reports whether the user removed the reporting skill, which the
+// startup hook then leaves removed.
+func SkillOptedOut(stateDir string) bool { return marked(stateDir, skillOptOutFile) }
+
+func marked(stateDir, name string) bool {
+	p := markerPath(stateDir, name)
 	if p == "" {
 		return false
 	}
@@ -542,7 +571,17 @@ func OptedOut(stateDir string) bool {
 // look like it worked and undo itself at the next herdr start. Clearing a
 // refusal that cannot exist is genuinely nothing to do.
 func SetOptOut(stateDir string, on bool) error {
-	p := OptOutPath(stateDir)
+	return setMarker(stateDir, optOutFile, "muster: keybindings declined\n", on)
+}
+
+// SetSkillOptOut records or clears a refusal of the reporting skill, the same
+// way SetOptOut does for the keys.
+func SetSkillOptOut(stateDir string, on bool) error {
+	return setMarker(stateDir, skillOptOutFile, "muster: reporting skill declined\n", on)
+}
+
+func setMarker(stateDir, name, body string, on bool) error {
+	p := markerPath(stateDir, name)
 	if p == "" {
 		if on {
 			return state.ErrNoStateDir
@@ -555,5 +594,5 @@ func SetOptOut(stateDir string, on bool) error {
 		}
 		return nil
 	}
-	return writeAtomic(p, []byte("muster: keybindings declined\n"), 0o644)
+	return writeAtomic(p, []byte(body), 0o644)
 }

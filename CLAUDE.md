@@ -19,7 +19,8 @@ internal/daemon       reconcile loop, lifecycle, snapshot writing
 internal/discover     workspace cwd to repo identity. Reads .git directly
 internal/identity     colour hashed from repo key, sigil by slot, skipping any
                       mark already on screen
-internal/chain        orchestrator-recorded dependency order (chain.json)
+internal/chain        usual order between repos (chain.json): a default the
+                      orchestrator reads, never an edge
 internal/triage       attention ranking that fills the ribbon
 internal/state        state dir, lock, atomic writes. No invented fallback:
                       HERDR_PLUGIN_STATE_DIR or --state-dir, else ErrNoStateDir
@@ -35,7 +36,7 @@ internal/ui           overlay
 
 State dir files: `snapshot.json`, `state.json` (grid slots, learned state),
 `ui.json` (sort, dismissed) and `ui.json.lock` (serialises two overlays
-saving it), `chain.json`, `keys.optout`, `musterd.log`, `musterd.lock`,
+saving it), `chain.json`, `keys.optout`, `skill.optout`, `musterd.log`, `musterd.lock`,
 `musterd.spawn.lock` (serialises concurrent `--ensure`).
 
 ## Build and test
@@ -56,7 +57,8 @@ muster install [--key <letter>] [--no-keys] [--auto]        keybindings
 muster uninstall-keys | uninstall [--purge]         undoing them
 muster install-skill | uninstall-skill              the orchestrator reporting skill
 muster mark-orchestrator                            run on the orchestrator's pane
-muster chain get [--json] | set <spec> [--independent a,b] [--by NAME] | clear
+muster show [target]                                the orchestrator's query: usual order, parked work
+muster chain get [--json] | set <spec> [--by NAME] | clear
 muster discover                                     make sure the daemon is up; the event hooks call it
 muster badge [letter]                               the tab_bar_right line install writes
 muster doctor [--yes]                               health check; the action passes --yes
@@ -69,7 +71,10 @@ musterd status
 
 Chain spec: `"contracts > api > web,mobile"`, `>` sequence, `,` parallel.
 Task lines come via `herdr pane report-metadata` (`task`, `blocked_on`,
-`note` tokens); the skill teaches the orchestrator to write them.
+`landed`, `note` tokens); the skill teaches the orchestrator to write them.
+Edges come only from `blocked_on` (`repo#pr`, resolved to `Agent.After` by
+`resolveEdges`); a `landed` equal to it stamps `LandedAt`. The gate row fires
+once the orchestrator ends a turn after that while a parked agent has not moved.
 
 Global keys, once installed (`prefix` is the reader's herdr prefix key):
 `prefix+m` overlay, `prefix+shift+m` orchestrator, `prefix+ctrl+m` back. The
@@ -82,7 +87,7 @@ workspace, `/` searches, `esc` leaves search / clears filter / closes, `s`
 cycles sort (first seen, a-z, attention, herdr), `J`/`K` move the selected
 tile's workspace one place in herdr's own order and only do anything in herdr
 sort, `g`/`G` ends, `1`-`9` ribbon row, `x` dismisses one, `o` marks
-orchestrator, `i` messages it, `t` reports a finished agent to it, `S`
+orchestrator, `i` messages it, `t` tells it a gate is open, `S`
 installs the skill while its banner shows, `q`/`ctrl+c` closes, `M` jumps to
 the orchestrator.
 Mouse: click a tile jumps or focuses its workspace, click banner installs
@@ -130,13 +135,19 @@ skill, wheel moves, hover highlights.
 - The skill is one canonical copy at `~/.agents/skills/muster-report/`, symlinked
   into each runtime that exists (`~/.claude/skills`, `~/.codex/skills` honouring
   `CODEX_HOME`, `~/.config/opencode/skill`), relative target computed with
-  `filepath.Rel`. The embedded bytes are the version, so there is no sentinel
-  file: a differing copy is simply rewritten. A plain directory from an older
-  install gets replaced by the link.
+  `filepath.Rel`. The rendered bytes are the version (the embedded skill with
+  `{{muster}}` replaced by the absolute binary and `--state-dir`), so there is
+  no sentinel file: a differing copy is simply rewritten. A plain directory
+  from an older install gets replaced by the link. The command is rendered in
+  because an agent pane cannot reach Muster otherwise: actions take no
+  arguments, and herdr reports the plugin root but never the state dir.
 - The `[[startup]]` hook is `muster install --auto`, so setup is just
   `herdr plugin install`. `--auto` skips when `keys.optout` is in the state
   dir; `--no-keys` and both uninstalls write that marker, plain `install`
   clears it. Without it every uninstall would undo itself at the next start.
+  Every install also writes the skill, and `skill.optout` does the same job for
+  it: written by `uninstall-skill` and `uninstall`, cleared by `install` and
+  `install-skill`.
 - `install` also puts a `muster badge` entry at the front of `[ui]
   tab_bar_right`. TOML allows one `[ui]` and one `tab_bar_right`, so when the
   user has them the entry goes into their own array, outside the marked block,

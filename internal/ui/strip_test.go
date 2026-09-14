@@ -22,15 +22,21 @@ func withOrch(gates ...model.Attention) *model.Snapshot {
 		LastSaid:    "Told api to pick up the schema change.",
 	}
 	s.Attention = append(s.Attention, gates...)
+	if len(gates) > 0 {
+		// What a gate row stands on: web parked on api, which landed 6m ago.
+		web := &s.Repos[2].Agents[0]
+		web.BlockedOn, web.After = "api#412", "acme/api"
+		web.LandedAt = time.Now().Add(-6 * time.Minute)
+	}
 	return s
 }
 
 func gateRow() model.Attention {
 	return model.Attention{
-		Rank: 2, Reason: model.ReasonGateUntold, RepoKey: "acme/api",
-		PaneID: "w2:p2", Agent: "tests", Status: model.StatusDone,
-		Age: 6 * time.Minute, AgeKnown: true,
-		Detail:     "finished, orchestrator not told",
+		Rank: 2, Reason: model.ReasonGateOpen, RepoKey: "acme/web",
+		PaneID: "w3:p1", Agent: "checkout-ui", Status: model.StatusIdle,
+		Age: 40 * time.Minute, AgeKnown: true,
+		Detail:     "api landed · web, mobile still parked on it",
 		Downstream: []string{"web/checkout-ui", "mobile/checkout"},
 	}
 }
@@ -180,7 +186,7 @@ func TestRepairKeyReportsTheOpenGate(t *testing.T) {
 	if toPane != "w4:p1" {
 		t.Fatalf("the report went to %q, wanted the orchestrator", toPane)
 	}
-	for _, want := range []string{"api/tests", "finished", "6m", "web/checkout-ui", "mobile/checkout"} {
+	for _, want := range []string{"api landed 6m ago", "web/checkout-ui, mobile/checkout are still parked"} {
 		if !strings.Contains(sent, want) {
 			t.Errorf("the report does not mention %q:\n%s", want, sent)
 		}
@@ -208,7 +214,7 @@ func TestRepairKeyStaysSilentWithNoGate(t *testing.T) {
 // Two open gates and no selection: picking one would send the wrong report.
 func TestRepairKeyRefusesToChooseBetweenGates(t *testing.T) {
 	second := gateRow()
-	second.PaneID, second.Agent, second.RepoKey = "w3:p1", "checkout-ui", "acme/web"
+	second.PaneID, second.Agent, second.RepoKey = "w2:p2", "tests", "acme/api"
 	m := withSnapshot(t, withOrch(gateRow(), second), 143)
 	sends := 0
 	m.SetPrompter(func(string, string) error { sends++; return nil })
@@ -224,20 +230,21 @@ func TestRepairKeyRefusesToChooseBetweenGates(t *testing.T) {
 // With two gates open, t acts on the one you are looking at.
 func TestRepairKeyFollowsTheSelection(t *testing.T) {
 	second := gateRow()
-	second.PaneID, second.Agent, second.RepoKey = "w3:p1", "checkout-ui", "acme/web"
+	second.PaneID, second.Agent, second.RepoKey = "w2:p2", "tests", "acme/api"
+	second.Downstream = []string{"api/tests"}
 	m := withSnapshot(t, withOrch(gateRow(), second), 143)
 	var sent string
 	m.SetPrompter(func(_, text string) error { sent = text; return nil })
 
 	for i := 0; i < len(m.targets); i++ {
-		if m.isKind(i, kindRibbon) && m.targetPane(i) == "w3:p1" {
+		if m.isKind(i, kindRibbon) && m.targetPane(i) == "w2:p2" {
 			m.cursor = i
 			break
 		}
 	}
 	key(m, "t")
 
-	if !strings.Contains(sent, "checkout-ui") {
+	if !strings.Contains(sent, "api/tests") {
 		t.Errorf("t reported %q, wanted the selected gate", sent)
 	}
 }

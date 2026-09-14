@@ -6,7 +6,7 @@
 //	muster mark-orchestrator   mark the pane this runs in
 //	muster discover            make sure the daemon is up after a workspace appears
 //	muster install | uninstall | install-skill | uninstall-skill | uninstall-keys | doctor
-//	muster chain get | set | clear
+//	muster show [target] | chain get | set | clear
 //
 // Bare invocation is the overlay itself, one process per opening rather than
 // one per keypress: it runs a tea.Program on the alt screen and lives until q.
@@ -79,6 +79,12 @@ func main() {
 			fmt.Fprintf(os.Stderr, "muster: %v\n", err)
 			os.Exit(1)
 		}
+		// Same reason as uninstall-keys: install --auto writes the skill at every
+		// herdr start, so without this it comes straight back.
+		if err := install.SetSkillOptOut(state.Dir(), true); err != nil {
+			fmt.Fprintf(os.Stderr, "muster: could not record the refusal: %v\n", err)
+			fmt.Fprintln(os.Stderr, "the next herdr start will write the skill again. Run this through herdr, or pass --state-dir.")
+		}
 		if res.Changed {
 			fmt.Printf("removed the reporting skill from %s\n", res.Path)
 			for _, l := range res.Links {
@@ -117,6 +123,9 @@ func main() {
 
 	case "chain":
 		os.Exit(cmdChain(args[1:]))
+
+	case "show":
+		os.Exit(cmdShow(args[1:]))
 
 	case "open":
 		// The action a keybinding invokes. It cannot open a pane entrypoint
@@ -177,11 +186,13 @@ usage:
   muster open                      ask herdr to open the overlay, for a keybinding
   muster jump orchestrator|previous  focus one of them
   muster mark-orchestrator         mark the pane this runs in as the orchestrator
-  muster chain get [--json]        print the recorded dependency order
-  muster chain set <spec> [--independent a,b] [--by NAME]
+  muster show [target]             the usual order, and where parked work stands;
+                                   target is a pane id, repo/agent or repo
+  muster chain get [--json]        print the usual order between repos
+  muster chain set <spec> [--by NAME]
   muster chain clear
   muster install [--key <letter>] [--no-keys] [--auto]
-                                   start the daemon and install keybindings
+                                   start the daemon, bind the keys, write the skill
   muster install-skill             install the reporting skill for the orchestrator
   muster uninstall-keys            drop the keybindings, keep everything else
   muster uninstall-skill           drop the reporting skill
@@ -193,16 +204,17 @@ usage:
 any command may be preceded by --state-dir <dir>, which is what herdr supplies
 through HERDR_PLUGIN_STATE_DIR. --no-keys installs without touching your herdr
 config, and --auto is the startup hook's form: it does nothing if you have said
-no to the keys before.
+no to the keys or the skill before.
 
 chain spec syntax:
   "contracts > api > web,mobile"   ">" is sequence, "," is parallel
 
-The chain is written by the orchestrator during workflow setup and persists
-across sessions. Read it back with "chain get" to confirm or replace it.
+The usual order is a default the orchestrator reads before it records what an
+agent is parked on. The edges themselves come from each agent's blocked_on.
 
 The reporting skill teaches the orchestrator to write the task line Muster
-shows. Without it agents fall back to their terminal titles.
+shows, and carries the full command for show and chain, since an agent pane
+has neither on its PATH.
 `)
 }
 
@@ -231,24 +243,20 @@ func cmdChain(args []string) int {
 			return 0
 		}
 		if c.Empty() {
-			fmt.Println("no chain recorded")
+			fmt.Println("no usual order recorded")
 			return 0
 		}
-		fmt.Printf("order:       %s\n", chain.Format(c.Stages))
-		if len(c.Independent) > 0 {
-			fmt.Printf("independent: %v\n", c.Independent)
-		}
+		fmt.Printf("order:   %s\n", chain.Format(c.Stages))
 		if c.SetBy != "" {
-			fmt.Printf("set by:      %s\n", c.SetBy)
+			fmt.Printf("set by:  %s\n", c.SetBy)
 		}
 		if !c.SetAt.IsZero() {
-			fmt.Printf("set at:      %s\n", c.SetAt.Format("2006-01-02 15:04:05"))
+			fmt.Printf("set at:  %s\n", c.SetAt.Format("2006-01-02 15:04:05"))
 		}
 		return 0
 
 	case "set":
 		fs := flag.NewFlagSet("chain set", flag.ExitOnError)
-		independent := fs.String("independent", "", "comma-separated repos outside the order")
 		by := fs.String("by", "", "who is recording this")
 
 		// Go's flag parser stops at the first positional, and the spec is a
@@ -270,24 +278,17 @@ func cmdChain(args []string) int {
 			rest = fs.Args()[1:]
 		}
 		stages := chain.Parse(spec)
-		if len(stages) == 0 && *independent == "" {
+		if len(stages) == 0 {
 			fmt.Fprintln(os.Stderr, `muster chain set: nothing to record`)
-			fmt.Fprintln(os.Stderr, `example: muster chain set "contracts > api > web,mobile" --independent infra`)
+			fmt.Fprintln(os.Stderr, `example: muster chain set "contracts > api > web,mobile" --by orchestrator`)
 			return 2
 		}
-		c := &chain.Chain{
-			Stages:      stages,
-			Independent: chain.ParseList(*independent),
-			SetBy:       *by,
-		}
-		if c.Independent == nil {
-			c.Independent = []string{}
-		}
+		c := &chain.Chain{Stages: stages, SetBy: *by}
 		if err := chain.Save(dir, c, state.WriteAtomic); err != nil {
 			fmt.Fprintf(os.Stderr, "muster chain set: %v\n", err)
 			return 1
 		}
-		fmt.Printf("chain recorded: %s\n", chain.Format(c.Stages))
+		fmt.Printf("usual order recorded: %s\n", chain.Format(c.Stages))
 		return 0
 
 	case "clear":
@@ -295,7 +296,7 @@ func cmdChain(args []string) int {
 			fmt.Fprintf(os.Stderr, "muster chain clear: %v\n", err)
 			return 1
 		}
-		fmt.Println("chain cleared")
+		fmt.Println("usual order cleared")
 		return 0
 
 	default:
@@ -303,6 +304,30 @@ func cmdChain(args []string) int {
 		usage(os.Stderr)
 		return 2
 	}
+}
+
+// cmdShow is the orchestrator's query: the usual order, and where parked work
+// stands, read from the snapshot rather than from anyone's pane.
+func cmdShow(args []string) int {
+	dir := state.Dir()
+	if dir == "" {
+		fmt.Fprintln(os.Stderr, "muster: no state directory: run through herdr, or pass --state-dir")
+		return 1
+	}
+	snap, err := daemon.ReadSnapshot()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "muster show: no snapshot, is the daemon running? %v\n", err)
+		return 1
+	}
+	target := ""
+	if len(args) > 0 {
+		target = args[0]
+	}
+	if err := daemon.Show(os.Stdout, snap, chain.Load(dir), target, time.Now()); err != nil {
+		fmt.Fprintf(os.Stderr, "muster show: %v\n", err)
+		return 1
+	}
+	return 0
 }
 
 // runOverlay draws the screen, then focuses whatever was chosen.
@@ -386,6 +411,8 @@ func cmdInstallKeys(args []string) int {
 	key := fs.String("key", "", "the letter to bind, as in --key g; default picks the first free one")
 	_ = fs.Parse(args)
 
+	installSkill(*auto)
+
 	if *skipKeys {
 		if err := install.SetOptOut(state.Dir(), true); err != nil {
 			fmt.Fprintf(os.Stderr, "muster install: %v\n", err)
@@ -452,12 +479,37 @@ func reloadConfig() {
 // herdrBin honours the path herdr injects, never a bare `herdr` off PATH.
 func herdrBin() string { return os.Getenv("HERDR_BIN_PATH") }
 
-// cmdInstallSkill installs the reporting skill into the user's personal skills.
-//
-// It is a separate command from `muster install` on purpose. Keybindings go in
-// herdr's config, which is Muster's business; a skill goes in the user's agent
-// directories, which is not, so installing it stays something you ask for.
+// installSkill writes the reporting skill on every install, so an orchestrator
+// never follows instructions older than the binary they name. The startup
+// hook's --auto honours an uninstall-skill the way it honours uninstall-keys;
+// run by hand, install means the user asked, so it clears that refusal too.
+func installSkill(auto bool) {
+	dir := state.Dir()
+	if auto && install.SkillOptedOut(dir) {
+		return
+	}
+	if !auto {
+		if err := install.SetSkillOptOut(dir, false); err != nil {
+			fmt.Fprintf(os.Stderr, "muster install: %v\n", err)
+		}
+	}
+	res, err := install.Skill()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "muster install: skill: %v\n", err)
+		return
+	}
+	if res.Changed {
+		fmt.Printf("wrote the reporting skill to %s\n", res.Path)
+	}
+}
+
+// cmdInstallSkill installs the reporting skill and says where. install writes
+// it too; this is the loud version, and it takes back an earlier
+// uninstall-skill.
 func cmdInstallSkill() int {
+	if err := install.SetSkillOptOut(state.Dir(), false); err != nil {
+		fmt.Fprintf(os.Stderr, "muster install-skill: %v\n", err)
+	}
 	res, err := install.Skill()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "muster install-skill: %v\n", err)
@@ -506,6 +558,9 @@ func cmdUninstall(args []string) int {
 	if err := install.SetOptOut(state.Dir(), true); err != nil {
 		fmt.Fprintf(os.Stderr, "muster uninstall: could not record the refusal: %v\n", err)
 		fmt.Fprintln(os.Stderr, "the next herdr start will bind the keys again. Run this through herdr, or pass --state-dir.")
+	}
+	if err := install.SetSkillOptOut(state.Dir(), true); err != nil {
+		fmt.Fprintf(os.Stderr, "muster uninstall: could not record the skill refusal: %v\n", err)
 	}
 	res, err := install.Remove()
 	switch {

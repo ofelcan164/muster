@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ofelcan164/muster/internal/chain"
 	"github.com/ofelcan164/muster/internal/model"
 	"github.com/ofelcan164/muster/internal/state"
 )
@@ -103,7 +105,7 @@ func Dump(w io.Writer, s *model.Snapshot, now time.Time) {
 				strings.ToUpper(string(a.Status)), ageText(a, now),
 				taskLine(a))
 			if a.BlockedOn != "" {
-				fmt.Fprintf(w, "         blocked on: %s\n", a.BlockedOn)
+				fmt.Fprintf(w, "         after %s\n", edgeText(a, now))
 			}
 			if a.Note != "" {
 				fmt.Fprintf(w, "         ✎ %s\n", a.Note)
@@ -135,6 +137,118 @@ func Dump(w io.Writer, s *model.Snapshot, now time.Time) {
 		}
 	}
 }
+
+// Show is the orchestrator's view of where work stands: the usual order, then
+// one block per agent. A target narrows it to a pane id, a repo/agent, or every
+// agent in a repo. Without one it shows every agent on either end of an edge,
+// which is the question an orchestrator is usually asking.
+func Show(w io.Writer, s *model.Snapshot, c *chain.Chain, target string, now time.Time) error {
+	type ref struct {
+		repo  model.Repo
+		agent model.Agent
+	}
+	var all []ref
+	holds := map[string][]ref{}
+	for _, r := range s.Repos {
+		for _, a := range r.Agents {
+			all = append(all, ref{r, a})
+			if a.After != "" {
+				holds[a.After] = append(holds[a.After], ref{r, a})
+			}
+		}
+	}
+	var picked []ref
+	for _, x := range all {
+		onEdge := x.agent.BlockedOn != "" || len(holds[x.repo.Key]) > 0
+		if target == "" && onEdge || target != "" && isTarget(target, x.repo, x.agent) {
+			picked = append(picked, x)
+		}
+	}
+	if target != "" && len(picked) == 0 {
+		return fmt.Errorf("no agent matches %q: pass a pane id, repo/agent, or a repo", target)
+	}
+
+	order := "none recorded"
+	if !c.Empty() {
+		order = chain.Format(c.Stages)
+		var meta []string
+		if c.SetBy != "" {
+			meta = append(meta, "set by "+c.SetBy)
+		}
+		if !c.SetAt.IsZero() {
+			meta = append(meta, CompactDur(now.Sub(c.SetAt))+" ago")
+		}
+		if len(meta) > 0 {
+			order += "  (" + strings.Join(meta, ", ") + ")"
+		}
+	}
+	fmt.Fprintf(w, "usual order  %s\n", order)
+	if len(picked) == 0 {
+		fmt.Fprintln(w, "\nno agent is parked on another repo")
+		return nil
+	}
+
+	for _, x := range picked {
+		a := x.agent
+		fmt.Fprintf(w, "\n%s/%s  %s  %s %s\n", repoLabel(x.repo), a.Name, a.PaneID, a.Status, ageText(a, now))
+		fmt.Fprintf(w, "  task    %s\n", taskLine(a))
+		if a.BlockedOn != "" {
+			fmt.Fprintf(w, "  after   %s\n", edgeText(a, now))
+			for _, r := range s.Repos {
+				if a.After == "" || r.Key != a.After {
+					continue
+				}
+				if len(r.Agents) == 0 {
+					fmt.Fprintf(w, "          no agent open in %s\n", repoLabel(r))
+				}
+				for _, u := range r.Agents {
+					fmt.Fprintf(w, "          %s/%s  %s  %s %s · %s\n",
+						repoLabel(r), u.Name, u.PaneID, u.Status, ageText(u, now), taskLine(u))
+				}
+			}
+		}
+		if hs := holds[x.repo.Key]; len(hs) > 0 {
+			parts := make([]string, len(hs))
+			for i, h := range hs {
+				parts[i] = fmt.Sprintf("%s/%s (%s %s)", repoLabel(h.repo), h.agent.Name, h.agent.Status, ageText(h.agent, now))
+			}
+			fmt.Fprintf(w, "  holds   %s\n", strings.Join(parts, ", "))
+		}
+		for _, row := range s.Attention {
+			if row.PaneID == a.PaneID {
+				fmt.Fprintf(w, "  ribbon  %s · %s\n", row.Reason, row.Detail)
+			}
+		}
+		if a.Note != "" {
+			fmt.Fprintf(w, "  note    %s\n", a.Note)
+		}
+	}
+	return nil
+}
+
+// isTarget matches what an orchestrator would type: a pane id, a repo by the
+// name Muster shows or its full name, or repo/agent.
+func isTarget(target string, r model.Repo, a model.Agent) bool {
+	if target == a.PaneID {
+		return true
+	}
+	for _, name := range []string{r.Display, r.Name} {
+		if name != "" && (strings.EqualFold(target, name) || strings.EqualFold(target, name+"/"+a.Name)) {
+			return true
+		}
+	}
+	return false
+}
+
+// edgeText is what an agent is parked on and whether it has landed.
+func edgeText(a model.Agent, now time.Time) string {
+	if a.LandedAt.IsZero() {
+		return a.BlockedOn + " · can't land yet"
+	}
+	return a.BlockedOn + " · landed " + CompactDur(now.Sub(a.LandedAt)) + " ago"
+}
+
+func repoLabel(r model.Repo) string { return cmp.Or(r.Display, r.Name, r.Key) }
 
 // taskLine shows the task and, when it came from a lower rung of the fallback
 // ladder, says so. Showing doubt is better than showing false confidence.

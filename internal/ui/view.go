@@ -303,10 +303,10 @@ func (m *Model) isActive(target int) bool {
 	return target == m.cursor || target == m.hover
 }
 
-// agentTileLines renders one agent tile, four lines at most: the workspace
-// number, status and repo; the workspace label and branch; the task line; and,
-// only when the workspace also holds non-agent panes, the shared footer every
-// agent tile in it carries.
+// agentTileLines renders one agent tile: the workspace number, status and repo;
+// the workspace label and branch; the task line; a line for each end of a
+// dependency the agent sits on; and, only when the workspace also holds
+// non-agent panes, the shared footer every agent tile in it carries.
 func (m *Model) agentTileLines(t tile, width int) []string {
 	a := t.Agent
 	marker := " "
@@ -334,6 +334,7 @@ func (m *Model) agentTileLines(t tile, width int) []string {
 	if line, ok := m.tileTaskLine(a, width); ok {
 		lines = append(lines, line)
 	}
+	lines = append(lines, m.tileEdgeLines(t, width)...)
 	if len(t.Panes) > 0 {
 		lines = append(lines, styFaint.Render("    "+tilePanesFooter(t)))
 	}
@@ -358,6 +359,75 @@ func (m *Model) tileTaskLine(a model.Agent, width int) (string, bool) {
 		style = styFaint
 	}
 	return style.Render("    " + truncate(task, max(6, width-4))), true
+}
+
+// tileEdgeLines are the dependency lines: what this agent is parked on, and
+// which repos have agents parked on this one. Each sits dim until the tile at
+// its other end is selected or under the pointer, so picking a tile lights up
+// whatever it is tied to. Neither says "blocked", which means an agent waiting
+// on you.
+func (m *Model) tileEdgeLines(t tile, width int) []string {
+	var lines []string
+	a := t.Agent
+	if a.BlockedOn != "" {
+		lit := a.After != "" && m.litBy(func(r model.Repo, _ model.Agent) bool { return r.Key == a.After })
+		sty := edgeStyle(lit)
+		up := sty.Render(a.BlockedOn)
+		if a.After != "" {
+			up = repoMark(m.repoByKey(a.After), lit)
+		}
+		when := "can't land yet"
+		if !a.LandedAt.IsZero() {
+			when = "landed " + ageText(time.Since(a.LandedAt), true) + " ago"
+		}
+		lines = append(lines, "    "+truncate(sty.Render("⧗ after ")+up+sty.Render(" · "+when), width-4))
+	}
+
+	var holders []model.Repo
+	for _, r := range m.snap.Repos {
+		for _, x := range r.Agents {
+			if x.After == t.Repo.Key {
+				holders = append(holders, r)
+				break
+			}
+		}
+	}
+	if len(holders) > 0 {
+		lit := m.litBy(func(_ model.Repo, x model.Agent) bool { return x.After == t.Repo.Key })
+		sty := edgeStyle(lit)
+		marks := make([]string, len(holders))
+		for i, r := range holders {
+			marks[i] = repoMark(r, lit)
+		}
+		lines = append(lines, "    "+truncate(sty.Render("▸ holds ")+strings.Join(marks, sty.Render(", ")), width-4))
+	}
+	return lines
+}
+
+// litBy reports whether the selected or hovered agent satisfies match, which is
+// how an edge line knows the tile at its other end is the one you are on.
+func (m *Model) litBy(match func(model.Repo, model.Agent) bool) bool {
+	for _, i := range []int{m.cursor, m.hover} {
+		if pane := m.targetPane(i); pane != "" {
+			if r, a, ok := m.agentByPane(pane); ok && match(r, a) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func edgeStyle(lit bool) lipgloss.Style {
+	if lit {
+		return styFG
+	}
+	return styDim
+}
+
+// repoMark is a repo as an edge line names it: its sigil and name in its own
+// colour, bold while the line is lit.
+func repoMark(r model.Repo, lit bool) string {
+	return repoStyle(r).Bold(lit).Render(r.Sigil + " " + shortRepo(r))
 }
 
 // tilePanesFooter is the line every agent tile in a workspace shares once it

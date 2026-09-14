@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ofelcan164/muster/internal/chain"
 	"github.com/ofelcan164/muster/internal/model"
 )
 
@@ -58,9 +57,6 @@ type Input struct {
 	// Stopped lists non-agent panes whose process went away.
 	Stopped []model.Stopped
 
-	// Chain is the orchestrator-recorded dependency order. When it is empty the
-	// gate rule stays silent rather than guessing what downstream means.
-	Chain *chain.Chain
 	// EverDone reports whether a pane has ever been observed entering "done".
 	// The idle-never-done rule turns on this.
 	EverDone map[string]bool
@@ -118,9 +114,15 @@ func Rank(in Input) []model.Attention {
 		})
 	}
 
-	// Rank 2: a gate is open and nobody moved through it.
-	for _, g := range detectGates(in, all) {
+	// Rank 2: upstream work landed and nobody moved what was parked on it. One
+	// row names every agent parked on the same upstream, so the rest are
+	// claimed with it rather than each taking a row further down.
+	gates, parked := detectGates(in, all)
+	for _, g := range gates {
 		add(g)
+	}
+	for _, pane := range parked {
+		claimed[pane] = true
 	}
 
 	// Rank 3: something that was running has stopped. A dev server going down
@@ -148,7 +150,7 @@ func Rank(in Input) []model.Attention {
 			Rank: 4, Reason: model.ReasonDoneUnseen,
 			RepoKey: x.repo.Key, PaneID: x.agent.PaneID, Agent: x.agent.Name,
 			Status: x.agent.Status, Age: x.agent.Age(in.Now), AgeKnown: x.agent.AgeKnown,
-			Detail: "finished, unseen",
+			Detail: doneDetail(in.Repos, x.agent),
 		})
 	}
 
@@ -158,8 +160,12 @@ func Rank(in Input) []model.Attention {
 	// The EverWorked condition is what stops this firing on a shell you opened
 	// and never used. Without it every idle agent qualifies forever, which made
 	// this by far the noisiest rule in the ribbon.
+	//
+	// A parked agent is idle by design, waiting on work in another repo, so
+	// blocked_on keeps it out.
 	stale := filter(all, func(x agentRef) bool {
 		return x.agent.Status == model.StatusIdle &&
+			x.agent.BlockedOn == "" &&
 			in.EverWorked[x.agent.PaneID] &&
 			!in.EverDone[x.agent.PaneID] &&
 			x.agent.Age(in.Now) >= StaleAfter
@@ -190,102 +196,111 @@ func needsYouRegardless(a model.Agent) bool {
 	return a.Status == model.StatusBlocked
 }
 
-// detectGates finds the most valuable thing Muster can show: an agent finished,
-// the orchestrator has not learned of it, and work downstream is sitting idle
-// waiting on a gate that already opened.
+// detectGates finds upstream work that landed while the agents parked on it sat
+// still. It returns one row per upstream, and every pane those rows name.
 //
-// Three facts, all of which herdr already has:
-//   - an agent is done
-//   - the orchestrator has been resting since before that agent finished, so it
-//     cannot have reacted to it
-//   - some other repo has an agent idle for longer than the finished one, so it
-//     is waiting rather than merely between tasks
+// Three facts, recorded by the orchestrator or measured by the daemon:
+//   - an agent's blocked_on names a repo and its landed token matches, so the
+//     work it waits on is on main (LandedAt)
+//   - the orchestrator has ended a turn since then, so it has had its chance to
+//     move the parked work on
+//   - the parked agent is idle or done in a status it entered before the
+//     landing, so nobody moved it
 //
-// Without a marked orchestrator the middle fact is unavailable and the rule
-// stays silent rather than guessing.
-func detectGates(in Input, all []agentRef) []model.Attention {
+// None of that needs a timer. Without a marked orchestrator the middle fact is
+// unavailable and the rule stays silent rather than guessing.
+func detectGates(in Input, all []agentRef) ([]model.Attention, []string) {
 	// Idle or done, both of which mean the orchestrator is not working. done is
 	// herdr's word for an agent that finished its turn while you were looking at
 	// another pane, which is the usual state of an orchestrator you walked away
 	// from, so testing for idle alone missed the case this rule exists for.
 	resting := in.Orch.Status == model.StatusIdle || in.Orch.Status == model.StatusDone
 	if !in.Orch.Found || !resting || in.Orch.StatusSince.IsZero() {
-		return nil
-	}
-	// Without a recorded chain there is no way to know which idle agent is
-	// waiting on which finished one. Guessing produces a repair button that
-	// fires on unrelated repos, and a ribbon row you learn to distrust is worse
-	// than an empty ribbon.
-	if in.Chain == nil || in.Chain.Empty() {
-		return nil
+		return nil, nil
 	}
 
-	// Resolving one repo to its stage scans every stage and lowercases both
-	// operands. The loop below is every finished agent against every other, so
-	// ask the chain through a lookup that resolves each name once.
-	dependsOn := in.Chain.Lookup()
+	var order []string
+	groups := map[string][]agentRef{}
+	for _, x := range all {
+		a := x.agent
+		if a.After == "" || a.LandedAt.IsZero() {
+			continue
+		}
+		// An equal time counts as a turn ended: the landed token and the end of
+		// the turn that wrote it can arrive in the same reconcile.
+		if in.Orch.StatusSince.Before(a.LandedAt) {
+			continue
+		}
+		// For the parked agent, equal counts as moved: changing state in the same
+		// reconcile as the landing is most likely the orchestrator dispatching it.
+		if (a.Status != model.StatusIdle && a.Status != model.StatusDone) || !a.StatusSince.Before(a.LandedAt) {
+			continue
+		}
+		if _, ok := groups[a.After]; !ok {
+			order = append(order, a.After)
+		}
+		groups[a.After] = append(groups[a.After], x)
+	}
 
 	var out []model.Attention
-	for _, x := range all {
-		if x.agent.Status != model.StatusDone {
-			continue
-		}
-		finishedAt := x.agent.StatusSince
-		if finishedAt.IsZero() || !in.Orch.StatusSince.Before(finishedAt) {
-			// The orchestrator has changed state since this agent finished, so
-			// it has plausibly already seen it.
-			continue
-		}
-
-		var waiting []string
-		for _, other := range all {
-			if other.repo.Key == x.repo.Key || other.agent.PaneID == x.agent.PaneID {
-				continue
+	var parked []string
+	for _, up := range order {
+		xs := groups[up]
+		slices.SortStableFunc(xs, func(a, b agentRef) int { return longestFirst(a.agent, b.agent, in.Now) })
+		var who, repos []string
+		for _, x := range xs {
+			label := cmp.Or(x.repo.Display, x.repo.Name)
+			who = append(who, label+"/"+x.agent.Name)
+			if !slices.Contains(repos, label) {
+				repos = append(repos, label)
 			}
-			if other.agent.Status != model.StatusIdle {
-				continue
-			}
-			// The chain is what makes this a gate rather than a coincidence.
-			if !dependsOn(other.repo.Name, x.repo.Name) {
-				continue
-			}
-			if other.agent.Age(in.Now) > x.agent.Age(in.Now) {
-				waiting = append(waiting, other.repo.Name+"/"+other.agent.Name)
-			}
+			parked = append(parked, x.agent.PaneID)
 		}
-		if len(waiting) == 0 {
-			continue
-		}
-		slices.Sort(waiting)
+		// The row lands on the agent parked longest, since that is where the
+		// rebase happens. The upstream agent may be long gone by now.
+		lead := xs[0]
 		out = append(out, model.Attention{
-			Rank: 2, Reason: model.ReasonGateUntold,
-			RepoKey: x.repo.Key, PaneID: x.agent.PaneID, Agent: x.agent.Name,
-			Status: x.agent.Status, Age: x.agent.Age(in.Now), AgeKnown: x.agent.AgeKnown,
-			Detail:     fmt.Sprintf("orchestrator not told · %s idle", strings.Join(shortNames(waiting), " + ")),
-			Downstream: waiting,
+			Rank: 2, Reason: model.ReasonGateOpen,
+			RepoKey: lead.repo.Key, PaneID: lead.agent.PaneID, Agent: lead.agent.Name,
+			Status: lead.agent.Status, Age: lead.agent.Age(in.Now), AgeKnown: lead.agent.AgeKnown,
+			Detail:     fmt.Sprintf("%s landed · %s still parked on it", repoLabel(in.Repos, up), strings.Join(repos, ", ")),
+			Downstream: who,
 		})
 	}
 	slices.SortStableFunc(out, func(a, b model.Attention) int { return cmp.Compare(b.Age, a.Age) })
-	return out
+	return out, parked
 }
 
-func shortNames(full []string) []string {
-	out := make([]string, 0, len(full))
-	seen := map[string]bool{}
-	for _, f := range full {
-		repo := f
-		if i := strings.LastIndex(f, "/"); i > 0 {
-			repo = f[:i]
-		}
-		if i := strings.LastIndex(repo, "/"); i >= 0 {
-			repo = repo[i+1:]
-		}
-		if !seen[repo] {
-			seen[repo] = true
-			out = append(out, repo)
+// doneDetail is what a finished agent's row says. A parked agent finishing its
+// turn has written code that cannot land yet, which is different news from
+// finished work, and calling both "finished" is how the parked one got missed.
+func doneDetail(repos []model.Repo, a model.Agent) string {
+	switch {
+	case a.BlockedOn == "":
+		return "finished, unseen"
+	case !a.LandedAt.IsZero():
+		return "ready, " + afterName(repos, a) + " landed"
+	default:
+		return "ready, after " + afterName(repos, a)
+	}
+}
+
+// afterName is what a parked agent waits on: the repo's name when blocked_on
+// resolved to one, else the text as it was written.
+func afterName(repos []model.Repo, a model.Agent) string {
+	if a.After == "" {
+		return a.BlockedOn
+	}
+	return repoLabel(repos, a.After)
+}
+
+func repoLabel(repos []model.Repo, key string) string {
+	for _, r := range repos {
+		if r.Key == key {
+			return cmp.Or(r.Display, r.Name, r.Key)
 		}
 	}
-	return out
+	return key
 }
 
 // blockedDetail says what the agent is actually waiting for. The question read

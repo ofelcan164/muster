@@ -35,8 +35,17 @@ func (d *Daemon) buildAgents(snap *herdr.Snapshot, now time.Time) map[string]mod
 		}
 
 		pane := panesByID[a.PaneID]
-		taskSeen := d.stampTask(a.PaneID, tokenOf(a.Tokens, pane.Tokens, "task"), now)
+		taskSeen := stamp(d.persist.TaskSeenAt, a.PaneID, tokenOf(a.Tokens, pane.Tokens, "task"), now)
 		task, source := taskFor(a, pane, since, taskSeen)
+
+		// landed only counts when it names what blocked_on names. A landed token
+		// left over from the last feature must not open the next one's gate.
+		blockedOn := tokenOf(a.Tokens, pane.Tokens, "blocked_on")
+		landed := ""
+		if blockedOn != "" && tokenOf(a.Tokens, pane.Tokens, "landed") == blockedOn {
+			landed = blockedOn
+		}
+		landedAt := stamp(d.persist.LandedSeenAt, a.PaneID, landed, now)
 
 		out[a.PaneID] = model.Agent{
 			PaneID:         a.PaneID,
@@ -48,7 +57,8 @@ func (d *Daemon) buildAgents(snap *herdr.Snapshot, now time.Time) map[string]mod
 			Focused:        a.Focused,
 			Task:           task,
 			TaskSource:     source,
-			BlockedOn:      tokenOf(a.Tokens, pane.Tokens, "blocked_on"),
+			BlockedOn:      blockedOn,
+			LandedAt:       landedAt,
 			Note:           tokenOf(a.Tokens, pane.Tokens, "note"),
 			StatusSince:    since,
 			AgeKnown:       ageKnown,
@@ -78,6 +88,11 @@ func (d *Daemon) buildAgents(snap *herdr.Snapshot, now time.Time) map[string]mod
 			delete(d.persist.LastDoneSeq, pane)
 		}
 	}
+	for pane := range d.persist.LandedSeenAt {
+		if !live[pane] {
+			delete(d.persist.LandedSeenAt, pane)
+		}
+	}
 	return out
 }
 
@@ -98,18 +113,19 @@ func (d *Daemon) stampStatus(paneID, status string, now time.Time) (time.Time, b
 	return now, observed
 }
 
-// stampTask returns when the daemon first saw the current task value on a pane,
-// recording it the first time that value appears.
-func (d *Daemon) stampTask(paneID, task string, now time.Time) time.Time {
-	if task == "" {
-		delete(d.persist.TaskSeenAt, paneID)
+// stamp returns when the daemon first saw a token's current value on a pane,
+// recording it the first time that value appears. An empty value clears the
+// record, so the same value written again later counts as new.
+func stamp(seen map[string]state.TaskStamp, paneID, value string, now time.Time) time.Time {
+	if value == "" {
+		delete(seen, paneID)
 		return time.Time{}
 	}
-	prev, ok := d.persist.TaskSeenAt[paneID]
-	if ok && prev.Value == task {
+	prev, ok := seen[paneID]
+	if ok && prev.Value == value {
 		return prev.Since
 	}
-	d.persist.TaskSeenAt[paneID] = state.TaskStamp{Value: task, Since: now}
+	seen[paneID] = state.TaskStamp{Value: value, Since: now}
 	return now
 }
 

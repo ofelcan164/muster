@@ -6,6 +6,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -19,7 +20,7 @@ func (m *Model) SetPrompter(f func(paneID, text string) error) { m.prompt = f }
 // SetMarker supplies the function that marks an agent as the orchestrator.
 func (m *Model) SetMarker(f func(paneID string) error) { m.mark = f }
 
-// repairTarget is the finished agent the t key would report, or nil.
+// repairTarget is the open gate the t key would report, or nil.
 //
 // The selection wins when it is sitting on a gate row, so t always acts on what
 // you are looking at. Otherwise it falls back to the only gate row there is,
@@ -29,7 +30,7 @@ func (m *Model) SetMarker(f func(paneID string) error) { m.mark = f }
 func (m *Model) repairTarget() *model.Attention {
 	var gates []model.Attention
 	for _, a := range m.snap.Attention {
-		if a.Reason == model.ReasonGateUntold {
+		if a.Reason == model.ReasonGateOpen {
 			gates = append(gates, a)
 		}
 	}
@@ -51,20 +52,20 @@ func (m *Model) repairTarget() *model.Attention {
 
 // repairMessage is what the t key sends.
 //
-// Facts only, in the order the orchestrator needs them: what finished, how long
-// ago, and who is waiting. No instruction about what to do next, because the
-// orchestrator knows the plan and Muster does not.
-func repairMessage(a model.Attention, repo model.Repo) string {
+// Facts only, in the order the orchestrator needs them: what landed, how long
+// ago, and who is still parked on it. No instruction about what to do next,
+// because the orchestrator knows the plan and Muster does not.
+func repairMessage(a model.Attention, up model.Repo, landed time.Duration) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s/%s has finished", shortRepo(repo), a.Agent)
-	if a.AgeKnown {
-		fmt.Fprintf(&b, " (%s ago)", ageText(a.Age, true))
+	fmt.Fprintf(&b, "%s landed", shortRepo(up))
+	if landed > 0 {
+		fmt.Fprintf(&b, " %s ago", ageText(landed, true))
 	}
-	b.WriteString(" and has not been picked up.")
-	if len(a.Downstream) > 0 {
-		fmt.Fprintf(&b, " Waiting on it: %s.", strings.Join(a.Downstream, ", "))
+	verb := "are"
+	if len(a.Downstream) == 1 {
+		verb = "is"
 	}
-	b.WriteString(" Reported by Muster.")
+	fmt.Fprintf(&b, ", and %s %s still parked on it. Reported by Muster.", strings.Join(a.Downstream, ", "), verb)
 	return b.String()
 }
 
@@ -79,9 +80,15 @@ func (m *Model) repair() (tea.Model, tea.Cmd) {
 		m.notice = "no orchestrator marked, so there is nobody to tell"
 		return m, nil
 	}
-	return m, m.send(m.snap.Orch.PaneID, repairMessage(*a, m.repoByKey(a.RepoKey)),
-		fmt.Sprintf("told the orchestrator about %s/%s",
-			shortRepo(m.repoByKey(a.RepoKey)), a.Agent))
+	// The row lands on a parked agent, which is what knows the upstream.
+	_, parked, _ := m.agentByPane(a.PaneID)
+	up := m.repoByKey(parked.After)
+	var landed time.Duration
+	if !parked.LandedAt.IsZero() {
+		landed = time.Since(parked.LandedAt)
+	}
+	return m, m.send(m.snap.Orch.PaneID, repairMessage(*a, up, landed),
+		fmt.Sprintf("told the orchestrator %s landed", shortRepo(up)))
 }
 
 // noticeMsg is what a socket call running off the Update goroutine reports

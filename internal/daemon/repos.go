@@ -161,6 +161,10 @@ func (d *Daemon) buildRepos(snap *herdr.Snapshot, agents map[string]model.Agent,
 		taken[out[i].Sigil] = true
 	}
 
+	// After the slot sort, so a name two repos share resolves to the lower slot
+	// every time rather than to whichever came first out of the map.
+	resolveEdges(out)
+
 	// Stopped panes are resolved against the finished repo set, so a stop in a
 	// workspace that no longer maps to a repo is simply dropped.
 	repoByPane := map[string]*model.Repo{}
@@ -198,6 +202,42 @@ func shortName(name string) string {
 		return after
 	}
 	return name
+}
+
+// resolveEdges points each agent's blocked_on at the repo it names, which is
+// the text before any "#". An agent never waits on its own repo, and a name
+// that matches nothing leaves After empty rather than guessing.
+func resolveEdges(repos []model.Repo) {
+	for i := range repos {
+		for j := range repos[i].Agents {
+			a := &repos[i].Agents[j]
+			named, _, _ := strings.Cut(a.BlockedOn, "#")
+			if named = strings.TrimSpace(named); named == "" {
+				continue
+			}
+			for _, r := range repos {
+				if r.IsGit && r.Key != repos[i].Key && sameRepo(named, r.Name) {
+					a.After = r.Key
+					break
+				}
+			}
+		}
+	}
+}
+
+// sameRepo compares a name the orchestrator wrote against a discovered repo,
+// tolerating the owner on either side: it should not have to know whether
+// Muster calls it "api" or "acme/api". Owners on both sides have to agree,
+// since naming one is saying which "api" you mean.
+func sameRepo(named, repo string) bool {
+	named, repo = strings.ToLower(named), strings.ToLower(repo)
+	if named == repo {
+		return true
+	}
+	if strings.Contains(named, "/") && strings.Contains(repo, "/") {
+		return false
+	}
+	return shortName(named) == shortName(repo)
 }
 
 // overlayTitle is the [[panes]] title from the manifest, which herdr reports as

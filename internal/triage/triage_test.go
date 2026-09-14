@@ -1,23 +1,14 @@
 package triage
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 	"unicode/utf8"
 
-	"github.com/ofelcan164/muster/internal/chain"
 	"github.com/ofelcan164/muster/internal/model"
 )
-
-// linear is the shape that actually occurs: contracts, then api, then web and
-// mobile in parallel, with infra outside the order entirely.
-func linear() *chain.Chain {
-	return &chain.Chain{
-		Stages:      [][]string{{"contracts"}, {"api"}, {"web", "mobile"}},
-		Independent: []string{"infra"},
-	}
-}
 
 var now = time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
 
@@ -165,79 +156,137 @@ func TestOrchestratorIsNotTriagedWhenWorking(t *testing.T) {
 	}
 }
 
-// The gate rule is the propagation repair: an agent finished, the orchestrator
-// has been idle since before it finished so cannot have reacted, and work
-// elsewhere has been idle even longer.
-func TestGateOpenNobodyTold(t *testing.T) {
-	finished := agent("migrations", model.StatusDone, 6*time.Minute)
-	waiting := agent("checkout-ui", model.StatusIdle, 18*time.Minute)
-
-	in := Input{
-		Now: now,
-		Repos: []model.Repo{
-			repo("api", finished),
-			repo("web", waiting),
-		},
-		Orch: model.Orchestrator{
-			Found:       true,
-			Status:      model.StatusIdle,
-			StatusSince: ago(20 * time.Minute), // idle since before api finished
-		},
-		Chain: linear(),
+// parked is an agent waiting on work in another repo, which landed landedAgo
+// ago, or has not landed when landedAgo is zero.
+func parked(name, upstream string, status model.Status, age, landedAgo time.Duration) model.Agent {
+	a := agent(name, status, age)
+	a.BlockedOn = upstream + "#412"
+	a.After = upstream
+	if landedAgo > 0 {
+		a.LandedAt = ago(landedAgo)
 	}
-	got := Rank(in)
-	if len(got) == 0 {
-		t.Fatal("expected a gate row")
-	}
-	if got[0].Rank != 2 || got[0].Reason != model.ReasonGateUntold {
-		t.Fatalf("expected gate row first, got %+v", got[0])
-	}
-	if got[0].Agent != "migrations" {
-		t.Errorf("gate row should name the finished agent, got %q", got[0].Agent)
-	}
-	if !strings.Contains(got[0].Detail, "orchestrator not told") {
-		t.Errorf("detail should say the orchestrator was not told, got %q", got[0].Detail)
-	}
-	if len(got[0].Downstream) != 1 {
-		t.Errorf("expected one downstream waiter, got %v", got[0].Downstream)
-	}
+	return a
 }
 
-func TestGateSilentWhenOrchestratorAlreadyReacted(t *testing.T) {
-	in := Input{
-		Now: now,
-		Repos: []model.Repo{
-			repo("api", agent("migrations", model.StatusDone, 6*time.Minute)),
-			repo("web", agent("checkout-ui", model.StatusIdle, 18*time.Minute)),
-		},
-		Orch: model.Orchestrator{
-			Found:       true,
-			Status:      model.StatusIdle,
-			StatusSince: ago(2 * time.Minute), // changed state after api finished
-		},
-		Chain: linear(),
-	}
+// restingSince is a marked orchestrator that ended its last turn d ago.
+func restingSince(d time.Duration) model.Orchestrator {
+	return model.Orchestrator{Found: true, Status: model.StatusIdle, StatusSince: ago(d)}
+}
+
+func noGate(t *testing.T, in Input, why string) {
+	t.Helper()
 	for _, r := range Rank(in) {
-		if r.Reason == model.ReasonGateUntold {
-			t.Fatalf("gate must stay silent when the orchestrator has since acted: %+v", r)
+		if r.Reason == model.ReasonGateOpen {
+			t.Fatalf("%s: %+v", why, r)
 		}
 	}
 }
 
-func TestGateSilentWithoutOrchestrator(t *testing.T) {
-	in := Input{
+// The gate rule: api landed, the orchestrator has ended a turn since it
+// recorded that, and web is still where it was before the landing.
+func TestGateOpenAfterLandingNobodyMoved(t *testing.T) {
+	got := Rank(Input{
 		Now: now,
 		Repos: []model.Repo{
-			repo("api", agent("migrations", model.StatusDone, 6*time.Minute)),
-			repo("web", agent("checkout-ui", model.StatusIdle, 18*time.Minute)),
+			repo("api"),
+			repo("web", parked("checkout-ui", "api", model.StatusIdle, 40*time.Minute, 10*time.Minute)),
 		},
-		Orch:  model.Orchestrator{Found: false},
-		Chain: linear(),
+		Orch: restingSince(2 * time.Minute),
+	})
+	if len(got) != 1 || got[0].Rank != 2 || got[0].Reason != model.ReasonGateOpen {
+		t.Fatalf("want one gate row, got %+v", got)
 	}
-	for _, r := range Rank(in) {
-		if r.Reason == model.ReasonGateUntold {
-			t.Fatal("gate rule must not guess without a marked orchestrator")
-		}
+	if got[0].PaneID != "pane-checkout-ui" {
+		t.Errorf("the row should land on the parked agent, got %+v", got[0])
+	}
+	if got[0].Detail != "api landed · web still parked on it" {
+		t.Errorf("detail = %q", got[0].Detail)
+	}
+	if len(got[0].Downstream) != 1 || got[0].Downstream[0] != "web/checkout-ui" {
+		t.Errorf("downstream = %v", got[0].Downstream)
+	}
+}
+
+// Everything parked on one upstream is one row, and the agents it names do not
+// take rows of their own below it.
+func TestGateGroupsEveryAgentParkedOnOneUpstream(t *testing.T) {
+	got := Rank(Input{
+		Now: now,
+		Repos: []model.Repo{
+			repo("api"),
+			repo("web", parked("checkout-ui", "api", model.StatusIdle, 40*time.Minute, 10*time.Minute)),
+			repo("mobile", parked("checkout", "api", model.StatusDone, 30*time.Minute, 10*time.Minute)),
+		},
+		Orch: restingSince(2 * time.Minute),
+	})
+	if len(got) != 1 {
+		t.Fatalf("want one row for both, got %+v", got)
+	}
+	if got[0].Agent != "checkout-ui" {
+		t.Errorf("the agent parked longest should lead, got %q", got[0].Agent)
+	}
+	if got[0].Detail != "api landed · web, mobile still parked on it" {
+		t.Errorf("detail = %q", got[0].Detail)
+	}
+}
+
+func TestGateSilentBeforeLanding(t *testing.T) {
+	noGate(t, Input{
+		Now: now,
+		Repos: []model.Repo{
+			repo("api"),
+			repo("web", parked("checkout-ui", "api", model.StatusIdle, 40*time.Minute, 0)),
+		},
+		Orch: restingSince(2 * time.Minute),
+	}, "a gate opened before anything landed")
+}
+
+// A parked agent that changed state after the landing has been moved on,
+// whether it is still working or already back at its prompt.
+func TestGateSilentOnceTheParkedAgentMoved(t *testing.T) {
+	for _, st := range []model.Status{model.StatusWorking, model.StatusIdle} {
+		noGate(t, Input{
+			Now: now,
+			Repos: []model.Repo{
+				repo("api"),
+				repo("web", parked("checkout-ui", "api", st, 5*time.Minute, 10*time.Minute)),
+			},
+			Orch: restingSince(2 * time.Minute),
+		}, fmt.Sprintf("the parked agent moved and is %s", st))
+	}
+}
+
+// The orchestrator gets its turn first. A working one may be moving the parked
+// work right now, and one resting since before the landing has not been woken
+// since, so it cannot have acted on it.
+func TestGateSilentUntilTheOrchestratorEndsATurn(t *testing.T) {
+	web := parked("checkout-ui", "api", model.StatusIdle, 40*time.Minute, 10*time.Minute)
+	for _, o := range []model.Orchestrator{
+		{Found: true, Status: model.StatusWorking, StatusSince: ago(2 * time.Minute)},
+		restingSince(20 * time.Minute),
+		{Found: false},
+	} {
+		noGate(t, Input{Now: now, Repos: []model.Repo{repo("api"), repo("web", web)}, Orch: o},
+			fmt.Sprintf("orchestrator %+v", o))
+	}
+}
+
+// Parking is normal. An agent whose code is written and cannot land yet waits
+// by design, so it never reads as stalled, and when it finishes a turn its row
+// says it is ready rather than finished.
+func TestParkedAgentReadsAsReadyNotStalled(t *testing.T) {
+	idle := parked("checkout-ui", "api", model.StatusIdle, 40*time.Minute, 0)
+	if got := Rank(Input{
+		Now: now, Repos: []model.Repo{repo("api"), repo("web", idle)},
+		EverWorked: map[string]bool{idle.PaneID: true},
+	}); len(got) != 0 {
+		t.Errorf("a parked agent was flagged: %+v", got)
+	}
+
+	done := parked("checkout-ui", "api", model.StatusDone, 5*time.Minute, 0)
+	got := Rank(Input{Now: now, Repos: []model.Repo{repo("api"), repo("web", done)}})
+	if len(got) != 1 || got[0].Detail != "ready, after api" {
+		t.Errorf("want one ready row, got %+v", got)
 	}
 }
 
@@ -280,85 +329,6 @@ func TestIdleNeverDoneFiresOnALowerBound(t *testing.T) {
 		EverWorked: map[string]bool{a.PaneID: true}})
 	if len(got) != 1 || got[0].Rank != 5 {
 		t.Fatalf("threshold rules should still fire on a lower bound, got %+v", got)
-	}
-}
-
-// An independent repo being quiet is not a blocked downstream. This is the
-// false positive the chain exists to remove.
-func TestGateIgnoresIndependentRepos(t *testing.T) {
-	in := Input{
-		Now: now,
-		Repos: []model.Repo{
-			repo("api", agent("migrations", model.StatusDone, 6*time.Minute)),
-			repo("infra", agent("tf", model.StatusIdle, 40*time.Minute)),
-		},
-		Orch: model.Orchestrator{
-			Found: true, Status: model.StatusIdle, StatusSince: ago(time.Hour),
-		},
-		Chain: linear(),
-	}
-	for _, r := range Rank(in) {
-		if r.Reason == model.ReasonGateUntold {
-			t.Fatalf("infra is independent and must not count as downstream: %+v", r)
-		}
-	}
-}
-
-// Upstream work going quiet is not a gate either. Only later stages wait.
-func TestGateIgnoresUpstreamRepos(t *testing.T) {
-	in := Input{
-		Now: now,
-		Repos: []model.Repo{
-			repo("api", agent("migrations", model.StatusDone, 6*time.Minute)),
-			repo("contracts", agent("bump", model.StatusIdle, 40*time.Minute)),
-		},
-		Orch: model.Orchestrator{
-			Found: true, Status: model.StatusIdle, StatusSince: ago(time.Hour),
-		},
-		Chain: linear(),
-	}
-	for _, r := range Rank(in) {
-		if r.Reason == model.ReasonGateUntold {
-			t.Fatalf("contracts is upstream of api and cannot be waiting on it: %+v", r)
-		}
-	}
-}
-
-// Repos in the same stage run in parallel, so neither waits on the other.
-func TestGateIgnoresSameStageRepos(t *testing.T) {
-	in := Input{
-		Now: now,
-		Repos: []model.Repo{
-			repo("web", agent("ui", model.StatusDone, 6*time.Minute)),
-			repo("mobile", agent("app", model.StatusIdle, 40*time.Minute)),
-		},
-		Orch: model.Orchestrator{
-			Found: true, Status: model.StatusIdle, StatusSince: ago(time.Hour),
-		},
-		Chain: linear(),
-	}
-	for _, r := range Rank(in) {
-		if r.Reason == model.ReasonGateUntold {
-			t.Fatalf("web and mobile run in parallel: %+v", r)
-		}
-	}
-}
-
-func TestGateSilentWithoutAChain(t *testing.T) {
-	in := Input{
-		Now: now,
-		Repos: []model.Repo{
-			repo("api", agent("migrations", model.StatusDone, 6*time.Minute)),
-			repo("web", agent("checkout-ui", model.StatusIdle, 18*time.Minute)),
-		},
-		Orch: model.Orchestrator{
-			Found: true, Status: model.StatusIdle, StatusSince: ago(time.Hour),
-		},
-	}
-	for _, r := range Rank(in) {
-		if r.Reason == model.ReasonGateUntold {
-			t.Fatal("no chain means no way to know what downstream is")
-		}
 	}
 }
 
@@ -432,43 +402,17 @@ func TestDetailCutsCharactersNotBytes(t *testing.T) {
 // have walked away from, which is exactly when a gate goes unnoticed, so
 // testing for idle alone missed the case the rule exists for.
 func TestGateOpenWhileOrchestratorIsDone(t *testing.T) {
-	in := Input{
+	o := restingSince(2 * time.Minute)
+	o.Status = model.StatusDone
+	got := Rank(Input{
 		Now: now,
 		Repos: []model.Repo{
-			repo("api", agent("migrations", model.StatusDone, 6*time.Minute)),
-			repo("web", agent("checkout-ui", model.StatusIdle, 18*time.Minute)),
+			repo("api"),
+			repo("web", parked("checkout-ui", "api", model.StatusIdle, 40*time.Minute, 10*time.Minute)),
 		},
-		Orch: model.Orchestrator{
-			Found:       true,
-			Status:      model.StatusDone,
-			StatusSince: ago(20 * time.Minute),
-		},
-		Chain: linear(),
-	}
-	got := Rank(in)
-	if len(got) == 0 || got[0].Reason != model.ReasonGateUntold {
+		Orch: o,
+	})
+	if len(got) == 0 || got[0].Reason != model.ReasonGateOpen {
 		t.Fatalf("expected a gate row first, got %+v", got)
-	}
-}
-
-// A working orchestrator is reacting to something, so nothing is untold yet.
-func TestGateSilentWhileOrchestratorIsWorking(t *testing.T) {
-	in := Input{
-		Now: now,
-		Repos: []model.Repo{
-			repo("api", agent("migrations", model.StatusDone, 6*time.Minute)),
-			repo("web", agent("checkout-ui", model.StatusIdle, 18*time.Minute)),
-		},
-		Orch: model.Orchestrator{
-			Found:       true,
-			Status:      model.StatusWorking,
-			StatusSince: ago(20 * time.Minute),
-		},
-		Chain: linear(),
-	}
-	for _, r := range Rank(in) {
-		if r.Reason == model.ReasonGateUntold {
-			t.Fatal("a working orchestrator produced a gate row")
-		}
 	}
 }

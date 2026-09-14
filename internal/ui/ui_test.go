@@ -731,7 +731,7 @@ func TestRibbonBadgesReadFromTheReason(t *testing.T) {
 		want   string
 	}{
 		{model.ReasonBlocked, "BLOCKED"},
-		{model.ReasonGateUntold, "GATE"},
+		{model.ReasonGateOpen, "GATE OPEN"},
 		{model.ReasonProcessStopped, "STOPPED"},
 		{model.ReasonDoneUnseen, "DONE"},
 		{model.ReasonIdleNeverDone, "STALE"},
@@ -746,7 +746,7 @@ func TestRibbonBadgesReadFromTheReason(t *testing.T) {
 func TestReasonAccentsAreDistinct(t *testing.T) {
 	seen := map[string]model.Reason{}
 	for _, r := range []model.Reason{
-		model.ReasonBlocked, model.ReasonGateUntold,
+		model.ReasonBlocked, model.ReasonGateOpen,
 		model.ReasonProcessStopped, model.ReasonDoneUnseen,
 	} {
 		c := string(reasonAccent(r))
@@ -754,6 +754,49 @@ func TestReasonAccentsAreDistinct(t *testing.T) {
 			t.Errorf("%s and %s share accent %s", prev, r, c)
 		}
 		seen[c] = r
+	}
+}
+
+// A parked agent's tile says what it is after, and each tile of the repo it
+// waits on says who it holds.
+func TestTilesDrawBothEndsOfAnEdge(t *testing.T) {
+	s := testSnapshot()
+	web := &s.Repos[2].Agents[0]
+	web.BlockedOn, web.After = "api#412", "acme/api"
+	out := plain(withSnapshot(t, s, 143).View())
+	for _, want := range []string{"    ⧗ after ◆ api · can't land yet", "    ▸ holds ▣ web"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the grid does not show %q:\n%s", want, out)
+		}
+	}
+
+	web.LandedAt = time.Now().Add(-5 * time.Minute)
+	if out := plain(withSnapshot(t, s, 143).View()); !strings.Contains(out, "⧗ after ◆ api · landed 5m ago") {
+		t.Errorf("a landed edge does not say so:\n%s", out)
+	}
+}
+
+// Selecting or hovering one end of an edge brightens the line on the tile at
+// the other end. A tile on no edge lights nothing.
+func TestSelectingOneEndLightsTheOther(t *testing.T) {
+	s := testSnapshot()
+	s.Repos[2].Agents[0].BlockedOn, s.Repos[2].Agents[0].After = "api#412", "acme/api"
+	m := withSnapshot(t, s, 143)
+	webTile := tile{Agent: s.Repos[2].Agents[0], Repo: s.Repos[2]}
+	apiTile := tile{Agent: s.Repos[1].Agents[0], Repo: s.Repos[1]}
+	edge := func(tl tile) string { return strings.Join(m.tileEdgeLines(tl, 60), "\n") }
+
+	m.cursor = m.targetIndex("pane:w1:p1")
+	dimWeb, dimAPI := edge(webTile), edge(apiTile)
+
+	m.cursor = m.targetIndex("pane:w2:p1")
+	if edge(webTile) == dimWeb {
+		t.Error("selecting api did not light web's after line")
+	}
+	m.cursor = noSelection
+	m.hover = m.targetIndex("pane:w3:p1")
+	if edge(apiTile) == dimAPI {
+		t.Error("hovering web did not light api's holds line")
 	}
 }
 

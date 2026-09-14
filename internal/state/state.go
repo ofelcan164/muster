@@ -99,6 +99,11 @@ type Persisted struct {
 	// only way to tell a fresh task line from one written long ago.
 	TaskSeenAt map[string]TaskStamp `json:"task_seen_at"`
 
+	// LandedSeenAt records when the daemon first saw a pane's landed token match
+	// its blocked_on. The gate rule asks whether anyone moved after the landing,
+	// and herdr keeps no time for it either.
+	LandedSeenAt map[string]TaskStamp `json:"landed_seen_at"`
+
 	// lastWritten is the last serialised form, used to skip redundant writes.
 	lastWritten []byte
 }
@@ -128,13 +133,14 @@ type StatusStamp struct {
 
 func LoadPersisted() *Persisted {
 	p := &Persisted{
-		GridSlots:   map[string]int{},
-		StatusSince: map[string]StatusStamp{},
-		LastDoneSeq: map[string]uint64{},
-		TaskSeenAt:  map[string]TaskStamp{},
-		LastProcess: map[string]string{},
-		EverWorked:  map[string]bool{},
-		Stopped:     map[string]StoppedStamp{},
+		GridSlots:    map[string]int{},
+		StatusSince:  map[string]StatusStamp{},
+		LastDoneSeq:  map[string]uint64{},
+		TaskSeenAt:   map[string]TaskStamp{},
+		LandedSeenAt: map[string]TaskStamp{},
+		LastProcess:  map[string]string{},
+		EverWorked:   map[string]bool{},
+		Stopped:      map[string]StoppedStamp{},
 	}
 	b, err := os.ReadFile(PersistPath())
 	if err != nil {
@@ -154,6 +160,9 @@ func LoadPersisted() *Persisted {
 	}
 	if p.TaskSeenAt == nil {
 		p.TaskSeenAt = map[string]TaskStamp{}
+	}
+	if p.LandedSeenAt == nil {
+		p.LandedSeenAt = map[string]TaskStamp{}
 	}
 	if p.LastProcess == nil {
 		p.LastProcess = map[string]string{}

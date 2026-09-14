@@ -16,6 +16,7 @@ func skillHome(t *testing.T) string {
 	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(dir, ".claude"))
 	t.Setenv("CODEX_HOME", filepath.Join(dir, "no-codex"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "no-config"))
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", filepath.Join(dir, "state"))
 	if err := os.MkdirAll(filepath.Join(dir, ".claude", "skills"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -71,13 +72,65 @@ func TestSkillDocumentsTheTokensMusterReads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, token := range []string{"task", "blocked_on", "note", "role"} {
+	for _, token := range []string{"task", "blocked_on", "landed", "note", "role"} {
 		if !strings.Contains(string(b), "`"+token+"`") {
 			t.Errorf("the skill does not document the %q token", token)
 		}
 	}
 	if !strings.Contains(string(b), "report-metadata") {
 		t.Error("the skill does not name the command that writes the tokens")
+	}
+}
+
+// An agent pane has neither Muster on PATH nor its state dir, so the installed
+// skill carries both. A new path rewrites it, and with no state dir there is no
+// command to write, so there is no skill either.
+func TestSkillCarriesTheCommandThatReachesMuster(t *testing.T) {
+	dir := skillHome(t)
+	if _, err := Skill(); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(SkillPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "'" + bin + "' --state-dir '" + filepath.Join(dir, "state") + "' show"
+	if !strings.Contains(string(body), want) {
+		t.Errorf("the skill does not carry %q", want)
+	}
+	if strings.Contains(string(body), commandPlaceholder) {
+		t.Error("the placeholder survived into the installed skill")
+	}
+
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", filepath.Join(dir, "moved"))
+	if res, err := Skill(); err != nil || !res.Changed {
+		t.Errorf("a new state dir did not rewrite the skill: %v", err)
+	}
+
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", "")
+	if _, err := Skill(); err == nil {
+		t.Error("installed a skill with no command to put in it")
+	}
+}
+
+// Declining the skill is not declining the keys, or the reverse.
+func TestSkillRefusalHasItsOwnMarker(t *testing.T) {
+	dir := t.TempDir()
+	if err := SetSkillOptOut(dir, true); err != nil {
+		t.Fatal(err)
+	}
+	if !SkillOptedOut(dir) || OptedOut(dir) {
+		t.Errorf("skill refused = %v, keys refused = %v; want true, false", SkillOptedOut(dir), OptedOut(dir))
+	}
+	if err := SetSkillOptOut(dir, false); err != nil {
+		t.Fatal(err)
+	}
+	if SkillOptedOut(dir) {
+		t.Error("installing again did not clear the refusal")
 	}
 }
 

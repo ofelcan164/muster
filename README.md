@@ -83,16 +83,19 @@ daemon, that daemon's `musterd.log` and lock files in
 the plugin state dir, and a `server.reload_config` call so the keys go live.
 The daemon adds `snapshot.json` and `state.json` once it reaches herdr.
 `ui.json` appears the first time you change the sort or dismiss a row, and
-`chain.json` when you first set a chain.
+`chain.json` when the orchestrator first records a usual order.
 
-The reporting skill is the exception. **Install the reporting skill for the
-orchestrator** writes to your agent directories, so it stays a separate opt-in.
-It puts one copy in `~/.agents/skills/muster-report/` and symlinks it into every
-runtime you actually have: `~/.claude/skills`, `~/.codex/skills`
-(`CODEX_HOME` honoured) and `~/.config/opencode/skill`. A runtime you have not
-installed is left alone rather than created.
+Install also writes the reporting skill, into your agent directories rather
+than herdr's. It puts one copy in `~/.agents/skills/muster-report/` and
+symlinks it into every runtime you actually have: `~/.claude/skills`,
+`~/.codex/skills` (`CODEX_HOME` honoured) and `~/.config/opencode/skill`. A
+runtime you have not installed is left alone rather than created. The copy
+names the absolute path to `muster` and its state dir, which an agent pane has
+no other way to find, so every install rewrites it. `muster uninstall-skill`
+removes it and records the refusal, so the startup hook stops putting it back;
+`muster install-skill` asks for it again.
 
-Commands that touch state (`install`, `chain`, `musterd dump`) run inside a
+Commands that touch state (`install`, `show`, `chain`, `musterd dump`) run inside a
 herdr pane, where `HERDR_PLUGIN_STATE_DIR` is set. From a plain shell they fail
 with "no state directory": pass `--state-dir <dir>`.
 
@@ -131,8 +134,8 @@ In the overlay:
 - digits `1`-`9` jump to a ribbon row, `x` dismisses one until its status
   changes
 - `o` marks the selected agent as the orchestrator
-- `i` messages the orchestrator, `t` reports a finished agent to it, for when
-  the orchestrator never heard it finish
+- `i` messages the orchestrator, `t` tells it about an open gate: work landed
+  and the agents parked on it have not moved
 - `S` installs the reporting skill, but only while its banner is on screen
 - `M` jumps to the orchestrator. Muster opens as a herdr popup, which gets
   every key while it is open, your prefix included, so this is what keeps
@@ -153,7 +156,8 @@ muster install-skill | uninstall-skill | uninstall-keys
 muster mark-orchestrator
 muster doctor [--yes]     # check health, ask before restarting a stuck daemon
 muster --help
-muster chain get [--json] | set <spec> [--independent a,b] [--by NAME] | clear
+muster show [target]      # the usual order, and where parked work stands
+muster chain get [--json] | set <spec> [--by NAME] | clear
 muster discover
 muster badge [letter]     # the tab bar line install writes
 
@@ -165,30 +169,48 @@ musterd status
 
 There is nothing to configure. Muster reads no config of its own.
 
-## Chain
+## Dependencies
 
-The chain is the dependency order the orchestrator recorded, so a finished
-agent shows who it unblocks. Two mechanisms, both owned by the orchestrator:
+Some work can be written in parallel but not tested or merged until work in
+another repo is on main. web can build its checkout UI alongside api's new
+endpoints, and still has to wait for api to land before it can test against
+them.
+
+The orchestrator records that on the waiting agent's pane:
 
 ```sh
-muster chain set "contracts > api > web,mobile" --independent infra
+herdr pane report-metadata w3:p1 --source muster \
+  --token task="checkout UI against the new api endpoints" \
+  --token blocked_on="api#412" --ttl-ms 86400000
 ```
 
-`>` is sequence, `,` is parallel. It persists in the state dir across sessions;
-read it back with `muster chain get` to confirm or replace it. Without a chain
-the gate rule stays silent rather than guessing.
+The part before `#` names the repo. The web tile then reads
+`⧗ after ◆ api · can't land yet`, and each api tile reads `▸ holds ▣ web`.
+Selecting or hovering either tile brightens the line on the other.
 
-Who runs that: whoever has the binary and the state dir. An agent pane has
-neither, so either you set it, or you give the orchestrator the full path to
-`muster` and its `--state-dir`. The reporting skill deliberately does not teach
-it, since a skill that names a path that does not exist on the reader's machine
-is worse than one that stays quiet.
+Muster cannot see a merge, and herdr's `done` only means an agent's turn ended.
+So when you tell the orchestrator the PR merged and main is pulled, it writes
+`landed="api#412"` on the same pane and the tile reads `landed 5m ago`. If it
+then ends its turn without moving web on, a `GATE OPEN` row reaches the top of
+the ribbon, and `t` sends it the reminder.
 
-The task lines come separately, through `herdr pane report-metadata`
-(`task`, `blocked_on`, `note` tokens). The reporting skill teaches the
-orchestrator to write them at dispatch time and rewrite them when the work
-changes. Without it Muster falls back to terminal titles, then branch and
-directory, labelled as guesses.
+The usual order between repos lives in the state dir as `chain.json`:
+
+```sh
+muster chain set "contracts > api > web,mobile" --by orchestrator
+muster show            # the order, then every agent on either end of an edge
+muster show web        # one repo; repo/agent or a pane id also work
+```
+
+`>` is sequence, `,` is parallel. It is a default the orchestrator reads before
+it writes `blocked_on`, and Muster draws nothing from it: an order that holds
+for one feature can reverse for the next.
+
+An agent pane has neither `muster` on its `PATH` nor the state dir, so the
+reporting skill carries the full command for `show` and `chain`. The skill also
+teaches the orchestrator to write the task lines at dispatch time and rewrite
+them when the work changes. Without them Muster falls back to terminal titles,
+then branch and directory, labelled as guesses.
 
 ## How it works
 

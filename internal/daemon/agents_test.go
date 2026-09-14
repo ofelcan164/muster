@@ -80,19 +80,19 @@ func TestTaskStampHoldsUntilTheValueChanges(t *testing.T) {
 	d := newTestDaemon(t)
 	t0 := time.Now()
 
-	first := d.stampTask("w1:p1", "build the thing", t0)
+	first := stamp(d.persist.TaskSeenAt, "w1:p1", "build the thing", t0)
 	if !first.Equal(t0) {
 		t.Fatalf("first sighting should stamp now, got %v", first)
 	}
-	again := d.stampTask("w1:p1", "build the thing", t0.Add(time.Hour))
+	again := stamp(d.persist.TaskSeenAt, "w1:p1", "build the thing", t0.Add(time.Hour))
 	if !again.Equal(t0) {
 		t.Errorf("unchanged task must keep its original stamp, got %v", again)
 	}
-	changed := d.stampTask("w1:p1", "build a different thing", t0.Add(2*time.Hour))
+	changed := stamp(d.persist.TaskSeenAt, "w1:p1", "build a different thing", t0.Add(2*time.Hour))
 	if !changed.Equal(t0.Add(2 * time.Hour)) {
 		t.Errorf("a new task value must restamp, got %v", changed)
 	}
-	if cleared := d.stampTask("w1:p1", "", t0); !cleared.IsZero() {
+	if cleared := stamp(d.persist.TaskSeenAt, "w1:p1", "", t0); !cleared.IsZero() {
 		t.Errorf("clearing the token should clear the stamp, got %v", cleared)
 	}
 }
@@ -269,5 +269,60 @@ func TestToldIsOnlyWhatSomeoneSaid(t *testing.T) {
 	}
 	if got := d.orchFrom(&a, agents, "token").LastMessage; got != "ship the api" {
 		t.Errorf("got %q, want the message that was sent", got)
+	}
+}
+
+// landed only opens a gate when it names what blocked_on names, and the gate
+// rule compares against the stamp, so the stamp has to hold still while the
+// value does.
+func TestLandedStampsOnlyWhenItMatchesBlockedOn(t *testing.T) {
+	d := newTestDaemon(t)
+	t0 := time.Now()
+	parked := func(landed string) *herdr.Snapshot {
+		a := agentPane("w3:p1", "w3", "/web", "idle")
+		a.Tokens = map[string]string{"blocked_on": "api#412", "landed": landed}
+		return &herdr.Snapshot{Agents: []herdr.Agent{a}}
+	}
+
+	if got := d.buildAgents(parked("api#399"), t0)["w3:p1"]; !got.LandedAt.IsZero() {
+		t.Fatalf("a landed token for other work opened the gate: %v", got.LandedAt)
+	}
+	if got := d.buildAgents(parked("api#412"), t0.Add(time.Minute))["w3:p1"]; !got.LandedAt.Equal(t0.Add(time.Minute)) {
+		t.Fatalf("LandedAt = %v, want when the match was first seen", got.LandedAt)
+	}
+	if got := d.buildAgents(parked("api#412"), t0.Add(time.Hour))["w3:p1"]; !got.LandedAt.Equal(t0.Add(time.Minute)) {
+		t.Errorf("LandedAt moved while nothing changed: %v", got.LandedAt)
+	}
+	if got := d.buildAgents(parked(""), t0.Add(2*time.Hour))["w3:p1"]; !got.LandedAt.IsZero() {
+		t.Errorf("clearing landed left the gate open: %v", got.LandedAt)
+	}
+
+	d.buildAgents(parked("api#412"), t0)
+	d.buildAgents(&herdr.Snapshot{}, t0)
+	if len(d.persist.LandedSeenAt) != 0 {
+		t.Errorf("LandedSeenAt kept a dead pane: %v", d.persist.LandedSeenAt)
+	}
+}
+
+// blocked_on names a repo the way a person would, with or without its owner.
+// Anything that does not name another repo on screen stays unresolved.
+func TestBlockedOnResolvesToTheRepoItNames(t *testing.T) {
+	repos := []model.Repo{
+		{Key: "acme/api", Name: "acme/api", IsGit: true},
+		{Key: "acme/web", Name: "acme/web", IsGit: true, Agents: []model.Agent{
+			{PaneID: "short", BlockedOn: "api#412"},
+			{PaneID: "owner", BlockedOn: "acme/api"},
+			{PaneID: "case", BlockedOn: "API#2"},
+			{PaneID: "other-org", BlockedOn: "otherorg/api#1"},
+			{PaneID: "free-text", BlockedOn: "design review"},
+			{PaneID: "itself", BlockedOn: "web#3"},
+		}},
+	}
+	resolveEdges(repos)
+	want := map[string]string{"short": "acme/api", "owner": "acme/api", "case": "acme/api"}
+	for _, a := range repos[1].Agents {
+		if a.After != want[a.PaneID] {
+			t.Errorf("%s: blocked_on %q resolved to %q, want %q", a.PaneID, a.BlockedOn, a.After, want[a.PaneID])
+		}
 	}
 }

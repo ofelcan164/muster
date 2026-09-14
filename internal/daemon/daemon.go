@@ -17,7 +17,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ofelcan164/muster/internal/chain"
 	"github.com/ofelcan164/muster/internal/discover"
 	"github.com/ofelcan164/muster/internal/herdr"
 	"github.com/ofelcan164/muster/internal/model"
@@ -232,7 +231,6 @@ func (d *Daemon) reconcile(ctx context.Context) bool {
 		Repos:    repos,
 		Orch:     orch,
 		Stopped:  d.stopped,
-		Chain:    chain.Load(state.Dir()),
 		EverDone: everDone,
 		EverWorked: func() map[string]bool {
 			out := make(map[string]bool, len(d.persist.EverWorked))

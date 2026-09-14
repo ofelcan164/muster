@@ -23,7 +23,28 @@ const (
 	skillName = "muster-report"
 	skillSrc  = "skills/muster-report/SKILL.md"
 	skillFile = "SKILL.md"
+
+	// commandPlaceholder stands where the skill needs the command that reaches
+	// Muster. An agent pane has neither the binary on PATH nor the state dir,
+	// and herdr reports neither, so install writes the real ones in.
+	commandPlaceholder = "{{muster}}"
 )
+
+// renderSkill is the skill as this install writes it: the embedded text with
+// this binary and its state dir in place of the placeholder. With no state dir
+// there is no command to write, and a skill naming one that does not work is
+// worse than no skill, so that is an error.
+func renderSkill() ([]byte, error) {
+	b, err := skillFS.ReadFile(skillSrc)
+	if err != nil {
+		return nil, err
+	}
+	cmd, err := musterCommand()
+	if err != nil {
+		return nil, err
+	}
+	return bytes.ReplaceAll(b, []byte(commandPlaceholder), []byte(cmd)), nil
+}
 
 // harness is one agent runtime and where it keeps personal skills.
 //
@@ -116,16 +137,17 @@ func Skill() (*Result, error) {
 	if canon == "" {
 		return nil, errors.New("cannot locate a home directory")
 	}
-	want, err := skillFS.ReadFile(skillSrc)
+	want, err := renderSkill()
 	if err != nil {
 		return nil, err
 	}
 	path := SkillPath()
 	res := &Result{Path: path}
 
-	// The embedded copy is the version. A binary carrying a newer skill writes
-	// different bytes, which is what makes a separate version sentinel file
-	// unnecessary: the content already answers the question it would have.
+	// The rendered copy is the version. A binary carrying a newer skill, or
+	// running from a different path, writes different bytes, which is what makes
+	// a separate version sentinel file unnecessary: the content already answers
+	// the question it would have.
 	if existing, err := os.ReadFile(path); err != nil || string(existing) != string(want) {
 		if err := writeAtomic(path, want, 0o644); err != nil {
 			return nil, err
