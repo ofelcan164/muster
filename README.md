@@ -223,6 +223,23 @@ default branch and rebuilds `bin/`; `--ref <ref>` pins something else. The next
 overlay you open runs the new build. The daemon checks its own binary every few
 seconds and restarts itself on the new one, so nothing else needs running.
 
+## Health check
+
+Run the **Check Muster's health** action when the overlay looks wrong and
+reopening it does not help: no tiles while agents are running, tiles that stop
+changing, or an update that never showed up.
+
+The usual cause is a daemon that no longer matches the install. It restarts
+itself when an update rebuilds its binary, but not when the checkout it started
+from has been deleted, and a daemon that stops writing its snapshot still holds
+the lock, so nothing starts a new one. The check looks at the daemon, the
+snapshot, the keybindings and the reporting skill, and restarts a daemon in
+either state. It never touches the state dir or your config: for missing keys
+or a missing skill it names the command to run instead.
+
+From a herdr pane in a source checkout, `./bin/muster doctor` runs the same
+check and asks before restarting anything.
+
 ## Uninstall
 
 ```sh
@@ -255,10 +272,7 @@ state dir, which is right when the plugin is going away.
   open: the error is in `musterd.log` in the state dir. The popup is gone
   before anything it prints could be read.
 - Wrong or empty after a reinstall (0 workspaces with agents up, stale tiles):
-  run the **Check Muster's health** action. It restarts a daemon stranded on a
-  deleted checkout or no longer writing its snapshot, and says how to fix
-  anything else. It never touches the state dir. From a herdr pane in a source
-  checkout, `./bin/muster doctor` does the same but asks first.
+  run the **Check Muster's health** action, see [Health check](#health-check).
 - Tiles show terminal titles instead of task lines: the reporting skill is
   missing. Press `S` while its banner is up, or run `muster install-skill`.
 - A new binding does nothing: an old overlay binary keeps running after a
