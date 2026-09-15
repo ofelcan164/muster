@@ -24,23 +24,30 @@ func (m *Model) View() string {
 	lines = append(lines, "")
 	lines = append(lines, m.ribbonLines(len(lines))...)
 	lines = append(lines, m.gridLines(len(lines))...)
-	if strip := m.stripLines(len(lines) + 1); len(strip) > 0 {
-		lines = append(lines, "")
-		lines = append(lines, strip...)
-	}
 
-	if m.filtering || m.filter != "" {
-		lines = append(lines, "", m.viewFilterBar())
-		// The query line is pinned to the bottom of the window. It is what you
-		// are typing, so scrolling it away leaves you typing blind.
-		body := m.window(lines[:len(lines)-1], m.height-1)
-		return strings.Join(append(body, lines[len(lines)-1]), "\n")
+	// The strip and the query line are pinned to the bottom, and everything
+	// above them scrolls. The strip is how you reach the orchestrator, and the
+	// query line is what you are typing: scrolling either away leaves you blind.
+	var strip, bar []string
+	if s := m.stripLines(len(lines) + 1); len(s) > 0 {
+		strip = append([]string{""}, s...)
 	}
-	return strings.Join(m.window(lines, m.height), "\n")
+	if m.filtering || m.filter != "" {
+		bar = []string{"", m.viewFilterBar()}
+	}
+	if m.height-len(strip)-len(bar) < 1 {
+		// Too short for the strip and a line above it. The strip scrolls with
+		// the rest rather than covering all of it.
+		lines, strip = append(lines, strip...), nil
+	}
+	pinned := append(strip, bar...)
+	return strings.Join(append(m.window(lines, m.height-len(pinned)), pinned...), "\n")
 }
 
-// window trims the rendered screen to h lines, scrolled to keep the selection
-// visible, and moves the recorded hit regions with it.
+// window trims the lines that scroll to h, kept on the selection, with a scroll
+// bar down the right edge when they do not fit, and moves the recorded hit
+// regions with them. Regions past the end of lines belong to the pinned strip,
+// which moves up to sit right under the window.
 //
 // Without this the overlay handed bubbletea more lines than the terminal has.
 // Its renderer keeps the last ones, so the header and the ribbon were what
@@ -51,32 +58,61 @@ func (m *Model) window(lines []string, h int) []string {
 		return lines
 	}
 	top := 0
-	if y, ok := m.cursorLine(); ok && y >= h {
-		top = y - h + 1
+	// The whole selection, not only its first line, or a tall tile scrolls in
+	// with its bottom half still under the strip.
+	if first, last, ok := m.cursorLines(); ok && last >= h {
+		top = min(first, last-h+1)
 	}
-	if lastTop := len(lines) - h; top > lastTop {
-		top = lastTop
+	top = min(top, len(lines)-h)
+
+	hits := m.hits[:0]
+	for _, r := range m.hits {
+		if r.y >= len(lines) {
+			r.y -= len(lines) - h
+		} else if r.y -= top; r.y < 0 || r.y >= h {
+			// Scrolled out of sight. Left in, a tile hidden under the strip
+			// would take the clicks meant for the strip.
+			continue
+		}
+		hits = append(hits, r)
 	}
-	for i := range m.hits {
-		m.hits[i].y -= top
+	m.hits = hits
+
+	// The thumb is as tall as the share of lines on screen, and reaches the
+	// bottom exactly when the window does.
+	size := max(1, h*h/len(lines))
+	pos := top * (h - size) / (len(lines) - h)
+	out := make([]string, h)
+	for i := range out {
+		mark := styFaint.Render("│")
+		if i >= pos && i < pos+size {
+			mark = styMeta.Render("┃")
+		}
+		out[i] = pad(ansi.Truncate(lines[top+i], m.width-1, ""), m.width-1) + mark
 	}
-	return lines[top : top+h]
+	return out
 }
 
-// cursorLine is the first screen line the selection was drawn on, which is what
-// the window scrolls to keep visible. The hit regions already record it, so
-// nothing has to measure the layout twice.
-func (m *Model) cursorLine() (int, bool) {
+// cursorLines are the first and last screen lines the selection was drawn on,
+// which is what the window scrolls to keep visible. The hit regions already
+// record them, so nothing has to measure the layout twice.
+func (m *Model) cursorLines() (first, last int, ok bool) {
 	if m.cursor < 0 {
-		return 0, false
+		return 0, 0, false
 	}
-	y, found := 0, false
 	for _, h := range m.hits {
-		if h.target == m.cursor && (!found || h.y < y) {
-			y, found = h.y, true
+		if h.target != m.cursor {
+			continue
 		}
+		if !ok || h.y < first {
+			first = h.y
+		}
+		if !ok || h.y > last {
+			last = h.y
+		}
+		ok = true
 	}
-	return y, found
+	return first, last, ok
 }
 
 // headerLines is the title row, plus the warning on a line of its own when the
@@ -107,7 +143,8 @@ func (m *Model) header() string {
 		right = styWarn.Render("! " + m.warning)
 	}
 
-	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
+	// One column short of the edge, which is where the scroll bar draws.
+	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right) - 1
 	if gap < 1 {
 		// Too narrow for both. headerLines puts a warning on its own line; the
 		// key hints are what get dropped.
