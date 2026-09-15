@@ -127,12 +127,51 @@ func TestShortTerminalScrollsToTheSelection(t *testing.T) {
 	}
 	// The hit regions, and so the cursor's line, come from a render.
 	m.View()
-	y, ok := m.cursorLine()
+	y, _, ok := m.cursorLines()
 	if !ok {
 		t.Fatal("the selection was not drawn at all")
 	}
 	if y < 0 || y >= 12 {
 		t.Errorf("the selection is drawn on line %d of a 12 line screen", y)
+	}
+}
+
+// The strip is pinned under the part that scrolls, so it stays on screen however
+// long the grid is, and a click on it reaches the orchestrator rather than a
+// tile scrolled out of sight behind it.
+func TestStripStaysPinnedWhileTheGridScrolls(t *testing.T) {
+	const h = 16
+	m := New(withOrch(), "")
+	m.Update(tea.WindowSizeMsg{Width: 53, Height: h})
+
+	for range 5 {
+		lines := strings.Split(plain(m.View()), "\n")
+		if len(lines) != h {
+			t.Fatalf("rendered %d lines, want %d", len(lines), h)
+		}
+		if !strings.Contains(lines[h-1], "press i to tell it something") {
+			t.Errorf("the strip is not on the last line:\n%s", strings.Join(lines, "\n"))
+		}
+		if !strings.Contains(strings.Join(lines, "\n"), "┃") {
+			t.Errorf("a grid taller than the screen has no scroll bar")
+		}
+		if idx, ok := m.targetAt(2, h-1); !ok || !m.isKind(idx, kindStrip) {
+			t.Errorf("a click on the strip hit target %d, not the strip", idx)
+		}
+		if _, last, ok := m.cursorLines(); ok && last >= h-5 {
+			t.Errorf("the selection's last line %d is under the strip", last)
+		}
+		key(m, "down")
+	}
+}
+
+func TestShortViewStillFits(t *testing.T) {
+	for _, h := range []int{3, 5, 6, 10} {
+		m := New(withOrch(), "")
+		m.Update(tea.WindowSizeMsg{Width: 53, Height: h})
+		if n := len(strings.Split(m.View(), "\n")); n > h {
+			t.Errorf("height %d: rendered %d lines", h, n)
+		}
 	}
 }
 
@@ -145,7 +184,7 @@ func TestClicksLandAfterScrolling(t *testing.T) {
 		key(m, "down")
 	}
 	lines := strings.Split(m.View(), "\n")
-	y, ok := m.cursorLine()
+	y, _, ok := m.cursorLines()
 	if !ok {
 		t.Fatal("nothing selected")
 	}
