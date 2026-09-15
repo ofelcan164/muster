@@ -219,33 +219,34 @@ func (m *Model) gridLines(startY int) []string {
 		}
 	}
 
+	blank := strings.Repeat(" ", cellWidth)
 	for i := 0; i < len(tiles); i += cols {
-		var cells [][]string
+		row := tiles[i:min(i+cols, len(tiles))]
+		// Every tile stretches to the tallest in its row, so none has dead space
+		// under it that neither lights up nor clicks. The blank line between rows
+		// belongs to no tile, like the space between columns.
+		texts := make([][]string, len(row))
 		height := 0
-		for c := 0; c < cols && i+c < len(tiles); c++ {
+		for c, t := range row {
+			texts[c] = m.tileText(t, cellWidth-barWidth)
+			height = max(height, len(texts[c]))
+		}
+		if i > 0 {
+			out = append(out, "")
+		}
+		cells := make([][]string, len(row))
+		for c, t := range row {
 			// Each column starts after the cells before it, plus one space of
 			// separator per gap. Passing the offset is what makes every column
 			// clickable rather than only the first.
-			x0 := c * (cellWidth + 1)
-			lines := m.tileLines(tiles[i+c], cellWidth, startY+len(out), x0)
-			cells = append(cells, lines)
-			if len(lines) > height {
-				height = len(lines)
-			}
+			cells[c] = m.tileLines(t, texts[c], height, cellWidth, startY+len(out), c*(cellWidth+1))
 		}
-		// Pad every cell to the tallest, so columns stay aligned.
-		for c := range cells {
-			for len(cells[c]) < height {
-				cells[c] = append(cells[c], strings.Repeat(" ", cellWidth))
-			}
-		}
-		for row := 0; row < height; row++ {
-			var parts []string
-			for c := 0; c < cols; c++ {
+		for r := 0; r < height; r++ {
+			parts := make([]string, cols)
+			for c := range parts {
+				parts[c] = blank
 				if c < len(cells) {
-					parts = append(parts, cells[c][row])
-				} else {
-					parts = append(parts, strings.Repeat(" ", cellWidth))
+					parts[c] = cells[c][r]
 				}
 			}
 			out = append(out, fitLine(strings.Join(parts, " "), m.width))
@@ -265,33 +266,33 @@ func (m *Model) gridLines(startY int) []string {
 // tile line spends before its content starts.
 const barWidth = 2
 
-func (m *Model) tileLines(t tile, width, startY, x0 int) []string {
-	var (
-		lines []string
-		key   string
-		bar   string
-	)
+// text is the tile's content from tileText, drawn height lines tall.
+func (m *Model) tileLines(t tile, text []string, height, width, startY, x0 int) []string {
+	key, bar := "ws:"+t.Workspace.ID, styFaint.Render("▌")
 	if t.isAgent() {
-		lines = m.agentTileLines(t, width-barWidth)
-		key = "pane:" + t.Agent.PaneID
-		bar = repoStyle(t.Repo).Render("▌")
-	} else {
-		lines = m.emptyTileLines(t, width-barWidth)
-		key = "ws:" + t.Workspace.ID
-		bar = styFaint.Render("▌")
+		key, bar = "pane:"+t.Agent.PaneID, repoStyle(t.Repo).Render("▌")
 	}
 	ti := m.targetIndex(key)
 
-	out := make([]string, len(lines))
-	for i, text := range lines {
+	text = append(text, make([]string, max(0, height-len(text)))...)
+	out := make([]string, len(text))
+	for i, s := range text {
 		m.claim(startY+i, x0, width, ti)
-		line := fitLine(bar+" "+text, width)
+		line := fitLine(bar+" "+s, width)
 		if m.isActive(ti) {
 			line = paint(line, stySel)
 		}
 		out[i] = line
 	}
 	return out
+}
+
+// tileText is a tile's content lines, agent or empty workspace, before the bar.
+func (m *Model) tileText(t tile, width int) []string {
+	if t.isAgent() {
+		return m.agentTileLines(t, width)
+	}
+	return m.emptyTileLines(t, width)
 }
 
 // claim marks a whole cell-width line as belonging to a target.
@@ -313,7 +314,7 @@ func (m *Model) isActive(target int) bool {
 // agentTileLines renders one agent tile in zones: line 1 is where (workspace
 // and pane), line 2 is which checkout (repo and branch), line 3 is who
 // (status, agent and kind), line 4 is what it says (question or task); then
-// the dependency lines, the shared panes footer, and a blank separator. Every
+// the dependency lines and the shared panes footer. Every
 // field keeps its row, so the eye learns positions instead of parsing slashes
 // and dots.
 func (m *Model) agentTileLines(t tile, width int) []string {
@@ -358,7 +359,6 @@ func (m *Model) agentTileLines(t tile, width int) []string {
 	if len(t.Panes) > 0 {
 		lines = append(lines, styFaint.Render("    "+tilePanesFooter(t)))
 	}
-	lines = append(lines, "")
 	return lines
 }
 
@@ -491,7 +491,7 @@ func (m *Model) emptyTileLines(t tile, width int) []string {
 	if sigils != "" {
 		line2 = "    " + sigils + " " + detail
 	}
-	return []string{line1, line2, ""}
+	return []string{line1, line2}
 }
 
 // emptyTileDetail is an empty tile's second line: the one repo its panes sit
