@@ -119,6 +119,32 @@ func TestRibbonAndGridNeverShareALine(t *testing.T) {
 	}
 }
 
+// Tiles in one row stretch to the same lines. A short tile beside a tall one
+// used to get padding under it that neither lit up nor clicked, so two lines
+// running into each other that share a target must carry the same targets.
+func TestTilesInARowCoverTheSameLines(t *testing.T) {
+	for _, w := range widths {
+		m, _ := rendered(t, w)
+		byLine := map[int]map[int]bool{}
+		for _, h := range m.hits {
+			if byLine[h.y] == nil {
+				byLine[h.y] = map[int]bool{}
+			}
+			byLine[h.y][h.target] = true
+		}
+		for y, here := range byLine {
+			next := byLine[y+1]
+			shared := false
+			for ti := range here {
+				shared = shared || next[ti]
+			}
+			if shared && len(here) != len(next) {
+				t.Errorf("width %d: line %d has targets %v, line %d has %v", w, y, here, y+1, next)
+			}
+		}
+	}
+}
+
 // One click opens. An empty workspace tile has no pane of its own, so
 // clicking it must focus its workspace rather than only moving the selection.
 func TestOneClickOpensAnEmptyWorkspaceTile(t *testing.T) {
