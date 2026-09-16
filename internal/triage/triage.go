@@ -14,8 +14,10 @@ import (
 	"github.com/ofelcan164/muster/internal/model"
 )
 
-// RibbonMax caps the ranked ribbon. The plan holds it to four rows so it stays
-// scannable and so it can vanish entirely when nothing needs you.
+// RibbonMax caps the ribbon the overlay draws. The plan holds it to four rows so
+// it stays scannable and so it can vanish entirely when nothing needs you.
+// Rank itself does not apply it: the attention sort ranks every tile from the
+// full list, and a capped one sorted a fifth agent that needed you as quiet.
 const RibbonMax = 4
 
 // StaleAfter is how long an idle agent that never reported done has to sit
@@ -72,7 +74,7 @@ type agentRef struct {
 }
 
 // Rank builds the ribbon. Rows are ordered by rank, then by the tie-break the
-// table specifies for that rank, and the result is capped at RibbonMax.
+// table specifies for that rank. Every row is kept; see RibbonMax.
 func Rank(in Input) []model.Attention {
 	// The orchestrator has its own strip, so it stays out of the informational
 	// ranks. It does not stay out of the ribbon entirely: an orchestrator
@@ -183,9 +185,6 @@ func Rank(in Input) []model.Attention {
 	}
 
 	slices.SortStableFunc(rows, func(a, b model.Attention) int { return cmp.Compare(a.Rank, b.Rank) })
-	if len(rows) > RibbonMax {
-		rows = rows[:RibbonMax]
-	}
 	return rows
 }
 

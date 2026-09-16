@@ -263,8 +263,8 @@ type Counts struct {
 	Repos      int `json:"repos"`
 	Workspaces int `json:"workspaces"`
 	Agents     int `json:"agents"`
-	// NeedsYou is the number of rows in Attention, so never more than the
-	// ribbon's cap of four.
+	// NeedsYou is the number of rows in Attention. The overlay draws at most
+	// four of them.
 	NeedsYou int `json:"needs_you"`
 	// Working is the number of agents whose status is working.
 	Working int `json:"working"`

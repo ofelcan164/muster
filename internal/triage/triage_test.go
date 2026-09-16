@@ -97,14 +97,15 @@ func TestIdleNeverDoneNeedsBothQuietAndNoDoneHistory(t *testing.T) {
 	}
 }
 
-func TestRibbonIsCappedAtFour(t *testing.T) {
+// The overlay caps what it draws. The sort needs every row.
+func TestRankKeepsEveryRow(t *testing.T) {
 	var agents []model.Agent
 	for i := 0; i < 10; i++ {
 		agents = append(agents, agent(string(rune('a'+i)), model.StatusBlocked, time.Duration(i)*time.Minute))
 	}
 	got := Rank(Input{Now: now, Repos: []model.Repo{repo("api", agents...)}})
-	if len(got) != RibbonMax {
-		t.Fatalf("ribbon must cap at %d, got %d", RibbonMax, len(got))
+	if len(got) != len(agents) {
+		t.Fatalf("got %d rows for %d blocked agents", len(got), len(agents))
 	}
 }
 
