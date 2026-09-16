@@ -7,6 +7,7 @@ import (
 
 	"github.com/ofelcan164/muster/internal/identity"
 	"github.com/ofelcan164/muster/internal/model"
+	"github.com/ofelcan164/muster/internal/triage"
 )
 
 // Breakpoints are measured in columns of what the popup gets: the whole tab
@@ -269,15 +270,12 @@ func (m *Model) showBanner() bool {
 // Jump returns the pane the user chose, or "".
 func (m *Model) Jump() string { return m.jump }
 
-// ribbonRows is the ranked ribbon, capped by the daemon and never more than
-// four, less anything you have already acknowledged. It disappears entirely
-// when nothing needs you, which is the point.
-//
-// ponytail: the cap is applied by the daemon before this filters, so dismissing
-// a row leaves a gap rather than promoting the fifth thing that needs you. Move
-// the cap to the client if that gap ever matters.
+// ribbonRows is the ranked ribbon, less anything you have already acknowledged,
+// capped at four after that so dismissing a row promotes the next one. It
+// disappears entirely when nothing needs you, which is the point.
 func (m *Model) ribbonRows() []model.Attention {
-	return undismissed(m.snap.Attention, m.dismissed)
+	rows := undismissed(m.snap.Attention, m.dismissed)
+	return rows[:min(len(rows), triage.RibbonMax)]
 }
 
 // undismissed is the attention rows less any dismissed at their current status.

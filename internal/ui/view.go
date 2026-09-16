@@ -161,7 +161,9 @@ func (m *Model) ribbonLines(startY int) []string {
 		return nil
 	}
 
-	out := []string{m.attentionRule(len(rows))}
+	// The count is everything that needs you, as the tab bar badge says, not
+	// just the rows that fit.
+	out := []string{m.attentionRule(len(undismissed(m.snap.Attention, m.dismissed)))}
 	for i, a := range rows {
 		ti := m.ribbonTargetIndex("pane:" + a.PaneID)
 		selected := m.isActive(ti)
