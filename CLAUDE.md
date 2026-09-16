@@ -88,16 +88,16 @@ letter falls back through `m g u y` when the user already bound one, and
 
 Overlay: one tile per agent, one dim lowercase tile per workspace with no
 agents. arrows/`hjkl` move, `enter` jumps to the tile's pane or focuses its
-workspace, `/` searches, `esc` leaves search / clears filter / closes, `s`
+workspace, `/` searches, `esc` leaves search / clears filter / folds the message / closes, `s`
 cycles sort (first seen, a-z, attention, herdr), `J`/`K` move the selected
 tile's workspace one place in herdr's own order and only do anything in herdr
 sort, `g`/`G` ends, `1`-`9` ribbon row, `x` dismisses one, `c` gives the
 hovered or selected tile's repo a random unused colour, `o` marks
-orchestrator, `i` messages it, `t` tells it a gate is open, `S`
+orchestrator, `i` messages it, `t` tells it a gate is open, `e` expands or folds its last message, `S`
 installs the skill while its banner shows, `q`/`ctrl+c` closes, `M` jumps to
 the orchestrator.
 Mouse: click a tile jumps or focuses its workspace, click banner installs
-skill, wheel moves, hover highlights.
+skill, click `e more`/`e less` expands or folds the message, wheel moves, hover highlights.
 
 ## Gotchas
 

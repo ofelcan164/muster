@@ -466,3 +466,44 @@ func TestStripHeadNamesTheRepoNotTheBlock(t *testing.T) {
 		t.Errorf("an orchestrator outside every repo lost its name:\n%s", out)
 	}
 }
+
+// A reply longer than the line gets a more link. e or a click on the link
+// shows all of it, paragraphs included, and esc folds it back before closing.
+func TestSaidExpandsToTheWholeMessage(t *testing.T) {
+	s := withOrch()
+	tail := "and that is the end of the second paragraph"
+	s.Orch.LastSaid = strings.Repeat("api is picking up the schema change. ", 6) + "\n" + tail
+	m := withSnapshot(t, s, 80)
+
+	out := plain(m.View())
+	if !strings.Contains(out, "e more") || strings.Contains(out, tail) {
+		t.Fatalf("a long reply should be cut with a more link:\n%s", out)
+	}
+
+	key(m, "e")
+	out = plain(m.View())
+	if !strings.Contains(out, tail) || !strings.Contains(out, "e less") {
+		t.Fatalf("e should show the whole reply:\n%s", out)
+	}
+
+	key(m, "esc")
+	if m.quit || m.sayMore {
+		t.Fatal("esc should fold the reply, not close the overlay")
+	}
+
+	m.View()
+	var link *hitRegion
+	for i := range m.hits {
+		if m.hits[i].target == moreTarget {
+			link = &m.hits[i]
+		}
+	}
+	if link == nil {
+		t.Fatal("the more link has no click region")
+	}
+	m.Update(tea.MouseMsg{X: link.x0, Y: link.y,
+		Action: tea.MouseActionRelease, Button: tea.MouseButtonLeft})
+	if !m.sayMore || m.jump != "" {
+		t.Errorf("clicking more should expand, not jump (jump=%q)", m.jump)
+	}
+}

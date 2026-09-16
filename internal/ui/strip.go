@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/ofelcan164/muster/internal/model"
 )
@@ -61,7 +62,9 @@ func (m *Model) stripLines(startY int) []string {
 	}
 	out = append(out, fitLine(head, m.width))
 
-	out = append(out, m.saidLine(o))
+	// Before the region loop below, so a click on the more link finds the
+	// link's region first and toggles rather than jumps.
+	out = append(out, m.saidLines(o, startY+len(out))...)
 
 	// The offer is its own click target, so it is drawn after the lines that
 	// belong to the orchestrator and skipped by the region loop below. A click
@@ -140,17 +143,19 @@ func (m *Model) orchWho(o model.Orchestrator) string {
 	return styFG.Bold(true).Render(strings.ToUpper(name))
 }
 
-// saidLine is the strip's one message line: what the orchestrator last said,
-// and how long ago that was.
+// saidLines is the strip's message: what the orchestrator last said, and how
+// long ago that was. One line cut to the width, with a more link when that cut
+// anything, or the whole message wrapped while e has it expanded. y is the
+// screen line the first of them lands on.
 //
 // Only the reply. What it was told is the half you already know, because you
 // are the one who typed it, and it is still on the orchestrator's own card and
 // in musterd dump for the times you want it. The age is the point of the line
 // as much as the text is: a sentence with no clock on it cannot be told from
 // one that has been sitting there since this morning.
-func (m *Model) saidLine(o model.Orchestrator) string {
+func (m *Model) saidLines(o model.Orchestrator, y int) []string {
 	if o.LastSaid == "" {
-		return styFaint.Render(fitLine("   ↓ nothing said yet", m.width))
+		return []string{styFaint.Render(fitLine("   ↓ nothing said yet", m.width))}
 	}
 
 	age := ""
@@ -160,12 +165,41 @@ func (m *Model) saidLine(o model.Orchestrator) string {
 	// The arrow and the age both hold their columns, so the sentence gets
 	// whatever is left rather than pushing the clock off the end of the line.
 	head := styMeta.Render("   ↓ ")
-	room := m.width - lipgloss.Width(head) - lipgloss.Width(age) - 1
-	line := head + styFG.Render(truncate(o.LastSaid, max(10, room)))
-	if gap := m.width - lipgloss.Width(line) - lipgloss.Width(age); gap > 0 {
-		line += strings.Repeat(" ", gap) + age
+	room := max(10, m.width-lipgloss.Width(head)-lipgloss.Width(age)-1)
+	withAge := func(line string) string {
+		if gap := m.width - lipgloss.Width(line) - lipgloss.Width(age); gap > 0 {
+			line += strings.Repeat(" ", gap) + age
+		}
+		return fitLine(line, m.width)
 	}
-	return fitLine(line, m.width)
+
+	text := strings.TrimSpace(o.LastSaid)
+	if !m.sayMore {
+		// Paragraph breaks are for the expanded view; one line has no room.
+		text := strings.ReplaceAll(text, "\n", " ")
+		if lipgloss.Width(text) <= room {
+			return []string{withAge(head + styFG.Render(text))}
+		}
+		const more = " e more"
+		line := head + styFG.Render(truncate(text, room-len(more)))
+		m.noteRegion(y, lipgloss.Width(line), lipgloss.Width(line)+len(more)-1, moreTarget)
+		return []string{withAge(line + styHint.Render(more))}
+	}
+
+	// Half the screen at most, so the grid above keeps somewhere to be.
+	wrapped := strings.Split(ansi.Wrap(text, room, ""), "\n")
+	if limit := max(3, m.height/2); len(wrapped) > limit {
+		wrapped = wrapped[:limit]
+		wrapped[limit-1] = truncate(wrapped[limit-1], room-1) + "…"
+	}
+	out := []string{withAge(head + styFG.Render(wrapped[0]))}
+	indent := strings.Repeat(" ", lipgloss.Width(head))
+	for _, w := range wrapped[1:] {
+		out = append(out, fitLine(indent+styFG.Render(w), m.width))
+	}
+	const less = "e less"
+	m.noteRegion(y+len(out), len(indent), len(indent)+len(less)-1, moreTarget)
+	return append(out, fitLine(indent+styHint.Render(less), m.width))
 }
 
 // stripFooter is the last line of the strip: the input while it is open, then
