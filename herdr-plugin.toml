@@ -113,6 +113,15 @@ description = "Diagnose the daemon and snapshot, restart a stranded or stuck dae
 contexts = ["global"]
 command = ["./bin/muster", "doctor", "--yes"]
 
+# herdr has no plugin update command. Refuses a linked checkout, which is
+# yours to pull.
+[[actions]]
+id = "update"
+title = "Update Muster"
+description = "Install the newest Muster release from GitHub if it is newer than this one, then reopen Muster to use it. The result is in herdr plugin log."
+contexts = ["global"]
+command = ["./bin/muster", "update"]
+
 # Rare events only. Status and output events are far too chatty for a
 # process-per-event hook; musterd subscribes to those over the socket.
 [[events]]

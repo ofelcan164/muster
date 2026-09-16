@@ -159,3 +159,35 @@ func (c *Client) PaneForegroundProcess(paneID string) (string, error) {
 	}
 	return procs[len(procs)-1].Name, nil
 }
+
+// PluginSource is where herdr installed a plugin from. Kind is "github" or
+// "local", and a local one carries nothing else.
+type PluginSource struct {
+	Kind           string `json:"kind"`
+	Owner          string `json:"owner"`
+	Repo           string `json:"repo"`
+	RequestedRef   string `json:"requested_ref"`
+	ResolvedCommit string `json:"resolved_commit"`
+	ManagedPath    string `json:"managed_path"`
+}
+
+type Plugin struct {
+	PluginID   string       `json:"plugin_id"`
+	Name       string       `json:"name"`
+	Version    string       `json:"version"`
+	PluginRoot string       `json:"plugin_root"`
+	Enabled    bool         `json:"enabled"`
+	Source     PluginSource `json:"source"`
+}
+
+// Plugins lists every installed plugin, the same record `herdr plugin list
+// --json` prints.
+func (c *Client) Plugins() ([]Plugin, error) {
+	var out struct {
+		Plugins []Plugin `json:"plugins"`
+	}
+	if err := c.Call("plugin.list", struct{}{}, &out); err != nil {
+		return nil, err
+	}
+	return out.Plugins, nil
+}

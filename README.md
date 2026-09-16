@@ -156,6 +156,7 @@ herdr plugin action invoke muster.install-skill       # write the reporting skil
 herdr plugin action invoke muster.uninstall-keys      # drop the keys, keep the overlay
 herdr plugin action invoke muster.uninstall           # remove the keys and the skill
 herdr plugin action invoke muster.doctor              # check health, restart a stuck daemon
+herdr plugin action invoke muster.update              # install the newest release
 ```
 
 **Mark this agent as the orchestrator** acts on a pane, so pick it from that
@@ -241,16 +242,22 @@ on, including why events are a hint and never a log.
 
 ## Updating
 
+Run the **Update Muster** action. It looks up the newest `vX.Y.Z` tag on
+GitHub, and if that is newer than the installed version it reinstalls Muster at
+that tag and rewrites the keys and reporting skill for the new build. The daemon
+notices the new binary within seconds and restarts itself; an open overlay keeps
+the old build until you reopen it. The result is in `herdr plugin log list`.
+A linked checkout is refused: pull and rebuild it yourself.
+
+By hand, installing again is the update:
+
 ```sh
 herdr plugin install ofelcan164/muster --yes
 ```
 
-herdr has no update command, so installing again is the update. It pulls the
-default branch and rebuilds `bin/`; `--ref <ref>` pins something else. The next
-overlay you open runs the new build. The daemon checks its own binary every few
-seconds and restarts itself on the new one. The reporting skill is the one
-thing that waits: installing again runs no hook, so run the **Install Muster's
-keybindings** action, or restart herdr, to rewrite it for the new build.
+That pulls the default branch; `--ref <ref>` pins something else. It runs no
+hook, so run the **Install Muster's keybindings** action, or restart herdr,
+to rewrite the reporting skill for the new build.
 
 ## Health check
 
@@ -334,6 +341,7 @@ sets the state dir, socket and session:
 ./bin/muster install-skill | uninstall-skill | uninstall-keys
 ./bin/muster mark-orchestrator
 ./bin/muster doctor [--yes]   # asks before restarting a stuck daemon
+./bin/muster update           # refuses a linked checkout
 ./bin/muster show [target]
 ./bin/muster chain get [--json] | set <spec> [--by NAME] | clear
 ./bin/muster discover         # what the workspace and worktree hooks run

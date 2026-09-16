@@ -6,6 +6,7 @@
 //	muster mark-orchestrator   mark the pane this runs in
 //	muster discover            make sure the daemon is up after a workspace appears
 //	muster install | uninstall | install-skill | uninstall-skill | uninstall-keys | doctor
+//	muster update              install the newest release over this one
 //	muster show [target] | chain get | set | clear
 //
 // Bare invocation is the overlay itself, one process per opening rather than
@@ -69,6 +70,9 @@ func main() {
 
 	case "doctor":
 		os.Exit(cmdDoctor(args[1:]))
+
+	case "update":
+		os.Exit(cmdUpdate())
 
 	case "install-skill":
 		os.Exit(cmdInstallSkill())
@@ -198,6 +202,7 @@ usage:
   muster uninstall-skill           drop the reporting skill
   muster uninstall [--purge]       remove everything Muster wrote outside itself
   muster doctor [--yes]            check the daemon, snapshot and state dir, explain the fixes, ask before applying
+  muster update                    install the newest release, if it is newer
   muster discover                  make sure the daemon is up, for the event hooks
   muster badge [letter]            the tab bar line install writes: what needs you, and the key
 
