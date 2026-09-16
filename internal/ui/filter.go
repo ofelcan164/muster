@@ -43,7 +43,7 @@ func (m *Model) visibleTiles() []tile {
 // its panes sit in, and the branch only when it draws one.
 func tileFields(t tile) []string {
 	if t.isAgent() {
-		return []string{t.Workspace.Label, shortPane(t.Agent.PaneID), t.Repo.Display, t.Repo.Branch}
+		return []string{t.Workspace.Label, paneChip(t.Agent), t.Repo.Display, t.Repo.Branch}
 	}
 	fields := []string{t.Workspace.Label}
 	for _, r := range t.Repos {

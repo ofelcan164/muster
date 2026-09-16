@@ -827,6 +827,19 @@ func TestTilesZoneEachFieldToItsRow(t *testing.T) {
 	}
 }
 
+// A renamed pane's chip shows its name instead of its id, and search finds it.
+func TestPaneChipShowsARenamedPane(t *testing.T) {
+	s := testSnapshot()
+	s.Repos[1].Agents[0].PaneLabel = "migrations"
+	m := withSnapshot(t, s, 143)
+	if out := plain(m.View()); !strings.Contains(out, "[migrations]") {
+		t.Errorf("the chip does not show the pane's name:\n%s", out)
+	}
+	if got := paneChip(s.Repos[0].Agents[0]); got != "p1" {
+		t.Errorf("an unnamed pane's chip = %q, want p1", got)
+	}
+}
+
 // Selecting or hovering one end of an edge brightens the line on the tile at
 // the other end. A tile on no edge lights nothing.
 func TestSelectingOneEndLightsTheOther(t *testing.T) {

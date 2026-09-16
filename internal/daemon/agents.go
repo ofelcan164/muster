@@ -52,6 +52,7 @@ func (d *Daemon) buildAgents(snap *herdr.Snapshot, now time.Time) map[string]mod
 			WorkspaceID:    a.WorkspaceID,
 			TabID:          a.TabID,
 			Name:           agentName(a),
+			PaneLabel:      strings.TrimSpace(pane.Label),
 			Kind:           a.Agent,
 			Status:         status,
 			Focused:        a.Focused,
