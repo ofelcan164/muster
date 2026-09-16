@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/ofelcan164/muster/internal/identity"
 	"github.com/ofelcan164/muster/internal/model"
 )
 
@@ -103,6 +104,11 @@ type Model struct {
 	dismissed     map[string]string
 	saveDismissed func(map[string]string)
 
+	// colors is the repo colours picked with c, repo key to palette slot, laid
+	// over every snapshot. saveColors persists them.
+	colors     map[string]int
+	saveColors func(map[string]int)
+
 	// moveWorkspace asks herdr to move a workspace to a new position, for J and
 	// K in herdr sort. Injected the same way mark and prompt are, so a test
 	// never moves one of the user's real workspaces.
@@ -191,6 +197,7 @@ func (m *Model) SetSnapshot(s *model.Snapshot) {
 		return
 	}
 	m.snap = s
+	m.applyColors()
 	m.pruneDismissed()
 	m.rebuild()
 }
@@ -226,6 +233,23 @@ func (m *Model) SetDismissed(d map[string]string) {
 
 // SetDismissedSaver supplies the function that persists them.
 func (m *Model) SetDismissedSaver(f func(map[string]string)) { m.saveDismissed = f }
+
+// SetColors restores the repo colours picked in an earlier session, and
+// supplies the function that persists new ones.
+func (m *Model) SetColors(c map[string]int, save func(map[string]int)) {
+	m.colors, m.saveColors = c, save
+	m.applyColors()
+}
+
+// applyColors lays the picked colours over the snapshot's hashed ones. Every
+// draw reads the colour off the repo, so this is the one place it changes.
+func (m *Model) applyColors() {
+	for i, r := range m.snap.Repos {
+		if c, ok := m.colors[r.Key]; ok && r.IsGit && c >= 0 && c < len(identity.Palette) {
+			m.snap.Repos[i].ColorIndex = c
+		}
+	}
+}
 
 // SetSkillPrompt says whether the reporting skill is missing, and supplies the
 // function that installs it. Both at once, because offering an install with no

@@ -290,6 +290,10 @@ type UIState struct {
 	// change is what makes a row news again.
 	Dismissed map[string]string `json:"dismissed,omitempty"`
 
+	// Colors is palette slots picked with c, as repo key to slot. They beat
+	// the hashed colour, which two repos can share.
+	Colors map[string]int `json:"colors,omitempty"`
+
 	lastWritten []byte
 }
 
@@ -333,6 +337,9 @@ func (u *UIState) Save() error {
 	}
 	if !maps.Equal(u.Dismissed, loaded.Dismissed) {
 		fresh.Dismissed = u.Dismissed
+	}
+	if !maps.Equal(u.Colors, loaded.Colors) {
+		fresh.Colors = u.Colors
 	}
 	b, err := json.Marshal(fresh)
 	if err != nil {

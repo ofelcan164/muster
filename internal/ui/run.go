@@ -62,6 +62,10 @@ func Run() (string, error) {
 		ui.Dismissed = d
 		_ = ui.Save()
 	})
+	m.SetColors(ui.Colors, func(c map[string]int) {
+		ui.Colors = c
+		_ = ui.Save()
+	})
 	// The skill is what writes every task line on the screen. Without it the
 	// grid is a wall of terminal titles, and the only way to learn that is to
 	// know about a command nobody mentioned.
