@@ -401,7 +401,7 @@ func TestSearchFindsWorkspacesWithNoAgent(t *testing.T) {
 	}
 }
 
-func TestSearchMatchesBranchAndTask(t *testing.T) {
+func TestSearchMatchesBranch(t *testing.T) {
 	for _, q := range []string{"billing", "checkout", "migration"} {
 		m := newSized(143)
 		key(m, "slash")
@@ -1288,5 +1288,31 @@ func TestRecolorNeedsAnAgentTile(t *testing.T) {
 	key(m, "c")
 	if len(m.colors) != 0 || m.notice == "" {
 		t.Errorf("c on an empty tile: colors %v, notice %q", m.colors, m.notice)
+	}
+}
+
+// Search matches where a tile is and which checkout, never who or what: the
+// repo's owner and the pane's workspace prefix are off screen, and the agent's
+// name, kind, task and the workspace's other panes are left out on purpose.
+func TestSearchMatchesOnlyLocationFields(t *testing.T) {
+	tl := tile{
+		Agent: model.Agent{
+			PaneID: "w1:p1", Name: "auth", Kind: "claude",
+			Task: "rotate keys", TaskSource: model.TaskFromOrchestrator,
+		},
+		Repo:      model.Repo{Name: "acme/api", Display: "api", Branch: "feat/billing"},
+		Workspace: model.Workspace{Label: "backend"},
+		Panes:     []model.Pane{{Label: "logs"}},
+	}
+	fields := tileFields(tl)
+	for _, q := range []string{"backend", "p1", "api", "billing"} {
+		if _, ok := scoreTerms([]string{q}, fields); !ok {
+			t.Errorf("%q should match", q)
+		}
+	}
+	for _, q := range []string{"acme", "w1", "auth", "claude", "rotate", "logs"} {
+		if _, ok := scoreTerms([]string{q}, fields); ok {
+			t.Errorf("%q should not match", q)
+		}
 	}
 }

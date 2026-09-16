@@ -36,23 +36,21 @@ func (m *Model) visibleTiles() []tile {
 	return out
 }
 
-// tileFields is what a tile is searched against. An agent tile is searched by
-// its own name and task as well as its repo and workspace, so "web auth" finds
-// the auth agent in the web repo. An empty tile has no agent, so it falls back
-// to the repos and panes sitting in it.
+// tileFields is what a tile is searched against: where it is and which
+// checkout, never who or what. Every field is one the tile draws, or a
+// subsequence hit on a hidden one (the repo's owner) selects a tile with no
+// visible reason. An empty tile has no repo of its own, so it offers the repos
+// its panes sit in, and the branch only when it draws one.
 func tileFields(t tile) []string {
 	if t.isAgent() {
-		return []string{
-			t.Agent.Name, t.Agent.Task, t.Agent.Question, t.Agent.PaneID,
-			t.Repo.Display, t.Repo.Name, t.Repo.Branch, t.Workspace.Label,
-		}
+		return []string{t.Workspace.Label, shortPane(t.Agent.PaneID), t.Repo.Display, t.Repo.Branch}
 	}
 	fields := []string{t.Workspace.Label}
 	for _, r := range t.Repos {
-		fields = append(fields, r.Display, r.Name)
+		fields = append(fields, r.Display)
 	}
-	for _, p := range t.Panes {
-		fields = append(fields, p.Label)
+	if len(t.Repos) == 1 {
+		fields = append(fields, t.Repos[0].Branch)
 	}
 	return fields
 }
