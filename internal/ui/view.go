@@ -359,9 +359,9 @@ func (m *Model) isActive(target int) bool {
 func (m *Model) agentTileLines(t tile, width int) []string {
 	a := t.Agent
 
-	// Where. The snapshot carries no pane or tab labels, so the pane renders
-	// as its short id: the chip says where enter lands.
-	chip := styFaint.Render("[" + shortPane(a.PaneID) + "]")
+	// Where. The chip says where enter lands: the pane's name once it has been
+	// renamed, its short id until then.
+	chip := styFaint.Render("[" + truncate(paneChip(a), 14) + "]")
 	line1 := workspaceNumCol(t.Workspace, m.snap.FocusedWorkspace) + " " +
 		styDim.Render(truncate(t.Workspace.Label, max(4, width-lipgloss.Width(chip)-4))) + " " + chip
 	lines := []string{line1}
@@ -399,6 +399,14 @@ func (m *Model) agentTileLines(t tile, width int) []string {
 		lines = append(lines, styFaint.Render("    "+tilePanesFooter(t)))
 	}
 	return lines
+}
+
+// paneChip is what a tile's pane chip says.
+func paneChip(a model.Agent) string {
+	if a.PaneLabel != "" {
+		return a.PaneLabel
+	}
+	return shortPane(a.PaneID)
 }
 
 // shortPane trims "w1:p1" to "p1" for the tile's pane chip.

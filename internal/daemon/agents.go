@@ -51,7 +51,8 @@ func (d *Daemon) buildAgents(snap *herdr.Snapshot, now time.Time) map[string]mod
 			PaneID:         a.PaneID,
 			WorkspaceID:    a.WorkspaceID,
 			TabID:          a.TabID,
-			Name:           agentName(a, pane.Label),
+			Name:           agentName(a),
+			PaneLabel:      strings.TrimSpace(pane.Label),
 			Kind:           a.Agent,
 			Status:         status,
 			Focused:        a.Focused,
@@ -173,15 +174,11 @@ func tokenOf(agentTokens, paneTokens map[string]string, key string) string {
 	return ""
 }
 
-func agentName(a herdr.Agent, paneLabel string) string {
+func agentName(a herdr.Agent) string {
 	if a.Name != "" {
 		return a.Name
 	}
-	// Next, the name the pane was given with a rename; herdr omits it until then.
-	if s := strings.TrimSpace(paneLabel); s != "" {
-		return s
-	}
-	// Neither set. Use the whole pane id rather than just its pane half: two
+	// No name set. Use the whole pane id rather than just its pane half: two
 	// agents in different workspaces are both "p1", and a name you cannot tell
 	// apart is worse than an ugly one.
 	return a.PaneID
@@ -216,13 +213,12 @@ func (d *Daemon) orchFrom(a *herdr.Agent, agents map[string]model.Agent, how str
 	o := model.Orchestrator{
 		Found:      true,
 		PaneID:     a.PaneID,
-		Name:       agentName(*a, ""),
+		Name:       agentName(*a),
 		Status:     model.Status(a.AgentStatus),
 		DetectedBy: how,
 	}
 	if m, ok := agents[a.PaneID]; ok {
 		o.StatusSince = m.StatusSince
-		o.Name = m.Name
 		// Only the top of the task ladder. The lower rungs are the pane's
 		// terminal title, which nobody said to the orchestrator: under a label
 		// reading "told" it is a sentence that never changes and was never

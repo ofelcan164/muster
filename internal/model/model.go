@@ -50,9 +50,12 @@ type Agent struct {
 	WorkspaceID string `json:"workspace_id"`
 	TabID       string `json:"tab_id"`
 
-	// Name is herdr's agent name when one has been set, else the pane's name
-	// from a rename, else its pane id.
+	// Name is herdr's agent name when one has been set, else a stable label
+	// derived from the pane.
 	Name string `json:"name"`
+	// PaneLabel is the name the pane was given with a rename, empty until then.
+	// Only the tile's pane chip reads it.
+	PaneLabel string `json:"pane_label,omitempty"`
 	// Kind is herdr's own label for the agent, passed through unread. Nothing
 	// in Muster branches on it, so an agent herdr has never seen before still
 	// gets a card.
