@@ -272,57 +272,57 @@ func TestToldIsOnlyWhatSomeoneSaid(t *testing.T) {
 	}
 }
 
-// landed only opens a gate when it names what blocked_on names, and the gate
+// landed only counts when it names what depends_on names, and the landed
 // rule compares against the stamp, so the stamp has to hold still while the
 // value does.
-func TestLandedStampsOnlyWhenItMatchesBlockedOn(t *testing.T) {
+func TestLandedStampsOnlyWhenItMatchesDependsOn(t *testing.T) {
 	d := newTestDaemon(t)
 	t0 := time.Now()
-	parked := func(landed string) *herdr.Snapshot {
+	dependent := func(landed string) *herdr.Snapshot {
 		a := agentPane("w3:p1", "w3", "/web", "idle")
-		a.Tokens = map[string]string{"blocked_on": "api#412", "landed": landed}
+		a.Tokens = map[string]string{"depends_on": "api#412", "landed": landed}
 		return &herdr.Snapshot{Agents: []herdr.Agent{a}}
 	}
 
-	if got := d.buildAgents(parked("api#399"), t0)["w3:p1"]; !got.LandedAt.IsZero() {
-		t.Fatalf("a landed token for other work opened the gate: %v", got.LandedAt)
+	if got := d.buildAgents(dependent("api#399"), t0)["w3:p1"]; !got.LandedAt.IsZero() {
+		t.Fatalf("a landed token for other work counted: %v", got.LandedAt)
 	}
-	if got := d.buildAgents(parked("api#412"), t0.Add(time.Minute))["w3:p1"]; !got.LandedAt.Equal(t0.Add(time.Minute)) {
+	if got := d.buildAgents(dependent("api#412"), t0.Add(time.Minute))["w3:p1"]; !got.LandedAt.Equal(t0.Add(time.Minute)) {
 		t.Fatalf("LandedAt = %v, want when the match was first seen", got.LandedAt)
 	}
-	if got := d.buildAgents(parked("api#412"), t0.Add(time.Hour))["w3:p1"]; !got.LandedAt.Equal(t0.Add(time.Minute)) {
+	if got := d.buildAgents(dependent("api#412"), t0.Add(time.Hour))["w3:p1"]; !got.LandedAt.Equal(t0.Add(time.Minute)) {
 		t.Errorf("LandedAt moved while nothing changed: %v", got.LandedAt)
 	}
-	if got := d.buildAgents(parked(""), t0.Add(2*time.Hour))["w3:p1"]; !got.LandedAt.IsZero() {
-		t.Errorf("clearing landed left the gate open: %v", got.LandedAt)
+	if got := d.buildAgents(dependent(""), t0.Add(2*time.Hour))["w3:p1"]; !got.LandedAt.IsZero() {
+		t.Errorf("clearing landed left LandedAt set: %v", got.LandedAt)
 	}
 
-	d.buildAgents(parked("api#412"), t0)
+	d.buildAgents(dependent("api#412"), t0)
 	d.buildAgents(&herdr.Snapshot{}, t0)
 	if len(d.persist.LandedSeenAt) != 0 {
 		t.Errorf("LandedSeenAt kept a dead pane: %v", d.persist.LandedSeenAt)
 	}
 }
 
-// blocked_on names a repo the way a person would, with or without its owner.
+// depends_on names a repo the way a person would, with or without its owner.
 // Anything that does not name another repo on screen stays unresolved.
-func TestBlockedOnResolvesToTheRepoItNames(t *testing.T) {
+func TestDependsOnResolvesToTheRepoItNames(t *testing.T) {
 	repos := []model.Repo{
 		{Key: "acme/api", Name: "acme/api", IsGit: true},
 		{Key: "acme/web", Name: "acme/web", IsGit: true, Agents: []model.Agent{
-			{PaneID: "short", BlockedOn: "api#412"},
-			{PaneID: "owner", BlockedOn: "acme/api"},
-			{PaneID: "case", BlockedOn: "API#2"},
-			{PaneID: "other-org", BlockedOn: "otherorg/api#1"},
-			{PaneID: "free-text", BlockedOn: "design review"},
-			{PaneID: "itself", BlockedOn: "web#3"},
+			{PaneID: "short", DependsOn: "api#412"},
+			{PaneID: "owner", DependsOn: "acme/api"},
+			{PaneID: "case", DependsOn: "API#2"},
+			{PaneID: "other-org", DependsOn: "otherorg/api#1"},
+			{PaneID: "free-text", DependsOn: "design review"},
+			{PaneID: "itself", DependsOn: "web#3"},
 		}},
 	}
 	resolveEdges(repos)
 	want := map[string]string{"short": "acme/api", "owner": "acme/api", "case": "acme/api"}
 	for _, a := range repos[1].Agents {
-		if a.After != want[a.PaneID] {
-			t.Errorf("%s: blocked_on %q resolved to %q, want %q", a.PaneID, a.BlockedOn, a.After, want[a.PaneID])
+		if a.DependsOnRepo != want[a.PaneID] {
+			t.Errorf("%s: depends_on %q resolved to %q, want %q", a.PaneID, a.DependsOn, a.DependsOnRepo, want[a.PaneID])
 		}
 	}
 }

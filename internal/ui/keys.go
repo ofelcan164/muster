@@ -158,8 +158,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "t":
-		// The repair key. This is the whole reason gate detection exists.
-		return m.repair()
+		// The report key. This is the whole reason landed detection exists.
+		return m.report()
 
 	case "S":
 		// Install the reporting skill. Its own key rather than enter on the

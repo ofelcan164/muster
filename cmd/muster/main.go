@@ -190,7 +190,7 @@ usage:
   muster open                      ask herdr to open the overlay, for a keybinding
   muster jump orchestrator|previous  focus one of them
   muster mark-orchestrator         mark the pane this runs in as the orchestrator
-  muster show [target]             the usual order, and where parked work stands;
+  muster show [target]             the usual order, and where dependent work stands;
                                    target is a pane id, repo/agent or repo
   muster chain get [--json]        print the usual order between repos
   muster chain set <spec> [--by NAME]
@@ -215,7 +215,7 @@ chain spec syntax:
   "contracts > api > web,mobile"   ">" is sequence, "," is parallel
 
 The usual order is a default the orchestrator reads before it records what an
-agent is parked on. The edges themselves come from each agent's blocked_on.
+agent depends on. The edges themselves come from each agent's depends_on.
 
 The reporting skill teaches the orchestrator to write the task line Muster
 shows, and carries the full command for show and chain, since an agent pane
@@ -311,8 +311,8 @@ func cmdChain(args []string) int {
 	}
 }
 
-// cmdShow is the orchestrator's query: the usual order, and where parked work
-// stands, read from the snapshot rather than from anyone's pane.
+// cmdShow is the orchestrator's query: the usual order, and where dependent
+// work stands, read from the snapshot rather than from anyone's pane.
 func cmdShow(args []string) int {
 	dir := state.Dir()
 	if dir == "" {

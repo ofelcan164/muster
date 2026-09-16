@@ -116,14 +116,14 @@ func Rank(in Input) []model.Attention {
 		})
 	}
 
-	// Rank 2: upstream work landed and nobody moved what was parked on it. One
-	// row names every agent parked on the same upstream, so the rest are
+	// Rank 2: work landed and nobody moved what depends on it. One row names
+	// every agent that depends on the same repo, so the rest are
 	// claimed with it rather than each taking a row further down.
-	gates, parked := detectGates(in, all)
-	for _, g := range gates {
-		add(g)
+	landed, dependents := detectLanded(in, all)
+	for _, l := range landed {
+		add(l)
 	}
-	for _, pane := range parked {
+	for _, pane := range dependents {
 		claimed[pane] = true
 	}
 
@@ -163,11 +163,11 @@ func Rank(in Input) []model.Attention {
 	// and never used. Without it every idle agent qualifies forever, which made
 	// this by far the noisiest rule in the ribbon.
 	//
-	// A parked agent is idle by design, waiting on work in another repo, so
-	// blocked_on keeps it out.
+	// A dependent agent is idle by design, waiting on work in another repo, so
+	// depends_on keeps it out.
 	stale := filter(all, func(x agentRef) bool {
 		return x.agent.Status == model.StatusIdle &&
-			x.agent.BlockedOn == "" &&
+			x.agent.DependsOn == "" &&
 			in.EverWorked[x.agent.PaneID] &&
 			!in.EverDone[x.agent.PaneID] &&
 			x.agent.Age(in.Now) >= StaleAfter
@@ -195,20 +195,20 @@ func needsYouRegardless(a model.Agent) bool {
 	return a.Status == model.StatusBlocked
 }
 
-// detectGates finds upstream work that landed while the agents parked on it sat
-// still. It returns one row per upstream, and every pane those rows name.
+// detectLanded finds work that landed while the agents that depend on it sat
+// still. It returns one row per dependency, and every pane those rows name.
 //
 // Three facts, recorded by the orchestrator or measured by the daemon:
-//   - an agent's blocked_on names a repo and its landed token matches, so the
+//   - an agent's depends_on names a repo and its landed token matches, so the
 //     work it waits on is on main (LandedAt)
 //   - the orchestrator has ended a turn since then, so it has had its chance to
-//     move the parked work on
-//   - the parked agent is idle or done in a status it entered before the
+//     move the dependent work on
+//   - the dependent agent is idle or done in a status it entered before the
 //     landing, so nobody moved it
 //
 // None of that needs a timer. Without a marked orchestrator the middle fact is
 // unavailable and the rule stays silent rather than guessing.
-func detectGates(in Input, all []agentRef) ([]model.Attention, []string) {
+func detectLanded(in Input, all []agentRef) ([]model.Attention, []string) {
 	// Idle or done, both of which mean the orchestrator is not working. done is
 	// herdr's word for an agent that finished its turn while you were looking at
 	// another pane, which is the usual state of an orchestrator you walked away
@@ -222,7 +222,7 @@ func detectGates(in Input, all []agentRef) ([]model.Attention, []string) {
 	groups := map[string][]agentRef{}
 	for _, x := range all {
 		a := x.agent
-		if a.After == "" || a.LandedAt.IsZero() {
+		if a.DependsOnRepo == "" || a.LandedAt.IsZero() {
 			continue
 		}
 		// An equal time counts as a turn ended: the landed token and the end of
@@ -230,19 +230,19 @@ func detectGates(in Input, all []agentRef) ([]model.Attention, []string) {
 		if in.Orch.StatusSince.Before(a.LandedAt) {
 			continue
 		}
-		// For the parked agent, equal counts as moved: changing state in the same
+		// For the dependent agent, equal counts as moved: changing state in the same
 		// reconcile as the landing is most likely the orchestrator dispatching it.
 		if (a.Status != model.StatusIdle && a.Status != model.StatusDone) || !a.StatusSince.Before(a.LandedAt) {
 			continue
 		}
-		if _, ok := groups[a.After]; !ok {
-			order = append(order, a.After)
+		if _, ok := groups[a.DependsOnRepo]; !ok {
+			order = append(order, a.DependsOnRepo)
 		}
-		groups[a.After] = append(groups[a.After], x)
+		groups[a.DependsOnRepo] = append(groups[a.DependsOnRepo], x)
 	}
 
 	var out []model.Attention
-	var parked []string
+	var dependents []string
 	for _, up := range order {
 		xs := groups[up]
 		slices.SortStableFunc(xs, func(a, b agentRef) int { return longestFirst(a.agent, b.agent, in.Now) })
@@ -253,44 +253,44 @@ func detectGates(in Input, all []agentRef) ([]model.Attention, []string) {
 			if !slices.Contains(repos, label) {
 				repos = append(repos, label)
 			}
-			parked = append(parked, x.agent.PaneID)
+			dependents = append(dependents, x.agent.PaneID)
 		}
-		// The row lands on the agent parked longest, since that is where the
-		// rebase happens. The upstream agent may be long gone by now.
+		// The row lands on the agent that has waited longest, since that is where
+		// the rebase happens. The dependency's agent may be long gone by now.
 		lead := xs[0]
 		out = append(out, model.Attention{
-			Rank: 2, Reason: model.ReasonGateOpen,
+			Rank: 2, Reason: model.ReasonLanded,
 			RepoKey: lead.repo.Key, PaneID: lead.agent.PaneID, Agent: lead.agent.Name,
 			Status: lead.agent.Status, Age: lead.agent.Age(in.Now), AgeKnown: lead.agent.AgeKnown,
-			Detail:     fmt.Sprintf("%s landed · %s still parked on it", repoLabel(in.Repos, up), strings.Join(repos, ", ")),
-			Downstream: who,
+			Detail:     fmt.Sprintf("%s landed · still needed by %s", repoLabel(in.Repos, up), strings.Join(repos, ", ")),
+			Dependents: who,
 		})
 	}
 	slices.SortStableFunc(out, func(a, b model.Attention) int { return cmp.Compare(b.Age, a.Age) })
-	return out, parked
+	return out, dependents
 }
 
-// doneDetail is what a finished agent's row says. A parked agent finishing its
+// doneDetail is what a finished agent's row says. A dependent agent finishing its
 // turn has written code that cannot land yet, which is different news from
-// finished work, and calling both "finished" is how the parked one got missed.
+// finished work, and calling both "finished" is how the dependent one got missed.
 func doneDetail(repos []model.Repo, a model.Agent) string {
 	switch {
-	case a.BlockedOn == "":
+	case a.DependsOn == "":
 		return "finished, unseen"
 	case !a.LandedAt.IsZero():
-		return "ready, " + afterName(repos, a) + " landed"
+		return "ready, " + dependencyName(repos, a) + " landed"
 	default:
-		return "ready, after " + afterName(repos, a)
+		return "ready, depends on " + dependencyName(repos, a)
 	}
 }
 
-// afterName is what a parked agent waits on: the repo's name when blocked_on
+// dependencyName is what a dependent agent waits on: the repo's name when depends_on
 // resolved to one, else the text as it was written.
-func afterName(repos []model.Repo, a model.Agent) string {
-	if a.After == "" {
-		return a.BlockedOn
+func dependencyName(repos []model.Repo, a model.Agent) string {
+	if a.DependsOnRepo == "" {
+		return a.DependsOn
 	}
-	return repoLabel(repos, a.After)
+	return repoLabel(repos, a.DependsOnRepo)
 }
 
 func repoLabel(repos []model.Repo, key string) string {

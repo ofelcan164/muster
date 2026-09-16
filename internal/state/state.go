@@ -125,7 +125,7 @@ type Persisted struct {
 	TaskSeenAt map[string]TaskStamp `json:"task_seen_at"`
 
 	// LandedSeenAt records when the daemon first saw a pane's landed token match
-	// its blocked_on. The gate rule asks whether anyone moved after the landing,
+	// its depends_on. The landed rule asks whether anyone moved after the landing,
 	// and herdr keeps no time for it either.
 	LandedSeenAt map[string]TaskStamp `json:"landed_seen_at"`
 

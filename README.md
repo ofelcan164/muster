@@ -13,7 +13,7 @@ Muster is that landing place. One tile per agent, and a dim one for each
 workspace with no agent in it. Each agent tile shows what that agent is doing
 and how long it has sat quiet, and marks a task line the agent has since moved
 on from as stale. Blocked ones show the question they are asking. Finished ones
-stay visible until seen, and parked ones say which repo has to land first. The
+stay visible until seen, and ones that depend on another repo say which one has to land first. The
 ribbon on top pulls forward the ones that need attention now. Sort, search,
 rearrange, and jump straight to the pick. The strip along the bottom keeps the
 orchestrator and its last message in view, with keys to talk to it directly.
@@ -129,8 +129,8 @@ In the overlay:
 - digits `1`-`9` jump to a ribbon row, `x` dismisses one until its status
   changes
 - `o` marks the selected agent as the orchestrator
-- `i` messages the orchestrator, `t` tells it about an open gate: work landed
-  and the agents parked on it have not moved
+- `i` messages the orchestrator, `t` tells it about a landed row: work landed
+  and the agents that depend on it have not moved
 - `e` shows everything the orchestrator last said, not just the one line the
   strip has room for, and folds it again
 - `S` installs the reporting skill, but only while its banner is on screen
@@ -180,21 +180,22 @@ The orchestrator records that on the waiting agent's pane:
 ```sh
 herdr pane report-metadata w3:p1 --source muster \
   --token task="checkout UI against the new api endpoints" \
-  --token blocked_on="api#412" --ttl-ms 86400000
+  --token depends_on="api#412" --ttl-ms 86400000
 ```
 
 The part before `#` names the repo. The web tile then reads
-`⧗ after ◆ api · can't land yet`, and each api tile reads `▸ holds ▣ web`.
+`⧗ depends on ◆ api · can't land yet`, and each api tile reads
+`▸ needed by ▣ web`.
 Selecting or hovering either tile brightens the line on the other.
 
 Muster cannot see a merge, and herdr's `done` only means an agent's turn ended.
 So when you tell the orchestrator the PR merged and main is pulled, it writes
 `landed="api#412"` on the same pane and the tile reads `landed 5m ago`. If it
-then ends its turn without moving web on, a `GATE OPEN` row reaches the top of
+then ends its turn without moving web on, a `LANDED` row reaches the top of
 the ribbon, and `t` sends it the reminder.
 
 The orchestrator also keeps a usual order between repos for the session, as
-`chain.json` in the state dir, and asks Muster where parked work stands. No
+`chain.json` in the state dir, and asks Muster where dependent work stands. No
 action does either. An agent pane has neither `muster` on its `PATH` nor the
 state dir, so install writes the full command into the reporting skill, and the
 orchestrator runs it from there:
@@ -208,7 +209,7 @@ orchestrator runs it from there:
 `<muster>` is that full command, as written in
 `~/.agents/skills/muster-report/SKILL.md`, and it works the same from any herdr
 pane. `>` is sequence, `,` is parallel. The order is a default the orchestrator
-reads before it writes `blocked_on`, and Muster draws nothing from it: an order
+reads before it writes `depends_on`, and Muster draws nothing from it: an order
 that holds for one feature can reverse for the next.
 
 The skill also teaches the orchestrator to write the task lines at dispatch

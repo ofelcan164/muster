@@ -1,6 +1,6 @@
 ---
 name: muster-report
-description: Record what a herdr agent is working on and what it waits on, so Muster can show it. Use right after dispatching, delegating or handing work to another agent or pane, whenever what an agent is working on changes, when an agent is parked waiting on another repo, and when the user says a PR or MR that parked work waits on has merged. Also use to check where a body of work stands, and when an agent shows no task line in Muster or one that is out of date.
+description: Record what a herdr agent is working on and what it waits on, so Muster can show it. Use right after dispatching, delegating or handing work to another agent or pane, whenever what an agent is working on changes, when an agent depends on work in another repo, and when the user says a PR or MR that dependent work waits on has merged. Also use to check where a body of work stands, and when an agent shows no task line in Muster or one that is out of date.
 ---
 
 # Reporting what an agent is working on
@@ -31,8 +31,8 @@ with `--clear-token <name>`.
 | Token | What it is for |
 |---|---|
 | `task` | What this agent is doing. One sentence, present tense. This is the line Muster shows. |
-| `blocked_on` | Work in another repo this agent has to wait for before it can test or merge, as `<repo>#<pr>`, for example `api#412`. Name the repo the way `show` lists it. Muster draws the dependency on both agents' tiles. |
-| `landed` | The same value as `blocked_on`, written once that work is on main. Only an exact match counts. |
+| `depends_on` | Work in another repo this agent has to wait for before it can test or merge, as `<repo>#<pr>`, for example `api#412`. Name the repo the way `show` lists it. Muster draws the dependency on both agents' tiles. |
+| `landed` | The same value as `depends_on`, written once that work is on main. Only an exact match counts. |
 | `note` | Anything else worth recording. Read back by `show`, not shown on the card. |
 | `role` | Set to `orchestrator` on your own pane. Muster's mark-orchestrator action does this for you. |
 
@@ -80,13 +80,13 @@ record what it waits on:
 ```
 herdr pane report-metadata w3:p1 --source muster \
   --token task="checkout UI against the new api endpoints" \
-  --token blocked_on="api#412" \
+  --token depends_on="api#412" \
   --ttl-ms 86400000
 ```
 
 When its code is written and it can go no further, rewrite `task` to say so,
-for example `checkout UI written, waiting on api#412`, and keep `blocked_on`. A
-parked agent sitting idle is normal, and Muster shows it that way.
+for example `checkout UI written, waiting on api#412`, and keep `depends_on`. A
+dependent agent sitting idle is normal, and Muster shows it that way.
 
 When you and the user settle on a new usual order, record it so the next
 orchestrator finds it:
@@ -95,30 +95,30 @@ orchestrator finds it:
 {{muster}} chain set "contracts > api > web,mobile" --by orchestrator
 ```
 
-## When upstream work lands
+## When the work it depends on lands
 
 Muster cannot see a merge. The user will usually tell you that a PR or MR has
-merged and main is pulled. When they do, write `landed` on every pane parked on
-it, with the value its `blocked_on` already has:
+merged and main is pulled. When they do, write `landed` on every pane that depends
+on it, with the value its `depends_on` already has:
 
 ```
 herdr pane report-metadata w3:p1 --source muster \
   --token task="checkout UI, api#412 landed, rebasing" \
-  --token blocked_on="api#412" \
+  --token depends_on="api#412" \
   --token landed="api#412" \
   --ttl-ms 86400000
 ```
 
-`{{muster}} show api` lists who is parked on it. Then tell each of those agents
+`{{muster}} show api` lists who depends on it. Then tell each of those agents
 to rebase onto main, test and merge. If you record a landing and end your turn
-without moving them, Muster puts a GATE OPEN row at the top of its overlay.
+without moving them, Muster puts a LANDED row at the top of its overlay.
 
 Once the dependent work has merged, drop both tokens:
 
 ```
 herdr pane report-metadata w3:p1 --source muster \
   --token task="checkout UI merged" \
-  --clear-token blocked_on --clear-token landed \
+  --clear-token depends_on --clear-token landed \
   --ttl-ms 86400000
 ```
 

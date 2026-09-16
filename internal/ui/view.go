@@ -437,45 +437,45 @@ func (m *Model) tileTaskLine(a model.Agent, width int) (string, bool) {
 	return style.Render("    " + truncate(task, max(6, width-4))), true
 }
 
-// tileEdgeLines are the dependency lines: what this agent is parked on, and
-// which repos have agents parked on this one. Each sits dim until the tile at
+// tileEdgeLines are the dependency lines: what this agent depends on, and
+// which repos have agents that depend on this one. Each sits dim until the tile at
 // its other end is selected or under the pointer, so picking a tile lights up
 // whatever it is tied to. Neither says "blocked", which means an agent waiting
 // on you.
 func (m *Model) tileEdgeLines(t tile, width int) []string {
 	var lines []string
 	a := t.Agent
-	if a.BlockedOn != "" {
-		lit := a.After != "" && m.litBy(func(r model.Repo, _ model.Agent) bool { return r.Key == a.After })
+	if a.DependsOn != "" {
+		lit := a.DependsOnRepo != "" && m.litBy(func(r model.Repo, _ model.Agent) bool { return r.Key == a.DependsOnRepo })
 		sty := edgeStyle(lit)
-		up := sty.Render(a.BlockedOn)
-		if a.After != "" {
-			up = repoMark(m.repoByKey(a.After), lit)
+		up := sty.Render(a.DependsOn)
+		if a.DependsOnRepo != "" {
+			up = repoMark(m.repoByKey(a.DependsOnRepo), lit)
 		}
 		when := "can't land yet"
 		if !a.LandedAt.IsZero() {
 			when = "landed " + ageText(time.Since(a.LandedAt), true) + " ago"
 		}
-		lines = append(lines, "    "+truncate(sty.Render("⧗ after ")+up+sty.Render(" · "+when), width-4))
+		lines = append(lines, "    "+truncate(sty.Render("⧗ depends on ")+up+sty.Render(" · "+when), width-4))
 	}
 
-	var holders []model.Repo
+	var dependents []model.Repo
 	for _, r := range m.snap.Repos {
 		for _, x := range r.Agents {
-			if x.After == t.Repo.Key {
-				holders = append(holders, r)
+			if x.DependsOnRepo == t.Repo.Key {
+				dependents = append(dependents, r)
 				break
 			}
 		}
 	}
-	if len(holders) > 0 {
-		lit := m.litBy(func(_ model.Repo, x model.Agent) bool { return x.After == t.Repo.Key })
+	if len(dependents) > 0 {
+		lit := m.litBy(func(_ model.Repo, x model.Agent) bool { return x.DependsOnRepo == t.Repo.Key })
 		sty := edgeStyle(lit)
-		marks := make([]string, len(holders))
-		for i, r := range holders {
+		marks := make([]string, len(dependents))
+		for i, r := range dependents {
 			marks[i] = repoMark(r, lit)
 		}
-		lines = append(lines, "    "+truncate(sty.Render("▸ holds ")+strings.Join(marks, sty.Render(", ")), width-4))
+		lines = append(lines, "    "+truncate(sty.Render("▸ needed by ")+strings.Join(marks, sty.Render(", ")), width-4))
 	}
 	return lines
 }

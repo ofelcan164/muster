@@ -10,7 +10,7 @@ import (
 	"github.com/ofelcan164/muster/internal/model"
 )
 
-// web parked on api, which landed five minutes ago, and docs on neither end.
+// web depends on api, which landed five minutes ago, and docs on neither end.
 func showSnapshot() *model.Snapshot {
 	return &model.Snapshot{Repos: []model.Repo{
 		{Key: "acme/api", Name: "acme/api", Display: "api", Agents: []model.Agent{{
@@ -19,8 +19,8 @@ func showSnapshot() *model.Snapshot {
 		}}},
 		{Key: "acme/web", Name: "acme/web", Display: "web", Agents: []model.Agent{{
 			PaneID: "w3:p1", Name: "checkout-ui", Status: model.StatusIdle,
-			Task: "checkout UI, parked", TaskSource: model.TaskFromOrchestrator,
-			BlockedOn: "api#412", After: "acme/api", LandedAt: time.Now().Add(-5 * time.Minute),
+			Task: "checkout UI, waiting on api", TaskSource: model.TaskFromOrchestrator,
+			DependsOn: "api#412", DependsOnRepo: "acme/api", LandedAt: time.Now().Add(-5 * time.Minute),
 		}}},
 		{Key: "acme/docs", Name: "acme/docs", Display: "docs", Agents: []model.Agent{{
 			PaneID: "w4:p1", Name: "readme", Status: model.StatusWorking,
@@ -38,9 +38,9 @@ func TestShowWithoutATargetListsBothEndsOfEveryEdge(t *testing.T) {
 	for _, want := range []string{
 		"usual order  api > web  (set by orchestrator)",
 		"web/checkout-ui  w3:p1",
-		"after   api#412 · landed 5m ago",
+		"depends on  api#412 · landed 5m ago",
 		"api/endpoints  w2:p1  done",
-		"holds   web/checkout-ui (idle -)",
+		"needed by   web/checkout-ui (idle -)",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("show does not say %q:\n%s", want, out)

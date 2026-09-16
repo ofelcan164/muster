@@ -62,15 +62,15 @@ type Agent struct {
 
 	Task       string     `json:"task,omitempty"`
 	TaskSource TaskSource `json:"task_source"`
-	BlockedOn  string     `json:"blocked_on,omitempty"`
+	DependsOn  string     `json:"depends_on,omitempty"`
 
-	// After is the key of the repo BlockedOn names: the text before any "#",
+	// DependsOnRepo is the key of the repo DependsOn names: the text before any "#",
 	// matched against the repos on screen. Empty when nothing matched, which
-	// leaves BlockedOn to be shown as written.
-	After string `json:"after,omitempty"`
-	// LandedAt is when the daemon first saw a landed token equal to BlockedOn,
-	// which is the orchestrator saying the upstream work reached main. Zero
-	// while the agent is still parked.
+	// leaves DependsOn to be shown as written.
+	DependsOnRepo string `json:"depends_on_repo,omitempty"`
+	// LandedAt is when the daemon first saw a landed token equal to DependsOn,
+	// which is the orchestrator saying the work it depends on reached main.
+	// Zero until then.
 	LandedAt time.Time `json:"landed_at,omitempty"`
 
 	// Question is the prompt a blocked agent is waiting on, read from its pane
@@ -159,10 +159,10 @@ type Reason string
 const (
 	// ReasonBlocked is rank 1, an agent waiting on you.
 	ReasonBlocked Reason = "blocked"
-	// ReasonGateOpen is rank 2. Work an agent is parked on landed, the
-	// orchestrator has ended a turn since it recorded that, and the parked agent
-	// has not moved.
-	ReasonGateOpen Reason = "gate_open"
+	// ReasonLanded is rank 2. Work an agent depends on landed, the
+	// orchestrator has ended a turn since it recorded that, and the dependent
+	// agent has not moved.
+	ReasonLanded Reason = "landed"
 	// ReasonProcessStopped is rank 3, a non-agent pane whose process went away.
 	ReasonProcessStopped Reason = "process_stopped"
 	// ReasonDoneUnseen is rank 4, an agent that finished and you have not
@@ -183,12 +183,12 @@ type Attention struct {
 	Status   Status        `json:"status"`
 	Age      time.Duration `json:"age_ns"`
 	AgeKnown bool          `json:"age_known"`
-	// Detail is the human sentence: the blocking question, or why a gate is
-	// open with nobody moving through it.
+	// Detail is the human sentence: the blocking question, or what landed
+	// with nobody moving on it.
 	Detail string `json:"detail"`
-	// Downstream lists every agent still parked on the work that landed, as
-	// repo/agent, for the gate rule.
-	Downstream []string `json:"downstream,omitempty"`
+	// Dependents lists every agent that still depends on the work that landed,
+	// as repo/agent, for the landed rule.
+	Dependents []string `json:"dependents,omitempty"`
 }
 
 // Stopped is a non-agent pane whose process went away.

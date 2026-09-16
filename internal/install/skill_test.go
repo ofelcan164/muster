@@ -72,7 +72,7 @@ func TestSkillDocumentsTheTokensMusterReads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, token := range []string{"task", "blocked_on", "landed", "note", "role"} {
+	for _, token := range []string{"task", "depends_on", "landed", "note", "role"} {
 		if !strings.Contains(string(b), "`"+token+"`") {
 			t.Errorf("the skill does not document the %q token", token)
 		}

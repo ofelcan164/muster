@@ -38,12 +38,12 @@ func (d *Daemon) buildAgents(snap *herdr.Snapshot, now time.Time) map[string]mod
 		taskSeen := stamp(d.persist.TaskSeenAt, a.PaneID, tokenOf(a.Tokens, pane.Tokens, "task"), now)
 		task, source := taskFor(a, pane, since, taskSeen)
 
-		// landed only counts when it names what blocked_on names. A landed token
-		// left over from the last feature must not open the next one's gate.
-		blockedOn := tokenOf(a.Tokens, pane.Tokens, "blocked_on")
+		// landed only counts when it names what depends_on names. A landed token
+		// left over from the last feature must not mark the next one landed.
+		dependsOn := tokenOf(a.Tokens, pane.Tokens, "depends_on")
 		landed := ""
-		if blockedOn != "" && tokenOf(a.Tokens, pane.Tokens, "landed") == blockedOn {
-			landed = blockedOn
+		if dependsOn != "" && tokenOf(a.Tokens, pane.Tokens, "landed") == dependsOn {
+			landed = dependsOn
 		}
 		landedAt := stamp(d.persist.LandedSeenAt, a.PaneID, landed, now)
 
@@ -57,7 +57,7 @@ func (d *Daemon) buildAgents(snap *herdr.Snapshot, now time.Time) map[string]mod
 			Focused:        a.Focused,
 			Task:           task,
 			TaskSource:     source,
-			BlockedOn:      blockedOn,
+			DependsOn:      dependsOn,
 			LandedAt:       landedAt,
 			Note:           tokenOf(a.Tokens, pane.Tokens, "note"),
 			StatusSince:    since,

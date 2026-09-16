@@ -1,5 +1,5 @@
-// Talking back to the orchestrator: the i input, and the t repair key that the
-// whole gate-detection story exists to serve.
+// Talking back to the orchestrator: the i input, and the t report key that the
+// whole landed-detection story exists to serve.
 
 package ui
 
@@ -20,74 +20,74 @@ func (m *Model) SetPrompter(f func(paneID, text string) error) { m.prompt = f }
 // SetMarker supplies the function that marks an agent as the orchestrator.
 func (m *Model) SetMarker(f func(paneID string) error) { m.mark = f }
 
-// repairTarget is the open gate the t key would report, or nil.
+// reportTarget is the landed row the t key would report, or nil.
 //
-// The selection wins when it is sitting on a gate row, so t always acts on what
-// you are looking at. Otherwise it falls back to the only gate row there is,
+// The selection wins when it is sitting on a landed row, so t always acts on what
+// you are looking at. Otherwise it falls back to the only landed row there is,
 // which is the common case: t is meant to be pressed the moment you see the
 // row, without navigating to it first. With more than one and none selected it
 // stays silent, because picking for you would send the wrong report.
-func (m *Model) repairTarget() *model.Attention {
-	var gates []model.Attention
+func (m *Model) reportTarget() *model.Attention {
+	var rows []model.Attention
 	for _, a := range m.snap.Attention {
-		if a.Reason == model.ReasonGateOpen {
-			gates = append(gates, a)
+		if a.Reason == model.ReasonLanded {
+			rows = append(rows, a)
 		}
 	}
-	if len(gates) == 0 {
+	if len(rows) == 0 {
 		return nil
 	}
 	if sel := m.selectedPane(); sel != "" {
-		for i := range gates {
-			if gates[i].PaneID == sel {
-				return &gates[i]
+		for i := range rows {
+			if rows[i].PaneID == sel {
+				return &rows[i]
 			}
 		}
 	}
-	if len(gates) == 1 {
-		return &gates[0]
+	if len(rows) == 1 {
+		return &rows[0]
 	}
 	return nil
 }
 
-// repairMessage is what the t key sends.
+// reportMessage is what the t key sends.
 //
 // Facts only, in the order the orchestrator needs them: what landed, how long
-// ago, and who is still parked on it. No instruction about what to do next,
+// ago, and who still depends on it. No instruction about what to do next,
 // because the orchestrator knows the plan and Muster does not.
-func repairMessage(a model.Attention, up model.Repo, landed time.Duration) string {
+func reportMessage(a model.Attention, up model.Repo, landed time.Duration) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s landed", shortRepo(up))
 	if landed > 0 {
 		fmt.Fprintf(&b, " %s ago", ageText(landed, true))
 	}
-	verb := "are"
-	if len(a.Downstream) == 1 {
-		verb = "is"
+	verb := "depend"
+	if len(a.Dependents) == 1 {
+		verb = "depends"
 	}
-	fmt.Fprintf(&b, ", and %s %s still parked on it. Reported by Muster.", strings.Join(a.Downstream, ", "), verb)
+	fmt.Fprintf(&b, ", and %s still %s on it. Reported by Muster.", strings.Join(a.Dependents, ", "), verb)
 	return b.String()
 }
 
-// repair sends the orchestrator what it missed.
-func (m *Model) repair() (tea.Model, tea.Cmd) {
-	a := m.repairTarget()
+// report sends the orchestrator what it missed.
+func (m *Model) report() (tea.Model, tea.Cmd) {
+	a := m.reportTarget()
 	if a == nil {
-		m.notice = "nothing to report: no open gate is selected"
+		m.notice = "nothing to report: no landed row is selected"
 		return m, nil
 	}
 	if !m.snap.Orch.Found {
 		m.notice = "no orchestrator marked, so there is nobody to tell"
 		return m, nil
 	}
-	// The row lands on a parked agent, which is what knows the upstream.
-	_, parked, _ := m.agentByPane(a.PaneID)
-	up := m.repoByKey(parked.After)
+	// The row lands on a dependent agent, which is what knows the dependency.
+	_, dep, _ := m.agentByPane(a.PaneID)
+	up := m.repoByKey(dep.DependsOnRepo)
 	var landed time.Duration
-	if !parked.LandedAt.IsZero() {
-		landed = time.Since(parked.LandedAt)
+	if !dep.LandedAt.IsZero() {
+		landed = time.Since(dep.LandedAt)
 	}
-	return m, m.send(m.snap.Orch.PaneID, repairMessage(*a, up, landed),
+	return m, m.send(m.snap.Orch.PaneID, reportMessage(*a, up, landed),
 		fmt.Sprintf("told the orchestrator %s landed", shortRepo(up)))
 }
 
