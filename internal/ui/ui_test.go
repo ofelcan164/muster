@@ -1251,3 +1251,42 @@ func TestBadge(t *testing.T) {
 	write(snap)
 	check("m", "◆ prefix+m")
 }
+
+// c gives the tile's repo a colour no other repo has, keeps it across
+// snapshots, and saves it.
+func TestRecolorPicksAFreeColourAndKeepsIt(t *testing.T) {
+	m := newSized(143)
+	var saved map[string]int
+	m.SetColors(nil, func(c map[string]int) { saved = c })
+	before := map[int]bool{}
+	for _, r := range m.snap.Repos {
+		before[r.ColorIndex] = true
+	}
+
+	m.cursor = m.targetIndex("pane:w2:p1")
+	key(m, "c")
+	got, ok := saved["acme/api"]
+	if !ok || before[got] {
+		t.Fatalf("c on api saved %v, want a colour no repo had in %v", saved, before)
+	}
+	m.SetSnapshot(testSnapshot())
+	if r := m.repoByKey("acme/api"); r.ColorIndex != got {
+		t.Errorf("after a refresh api is colour %d, want the picked %d", r.ColorIndex, got)
+	}
+
+	// The pointer beats the keyboard selection.
+	m.hover = m.targetIndex("pane:w3:p1")
+	key(m, "c")
+	if _, ok := saved["acme/web"]; !ok {
+		t.Errorf("c with the pointer on web saved %v", saved)
+	}
+}
+
+func TestRecolorNeedsAnAgentTile(t *testing.T) {
+	m := newSized(143)
+	m.cursor = m.targetIndex("ws:w9")
+	key(m, "c")
+	if len(m.colors) != 0 || m.notice == "" {
+		t.Errorf("c on an empty tile: colors %v, notice %q", m.colors, m.notice)
+	}
+}

@@ -37,8 +37,9 @@ internal/ui           overlay
 
 State dir files, one set per herdr session (the default session uses the base
 dir, a named one `sessions/<HERDR_SESSION>/` inside it): `snapshot.json`,
-`state.json` (grid slots, learned state), `ui.json` (sort, dismissed) and
-`ui.json.lock` (serialises two overlays saving it), `chain.json`,
+`state.json` (grid slots, learned state), `ui.json` (sort, dismissed,
+colours picked with `c`) and `ui.json.lock` (serialises two overlays saving
+it), `chain.json`,
 `musterd.log`, `musterd.lock`, `musterd.spawn.lock` (serialises concurrent
 `--ensure`). In the base dir only: `keys.optout`, `skill.optout`.
 
@@ -89,7 +90,8 @@ agents. arrows/`hjkl` move, `enter` jumps to the tile's pane or focuses its
 workspace, `/` searches, `esc` leaves search / clears filter / closes, `s`
 cycles sort (first seen, a-z, attention, herdr), `J`/`K` move the selected
 tile's workspace one place in herdr's own order and only do anything in herdr
-sort, `g`/`G` ends, `1`-`9` ribbon row, `x` dismisses one, `o` marks
+sort, `g`/`G` ends, `1`-`9` ribbon row, `x` dismisses one, `c` gives the
+hovered or selected tile's repo a random unused colour, `o` marks
 orchestrator, `i` messages it, `t` tells it a gate is open, `S`
 installs the skill while its banner shows, `q`/`ctrl+c` closes, `M` jumps to
 the orchestrator.

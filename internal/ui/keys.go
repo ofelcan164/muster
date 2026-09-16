@@ -5,10 +5,13 @@ package ui
 
 import (
 	"cmp"
+	"math/rand/v2"
 	"slices"
 	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/ofelcan164/muster/internal/identity"
 )
 
 // dropLastRune removes one character from the end of an input, which is what
@@ -161,6 +164,11 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// action on it. The overlay already lists every agent.
 		return m.markSelected()
 
+	case "c":
+		// Hashed colours collide, and nothing else can tell two repos apart
+		// when their sigils are hard to read.
+		return m.recolorSelected()
+
 	case "s":
 		// Cycle the sort. First seen is the default and where it returns to.
 		m.sort = m.sort.Next()
@@ -275,6 +283,48 @@ func (m *Model) dismissSelected() (tea.Model, tea.Cmd) {
 			m.saveDismissed(m.dismissed)
 		}
 		break
+	}
+	return m, nil
+}
+
+// recolorSelected gives the hovered or selected agent's repo a random colour no other repo
+// on screen has, and keeps it. Pressing again picks another. With every colour
+// in use it settles for any but its own.
+func (m *Model) recolorSelected() (tea.Model, tea.Cmd) {
+	// The tile under the pointer, when there is one, is the one being looked at.
+	pane := m.selectedPane()
+	if m.hover >= 0 {
+		pane = m.targetPane(m.hover)
+	}
+	repo, _, ok := m.agentByPane(pane)
+	if !ok || !repo.IsGit {
+		m.notice = "c recolours an agent's repo: select one first"
+		return m, nil
+	}
+	used := map[int]bool{}
+	for _, r := range m.snap.Repos {
+		used[r.ColorIndex] = true
+	}
+	var free, other []int
+	for i := range identity.Palette {
+		if i == repo.ColorIndex {
+			continue
+		}
+		other = append(other, i)
+		if !used[i] {
+			free = append(free, i)
+		}
+	}
+	if len(free) == 0 {
+		free = other
+	}
+	if m.colors == nil {
+		m.colors = map[string]int{}
+	}
+	m.colors[repo.Key] = free[rand.IntN(len(free))]
+	m.applyColors()
+	if m.saveColors != nil {
+		m.saveColors(m.colors)
 	}
 	return m, nil
 }
