@@ -50,8 +50,8 @@ type Agent struct {
 	WorkspaceID string `json:"workspace_id"`
 	TabID       string `json:"tab_id"`
 
-	// Name is herdr's agent name when one has been set, else a stable label
-	// derived from the pane.
+	// Name is herdr's agent name when one has been set, else the pane's name
+	// from a rename, else its pane id.
 	Name string `json:"name"`
 	// Kind is herdr's own label for the agent, passed through unread. Nothing
 	// in Muster branches on it, so an agent herdr has never seen before still

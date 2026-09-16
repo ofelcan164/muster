@@ -318,14 +318,17 @@ func TestPaneWithNoCwdStillAppearsInSnapshot(t *testing.T) {
 func TestAgentNamesAreUnambiguous(t *testing.T) {
 	// Two agents in different workspaces are both "p1". The fallback must not
 	// collapse them into the same label.
-	a := agentName(herdr.Agent{PaneID: "w5:p1"})
-	b := agentName(herdr.Agent{PaneID: "w6:p1"})
+	a := agentName(herdr.Agent{PaneID: "w5:p1"}, "")
+	b := agentName(herdr.Agent{PaneID: "w6:p1"}, "")
 	if a == b {
 		t.Fatalf("distinct panes produced the same name %q", a)
 	}
-	named := agentName(herdr.Agent{PaneID: "w5:p1", Name: "migrations"})
+	named := agentName(herdr.Agent{PaneID: "w5:p1", Name: "migrations"}, "db pane")
 	if named != "migrations" {
 		t.Errorf("an explicit name must win, got %q", named)
+	}
+	if got := agentName(herdr.Agent{PaneID: "w5:p1"}, " db pane "); got != "db pane" {
+		t.Errorf("a renamed pane must beat its id, got %q", got)
 	}
 }
 
