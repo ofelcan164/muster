@@ -75,6 +75,9 @@ type Model struct {
 	composing bool
 	compose   string
 
+	// sayMore expands the strip's said line to the whole message, wrapped.
+	sayMore bool
+
 	// notice is what just happened, shown on the strip. A full-screen overlay
 	// has nowhere else to report that a send worked or failed.
 	notice string

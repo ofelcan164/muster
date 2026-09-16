@@ -121,8 +121,8 @@ In the overlay:
 
 - arrows or `hjkl` move, `/` searches, `enter` jumps to the tile's agent or
   focuses an empty tile's workspace
-- `esc` leaves search, then clears the filter, then closes; `q` or `ctrl+c`
-  closes
+- `esc` leaves search, then clears the filter, then folds the orchestrator's
+  message, then closes; `q` or `ctrl+c` closes
 - `s` cycles sort (first seen, a-z, attention, herdr); `J`/`K` move the
   selected tile's workspace one place in herdr's own order, and only do
   anything in herdr sort; `g`/`G` jump to the ends
@@ -131,12 +131,15 @@ In the overlay:
 - `o` marks the selected agent as the orchestrator
 - `i` messages the orchestrator, `t` tells it about an open gate: work landed
   and the agents parked on it have not moved
+- `e` shows everything the orchestrator last said, not just the one line the
+  strip has room for, and folds it again
 - `S` installs the reporting skill, but only while its banner is on screen
 - `M` jumps to the orchestrator. Muster opens as a herdr popup, which gets
   every key while it is open, your prefix included, so this is what keeps
   `prefix+shift+m` working. `prefix+m` does nothing inside; close with `q` or
   `esc`. `prefix+ctrl+m` arrives as `enter` and jumps to the selected tile
-- mouse: click a tile to jump to it or focus its workspace, click the banner to install the skill, wheel
+- mouse: click a tile to jump to it or focus its workspace, click the banner to install the skill, click
+  `e more` or `e less` on the strip to expand or fold the message, wheel
   scrolls, hover highlights. A click outside Muster does nothing: herdr keeps
   clicks outside a popup to itself
 

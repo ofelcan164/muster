@@ -104,6 +104,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.rebuild()
 			return m, nil
 		}
+		if m.sayMore {
+			m.sayMore = false
+			return m, nil
+		}
 		m.quit = true
 		return m, tea.Quit
 
@@ -142,6 +146,14 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.composing, m.compose = true, ""
 		} else {
 			m.notice = "no orchestrator marked, so there is nobody to tell"
+		}
+		return m, nil
+
+	case "e":
+		// Expand what the orchestrator last said. Not while a filter hides the
+		// strip, for the same reason i refuses.
+		if m.filter == "" && m.snap.Orch.LastSaid != "" {
+			m.sayMore = !m.sayMore
 		}
 		return m, nil
 

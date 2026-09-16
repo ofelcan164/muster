@@ -20,11 +20,11 @@ import (
 // it is halfway through writing.
 
 // saidLines is how far back to look, and saidMax caps what is kept. The strip
-// shows one line and truncates to the width anyway; the cap is only so a pasted
-// wall of text cannot land in the snapshot.
+// shows one line until e expands it to the whole message, so the cap is only so
+// a pasted wall of text cannot land in the snapshot.
 const (
 	saidLines = 60
-	saidMax   = 200
+	saidMax   = 4000
 )
 
 // orchSay is what the orchestrator last said, and when that was read, if it
@@ -106,7 +106,9 @@ func (d *Daemon) fetchSaid(ctx context.Context, paneID, key string) {
 // alike, and the user's own input with "❯". So the last "●" is the last thing
 // the agent said or did, which is the glance this is for: did it answer, and
 // did it dispatch. Wrapped text continues indented underneath and is joined
-// back on, because half a sentence reads as a bug.
+// back on, because half a sentence reads as a bug. A blank line followed by more
+// indented text is the next paragraph of the same message, kept as a newline
+// so the expanded strip can show it.
 //
 // No other agent marks its own lines, so for them the "●" scan never fires and
 // the fallback carries the strip: the last line with words in it that is not
@@ -125,11 +127,18 @@ func ExtractSaid(text string) string {
 			continue
 		}
 		said := strings.TrimSpace(strings.TrimPrefix(s, "●"))
+		sep := " "
 		for j := i + 1; j < len(lines); j++ {
-			if !strings.HasPrefix(lines[j], "  ") || strings.TrimSpace(lines[j]) == "" {
+			t := strings.TrimSpace(lines[j])
+			if t == "" {
+				sep = "\n"
+				continue
+			}
+			if !strings.HasPrefix(lines[j], "  ") {
 				break
 			}
-			said += " " + strings.TrimSpace(lines[j])
+			said += sep + t
+			sep = " "
 		}
 		return clip(said, saidMax)
 	}

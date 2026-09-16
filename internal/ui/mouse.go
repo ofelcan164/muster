@@ -42,6 +42,10 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
+	if idx == moreTarget {
+		m.sayMore = !m.sayMore
+		return m, nil
+	}
 	if m.isKind(idx, kindBanner) {
 		// The banner is not a selection, so clicking it must not move the
 		// cursor off whatever the keyboard was on.
@@ -61,6 +65,10 @@ type hitRegion struct {
 	x0, x1 int // inclusive
 	target int
 }
+
+// moreTarget is the region of the strip's more/less link. It is no target: the
+// cursor never lands on it, and isActive ignores it like any negative index.
+const moreTarget = -2
 
 // noteRegion records that a target occupies part of a screen line.
 func (m *Model) noteRegion(y, x0, x1, targetIndex int) {

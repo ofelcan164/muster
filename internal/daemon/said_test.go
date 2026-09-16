@@ -30,6 +30,15 @@ func TestExtractsWhatTheAgentLastSaid(t *testing.T) {
 	}
 }
 
+// The strip can expand to the whole message, so a second paragraph is kept,
+// and the input box after it is not.
+func TestSaidKeepsEveryParagraph(t *testing.T) {
+	text := "● First paragraph that\n  wraps.\n\n  Second one.\n\n❯ \n  ? for shortcuts\n"
+	if got, want := ExtractSaid(text), "First paragraph that wraps.\nSecond one."; got != want {
+		t.Errorf("got  %q\nwant %q", got, want)
+	}
+}
+
 // A tool call is the last thing it said as much as prose is: dispatching is
 // exactly the thing the strip is meant to let you check at a glance.
 func TestATooCallCountsAsSaying(t *testing.T) {
@@ -58,7 +67,7 @@ func TestNothingSaid(t *testing.T) {
 // A wall of pasted text must not land in the snapshot whole.
 func TestSaidIsCapped(t *testing.T) {
 	long := "● "
-	for i := 0; i < 500; i++ {
+	for i := 0; i < saidMax+100; i++ {
 		long += "x"
 	}
 	got := ExtractSaid(long)
