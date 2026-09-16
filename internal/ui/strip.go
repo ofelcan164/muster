@@ -217,11 +217,11 @@ func (m *Model) stripFooter() string {
 // stripHint is the last line of the strip, which changes with what the current
 // selection makes possible.
 func (m *Model) stripHint() string {
-	if repair := m.repairTarget(); repair != nil {
-		// The row lands on a parked agent, which is what knows the upstream.
-		_, parked, _ := m.agentByPane(repair.PaneID)
+	if row := m.reportTarget(); row != nil {
+		// The row lands on a dependent agent, which is what knows the dependency.
+		_, dep, _ := m.agentByPane(row.PaneID)
 		return fmt.Sprintf(" › i tells it something · t tells it %s landed",
-			shortRepo(m.repoByKey(parked.After)))
+			shortRepo(m.repoByKey(dep.DependsOnRepo)))
 	}
 	return " › press i to tell it something"
 }

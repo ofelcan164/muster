@@ -1,7 +1,7 @@
 // Package chain stores the usual order between repos.
 //
 // It is a default, not an edge. The orchestrator reads it back through
-// `muster show` or `muster chain get` before it writes blocked_on onto the
+// `muster show` or `muster chain get` before it writes depends_on onto the
 // agents it dispatches, and records a new one with `muster chain set` when a
 // durable order changes. Muster never draws an edge or ranks a row from it:
 // "api before web" holds for one feature and can reverse for the next, so edges
@@ -18,7 +18,7 @@ import (
 
 // Chain is an order over repo names. Stages run in sequence and everything
 // within a stage runs in parallel, which covers a linear order and a fan-out
-// where several repos follow the same upstream.
+// where several repos follow the same repo.
 type Chain struct {
 	Stages [][]string `json:"stages"`
 

@@ -61,7 +61,7 @@ muster install [--key <letter>] [--no-keys] [--auto]        keybindings
 muster uninstall-keys | uninstall [--purge]         undoing them
 muster install-skill | uninstall-skill              the orchestrator reporting skill
 muster mark-orchestrator                            run on the orchestrator's pane
-muster show [target]                                the orchestrator's query: usual order, parked work
+muster show [target]                                the orchestrator's query: usual order, dependent work
 muster chain get [--json] | set <spec> [--by NAME] | clear
 muster discover                                     make sure the daemon is up; the event hooks call it
 muster badge [letter]                               the tab_bar_right line install writes
@@ -75,11 +75,13 @@ musterd status
 ```
 
 Chain spec: `"contracts > api > web,mobile"`, `>` sequence, `,` parallel.
-Task lines come via `herdr pane report-metadata` (`task`, `blocked_on`,
+Task lines come via `herdr pane report-metadata` (`task`, `depends_on`,
 `landed`, `note` tokens); the skill teaches the orchestrator to write them.
-Edges come only from `blocked_on` (`repo#pr`, resolved to `Agent.After` by
-`resolveEdges`); a `landed` equal to it stamps `LandedAt`. The gate row fires
-once the orchestrator ends a turn after that while a parked agent has not moved.
+Edges come only from `depends_on` (`repo#pr`, resolved to `Agent.DependsOnRepo`
+by `resolveEdges`); a `landed` equal to it stamps `LandedAt`. The `LANDED` row
+fires once the orchestrator ends a turn after that while a dependent agent has
+not moved. One vocabulary throughout: an agent depends on a repo, the repo is
+needed by it, the work landed. `blocked` means waiting on you, never this.
 
 Global keys, once installed (`prefix` is the reader's herdr prefix key):
 `prefix+m` overlay, `prefix+shift+m` orchestrator, `prefix+ctrl+m` back. The
@@ -93,7 +95,7 @@ cycles sort (first seen, a-z, attention, herdr), `J`/`K` move the selected
 tile's workspace one place in herdr's own order and only do anything in herdr
 sort, `g`/`G` ends, `1`-`9` ribbon row, `x` dismisses one, `c` gives the
 hovered or selected tile's repo a random unused colour, `o` marks
-orchestrator, `i` messages it, `t` tells it a gate is open, `e` expands or folds its last message, `S`
+orchestrator, `i` messages it, `t` tells it about a landed row, `e` expands or folds its last message, `S`
 installs the skill while its banner shows, `q`/`ctrl+c` closes, `M` jumps to
 the orchestrator.
 Mouse: click a tile jumps or focuses its workspace, click banner installs

@@ -98,7 +98,7 @@ func reasonAccent(r model.Reason) lipgloss.Color {
 	switch r {
 	case model.ReasonBlocked:
 		return colRed
-	case model.ReasonGateOpen:
+	case model.ReasonLanded:
 		return colOrange
 	case model.ReasonProcessStopped:
 		return colYellow
@@ -114,8 +114,8 @@ func reasonAccent(r model.Reason) lipgloss.Color {
 // "STOPPED", and those read differently at a glance.
 func reasonLabel(r model.Reason, status model.Status) string {
 	switch r {
-	case model.ReasonGateOpen:
-		return "GATE OPEN"
+	case model.ReasonLanded:
+		return "LANDED"
 	case model.ReasonProcessStopped:
 		return "STOPPED"
 	case model.ReasonIdleNeverDone:

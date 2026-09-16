@@ -63,7 +63,7 @@ func testSnapshot() *model.Snapshot {
 				agent("w2:p1", "w2", "migrations", model.StatusBlocked, "add billing schema migration"),
 				agent("w2:p2", "w2", "tests", model.StatusDone, "check the test suite")),
 			repo(2, "acme/web", "web", "feat/checkout-ui", "▣", "w3",
-				agent("w3:p1", "w3", "checkout-ui", model.StatusWorking, "parked until api lands")),
+				agent("w3:p1", "w3", "checkout-ui", model.StatusWorking, "waiting until api lands")),
 			repo(3, "acme/infra", "infra", "main", "◈", "w9"),
 		},
 		Attention: []model.Attention{
@@ -732,7 +732,7 @@ func TestRibbonBadgesReadFromTheReason(t *testing.T) {
 		want   string
 	}{
 		{model.ReasonBlocked, "BLOCKED"},
-		{model.ReasonGateOpen, "GATE OPEN"},
+		{model.ReasonLanded, "LANDED"},
 		{model.ReasonProcessStopped, "STOPPED"},
 		{model.ReasonDoneUnseen, "DONE"},
 		{model.ReasonIdleNeverDone, "STALE"},
@@ -747,7 +747,7 @@ func TestRibbonBadgesReadFromTheReason(t *testing.T) {
 func TestReasonAccentsAreDistinct(t *testing.T) {
 	seen := map[string]model.Reason{}
 	for _, r := range []model.Reason{
-		model.ReasonBlocked, model.ReasonGateOpen,
+		model.ReasonBlocked, model.ReasonLanded,
 		model.ReasonProcessStopped, model.ReasonDoneUnseen,
 	} {
 		c := string(reasonAccent(r))
@@ -758,21 +758,21 @@ func TestReasonAccentsAreDistinct(t *testing.T) {
 	}
 }
 
-// A parked agent's tile says what it is after, and each tile of the repo it
-// waits on says who it holds.
+// A dependent agent's tile says what it depends on, and each tile of the repo
+// it waits on says who needs it.
 func TestTilesDrawBothEndsOfAnEdge(t *testing.T) {
 	s := testSnapshot()
 	web := &s.Repos[2].Agents[0]
-	web.BlockedOn, web.After = "api#412", "acme/api"
+	web.DependsOn, web.DependsOnRepo = "api#412", "acme/api"
 	out := plain(withSnapshot(t, s, 143).View())
-	for _, want := range []string{"    ⧗ after ◆ api · can't land yet", "    ▸ holds ▣ web"} {
+	for _, want := range []string{"    ⧗ depends on ◆ api · can't land yet", "    ▸ needed by ▣ web"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the grid does not show %q:\n%s", want, out)
 		}
 	}
 
 	web.LandedAt = time.Now().Add(-5 * time.Minute)
-	if out := plain(withSnapshot(t, s, 143).View()); !strings.Contains(out, "⧗ after ◆ api · landed 5m ago") {
+	if out := plain(withSnapshot(t, s, 143).View()); !strings.Contains(out, "⧗ depends on ◆ api · landed 5m ago") {
 		t.Errorf("a landed edge does not say so:\n%s", out)
 	}
 }
@@ -785,14 +785,14 @@ func TestTilesZoneEachFieldToItsRow(t *testing.T) {
 	blocked := &s.Repos[1].Agents[0]
 	blocked.Kind = "codex"
 	blocked.Question = "Drop the legacy table?"
-	blocked.BlockedOn, blocked.After = "api#412", "acme/api"
+	blocked.DependsOn, blocked.DependsOnRepo = "api#412", "acme/api"
 	out := plain(withSnapshot(t, s, 143).View())
 
 	for _, want := range []string{
 		"[p1]",                     // the pane chip: where enter lands
 		"[codex]",                  // the kind chip
 		"? Drop the legacy table?", // the question marks its own row
-		"⧗ after ◆ api",            // BlockedOn resolved to the repo on screen
+		"⧗ depends on ◆ api",       // DependsOn resolved to the repo on screen
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("zoned tile is missing %q:\n%s", want, out)
@@ -831,7 +831,7 @@ func TestTilesZoneEachFieldToItsRow(t *testing.T) {
 // the other end. A tile on no edge lights nothing.
 func TestSelectingOneEndLightsTheOther(t *testing.T) {
 	s := testSnapshot()
-	s.Repos[2].Agents[0].BlockedOn, s.Repos[2].Agents[0].After = "api#412", "acme/api"
+	s.Repos[2].Agents[0].DependsOn, s.Repos[2].Agents[0].DependsOnRepo = "api#412", "acme/api"
 	m := withSnapshot(t, s, 143)
 	webTile := tile{Agent: s.Repos[2].Agents[0], Repo: s.Repos[2]}
 	apiTile := tile{Agent: s.Repos[1].Agents[0], Repo: s.Repos[1]}
@@ -842,12 +842,12 @@ func TestSelectingOneEndLightsTheOther(t *testing.T) {
 
 	m.cursor = m.targetIndex("pane:w2:p1")
 	if edge(webTile) == dimWeb {
-		t.Error("selecting api did not light web's after line")
+		t.Error("selecting api did not light web's depends on line")
 	}
 	m.cursor = noSelection
 	m.hover = m.targetIndex("pane:w3:p1")
 	if edge(apiTile) == dimAPI {
-		t.Error("hovering web did not light api's holds line")
+		t.Error("hovering web did not light api's needed by line")
 	}
 }
 

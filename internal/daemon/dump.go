@@ -104,8 +104,8 @@ func Dump(w io.Writer, s *model.Snapshot, now time.Time) {
 				marker, icon(a.Status), a.Name,
 				strings.ToUpper(string(a.Status)), ageText(a, now),
 				taskLine(a))
-			if a.BlockedOn != "" {
-				fmt.Fprintf(w, "         after %s\n", edgeText(a, now))
+			if a.DependsOn != "" {
+				fmt.Fprintf(w, "         depends on %s\n", edgeText(a, now))
 			}
 			if a.Note != "" {
 				fmt.Fprintf(w, "         ✎ %s\n", a.Note)
@@ -148,18 +148,18 @@ func Show(w io.Writer, s *model.Snapshot, c *chain.Chain, target string, now tim
 		agent model.Agent
 	}
 	var all []ref
-	holds := map[string][]ref{}
+	neededBy := map[string][]ref{}
 	for _, r := range s.Repos {
 		for _, a := range r.Agents {
 			all = append(all, ref{r, a})
-			if a.After != "" {
-				holds[a.After] = append(holds[a.After], ref{r, a})
+			if a.DependsOnRepo != "" {
+				neededBy[a.DependsOnRepo] = append(neededBy[a.DependsOnRepo], ref{r, a})
 			}
 		}
 	}
 	var picked []ref
 	for _, x := range all {
-		onEdge := x.agent.BlockedOn != "" || len(holds[x.repo.Key]) > 0
+		onEdge := x.agent.DependsOn != "" || len(neededBy[x.repo.Key]) > 0
 		if target == "" && onEdge || target != "" && isTarget(target, x.repo, x.agent) {
 			picked = append(picked, x)
 		}
@@ -184,43 +184,43 @@ func Show(w io.Writer, s *model.Snapshot, c *chain.Chain, target string, now tim
 	}
 	fmt.Fprintf(w, "usual order  %s\n", order)
 	if len(picked) == 0 {
-		fmt.Fprintln(w, "\nno agent is parked on another repo")
+		fmt.Fprintln(w, "\nno agent depends on another repo")
 		return nil
 	}
 
 	for _, x := range picked {
 		a := x.agent
 		fmt.Fprintf(w, "\n%s/%s  %s  %s %s\n", repoLabel(x.repo), a.Name, a.PaneID, a.Status, ageText(a, now))
-		fmt.Fprintf(w, "  task    %s\n", taskLine(a))
-		if a.BlockedOn != "" {
-			fmt.Fprintf(w, "  after   %s\n", edgeText(a, now))
+		fmt.Fprintf(w, "  task        %s\n", taskLine(a))
+		if a.DependsOn != "" {
+			fmt.Fprintf(w, "  depends on  %s\n", edgeText(a, now))
 			for _, r := range s.Repos {
-				if a.After == "" || r.Key != a.After {
+				if a.DependsOnRepo == "" || r.Key != a.DependsOnRepo {
 					continue
 				}
 				if len(r.Agents) == 0 {
-					fmt.Fprintf(w, "          no agent open in %s\n", repoLabel(r))
+					fmt.Fprintf(w, "              no agent open in %s\n", repoLabel(r))
 				}
 				for _, u := range r.Agents {
-					fmt.Fprintf(w, "          %s/%s  %s  %s %s · %s\n",
+					fmt.Fprintf(w, "              %s/%s  %s  %s %s · %s\n",
 						repoLabel(r), u.Name, u.PaneID, u.Status, ageText(u, now), taskLine(u))
 				}
 			}
 		}
-		if hs := holds[x.repo.Key]; len(hs) > 0 {
+		if hs := neededBy[x.repo.Key]; len(hs) > 0 {
 			parts := make([]string, len(hs))
 			for i, h := range hs {
 				parts[i] = fmt.Sprintf("%s/%s (%s %s)", repoLabel(h.repo), h.agent.Name, h.agent.Status, ageText(h.agent, now))
 			}
-			fmt.Fprintf(w, "  holds   %s\n", strings.Join(parts, ", "))
+			fmt.Fprintf(w, "  needed by   %s\n", strings.Join(parts, ", "))
 		}
 		for _, row := range s.Attention {
 			if row.PaneID == a.PaneID {
-				fmt.Fprintf(w, "  ribbon  %s · %s\n", row.Reason, row.Detail)
+				fmt.Fprintf(w, "  ribbon      %s · %s\n", row.Reason, row.Detail)
 			}
 		}
 		if a.Note != "" {
-			fmt.Fprintf(w, "  note    %s\n", a.Note)
+			fmt.Fprintf(w, "  note        %s\n", a.Note)
 		}
 	}
 	return nil
@@ -240,12 +240,12 @@ func isTarget(target string, r model.Repo, a model.Agent) bool {
 	return false
 }
 
-// edgeText is what an agent is parked on and whether it has landed.
+// edgeText is what an agent depends on and whether it has landed.
 func edgeText(a model.Agent, now time.Time) string {
 	if a.LandedAt.IsZero() {
-		return a.BlockedOn + " · can't land yet"
+		return a.DependsOn + " · can't land yet"
 	}
-	return a.BlockedOn + " · landed " + CompactDur(now.Sub(a.LandedAt)) + " ago"
+	return a.DependsOn + " · landed " + CompactDur(now.Sub(a.LandedAt)) + " ago"
 }
 
 func repoLabel(r model.Repo) string { return cmp.Or(r.Display, r.Name, r.Key) }

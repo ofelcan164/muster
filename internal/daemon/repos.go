@@ -204,20 +204,20 @@ func shortName(name string) string {
 	return name
 }
 
-// resolveEdges points each agent's blocked_on at the repo it names, which is
+// resolveEdges points each agent's depends_on at the repo it names, which is
 // the text before any "#". An agent never waits on its own repo, and a name
-// that matches nothing leaves After empty rather than guessing.
+// that matches nothing leaves DependsOnRepo empty rather than guessing.
 func resolveEdges(repos []model.Repo) {
 	for i := range repos {
 		for j := range repos[i].Agents {
 			a := &repos[i].Agents[j]
-			named, _, _ := strings.Cut(a.BlockedOn, "#")
+			named, _, _ := strings.Cut(a.DependsOn, "#")
 			if named = strings.TrimSpace(named); named == "" {
 				continue
 			}
 			for _, r := range repos {
 				if r.IsGit && r.Key != repos[i].Key && sameRepo(named, r.Name) {
-					a.After = r.Key
+					a.DependsOnRepo = r.Key
 					break
 				}
 			}
