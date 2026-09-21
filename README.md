@@ -36,7 +36,7 @@ under [Requirements](#requirements).
 herdr plugin install ofelcan164/muster
 ```
 
-That is the whole install. It tracks the default branch, and `--ref v0.1.0`
+That is the whole install. It tracks the default branch, and `--ref v0.2.0`
 pins a release instead. Muster binds its keys itself: at every start herdr runs its
 startup hook, `./bin/muster install --auto` from the plugin's checkout, which
 starts the daemon and writes the keybindings.
