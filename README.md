@@ -14,19 +14,23 @@ sidebar](docs/overlay.png)
 
 ## Why use it
 
-herdr's sidebar can't tell you at a glance which agents matter right now.
-Muster can:
+Muster puts every agent in one place and gets you to any of them in a keystroke
+or two.
 
-- **You lose track of who needs you.** Muster's top ribbon lists the agents
-  waiting on you, blocked ones with the question they're asking.
-- **Finished work goes unnoticed.** An agent that finished stays in view until
-  you've looked at it.
-- **Terminal titles don't say much.** With the reporting skill, each tile shows
-  what the agent was actually asked to do.
-- **Cross-repo work gets tangled.** If `web` is waiting on a change in `api`,
-  both tiles say so, and Muster reminds you once `api` has landed.
-- **Orchestrator setups are hard to follow.** The orchestrator's latest message
-  stays pinned along the bottom, and you can message it without leaving Muster.
+- **Get to any agent fast.** Search with `/`, pick a tile and press `enter` to
+  land on that agent, in whatever workspace it's in. `prefix+shift+m` takes you
+  to the orchestrator from anywhere, and `prefix+ctrl+m` takes you back.
+- **See who needs you.** The ribbon along the top lists the agents waiting on
+  you, blocked ones with the question they're asking. `1`–`9` jump straight to
+  them.
+- **Catch finished work.** An agent that finished stays in view until you've
+  looked at it.
+- **See what each agent is doing.** With the reporting skill, each tile shows
+  the task the agent was given.
+- **Follow cross-repo work.** If `web` is waiting on a change in `api`, both
+  tiles say so, and Muster reminds you once `api` has landed.
+- **Keep the orchestrator in view.** Its latest message stays pinned along the
+  bottom, and you can message it without leaving Muster.
 
 ## Install
 
@@ -75,7 +79,7 @@ Inside Muster:
 | `enter`          | Jump to the agent, or focus the empty workspace           |
 | `/`              | Search                                                    |
 | `s`              | Change sort: first seen, a–z, needs attention, herdr's order |
-| `1`–`9`          | Jump to a row in the attention ribbon                     |
+| `1`–`9`          | Jump to that agent in the attention ribbon                |
 | `x`              | Dismiss a ribbon row until its status changes             |
 | `o`              | Mark the selected agent as the orchestrator               |
 | `M`              | Jump to the orchestrator                                  |
