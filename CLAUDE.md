@@ -83,6 +83,10 @@ fires once the orchestrator ends a turn after that while a dependent agent has
 not moved. One vocabulary throughout: an agent depends on a repo, the repo is
 needed by it, the work landed. `blocked` means waiting on you, never this.
 
+The orchestrator is whichever agent carries the `role=orchestrator` token (what
+`o` and `mark-orchestrator` write), else one named orchestrator, else one running
+in a pane named orchestrator, all case-insensitive. Nothing else is guessed.
+
 Global keys, once installed (`prefix` is the reader's herdr prefix key):
 `prefix+m` overlay, `prefix+shift+m` orchestrator, `prefix+ctrl+m` back. The
 letter falls back through `m g u y` when the user already bound one, and

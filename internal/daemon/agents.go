@@ -184,16 +184,24 @@ func agentName(a herdr.Agent) string {
 	return a.PaneID
 }
 
-// findOrchestrator resolves the orchestrator by token first and name second.
-// The token wins because it survives a rename and can carry more than a string
-// later. If neither is set the strip is absent rather than guessed at.
+// findOrchestrator resolves the orchestrator by token first, the agent's name
+// second, and the name of the pane it runs in third. The token wins because it
+// survives a rename and can carry more than a string later, and because it is
+// what o writes: marking one agent must beat another that only happens to be
+// called orchestrator. If none is set the strip is absent rather than guessed
+// at.
+//
+// The pane's name is there because naming the pane is how you set an
+// orchestrator up in herdr before Muster is involved, and asking you to mark
+// it again with o was asking twice. Only a pane an agent is running in counts:
+// a shell in a pane with that name has nothing to coordinate with.
 func (d *Daemon) findOrchestrator(snap *herdr.Snapshot, agents map[string]model.Agent, now time.Time) model.Orchestrator {
 	panesByID := make(map[string]herdr.Pane, len(snap.Panes))
 	for _, p := range snap.Panes {
 		panesByID[p.PaneID] = p
 	}
 
-	var byName *herdr.Agent
+	var byName, byLabel *herdr.Agent
 	for i := range snap.Agents {
 		a := &snap.Agents[i]
 		if strings.EqualFold(tokenOf(a.Tokens, panesByID[a.PaneID].Tokens, "role"), "orchestrator") {
@@ -202,9 +210,15 @@ func (d *Daemon) findOrchestrator(snap *herdr.Snapshot, agents map[string]model.
 		if strings.EqualFold(a.Name, "orchestrator") && byName == nil {
 			byName = a
 		}
+		if strings.EqualFold(strings.TrimSpace(panesByID[a.PaneID].Label), "orchestrator") && byLabel == nil {
+			byLabel = a
+		}
 	}
 	if byName != nil {
 		return d.orchFrom(byName, agents, "name")
+	}
+	if byLabel != nil {
+		return d.orchFrom(byLabel, agents, "pane")
 	}
 	return model.Orchestrator{Found: false}
 }

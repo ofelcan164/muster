@@ -29,7 +29,7 @@ func (m *Model) stripLines(startY int) []string {
 		out := []string{
 			m.sectionRule("orchestrator"),
 			styFaint.Render(fitLine(
-				"  none marked · press o on the agent in charge", m.width)),
+				"  none marked · press o on the agent in charge, or name its pane orchestrator", m.width)),
 		}
 		if offer, ok := m.skillOffer(startY + len(out)); ok {
 			out = append(out, offer)

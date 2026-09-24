@@ -361,6 +361,60 @@ func TestOrchestratorFallsBackToName(t *testing.T) {
 	}
 }
 
+// A pane named orchestrator, any case, marks the agent running in it, so an
+// orchestrator set up in herdr needs no o in Muster.
+func TestOrchestratorFromThePaneName(t *testing.T) {
+	d := newTestDaemon(t)
+	snap := &herdr.Snapshot{
+		Panes: []herdr.Pane{
+			{PaneID: "w1:p1", Label: "api"},
+			{PaneID: "w2:p1", Label: " Orchestrator "},
+		},
+		Agents: []herdr.Agent{
+			{PaneID: "w1:p1", Name: "migrations", AgentStatus: "working"},
+			{PaneID: "w2:p1", Name: "claude", AgentStatus: "idle"},
+		},
+	}
+	orch := d.findOrchestrator(snap, d.buildAgents(snap, time.Now()), time.Now())
+	if !orch.Found || orch.PaneID != "w2:p1" || orch.DetectedBy != "pane" {
+		t.Fatalf("want w2:p1 via pane, got %+v", orch)
+	}
+}
+
+// The pane's name is the weakest of the three: marking an agent with o, or an
+// agent named orchestrator, beats a pane that is only called that.
+func TestOrchestratorPaneNameLosesToTokenAndName(t *testing.T) {
+	d := newTestDaemon(t)
+	panes := []herdr.Pane{{PaneID: "w1:p1", Label: "orchestrator"}}
+	for _, c := range []struct {
+		other herdr.Agent
+		how   string
+	}{
+		{herdr.Agent{PaneID: "w2:p1", Tokens: map[string]string{"role": "orchestrator"}}, "token"},
+		{herdr.Agent{PaneID: "w2:p1", Name: "Orchestrator"}, "name"},
+	} {
+		snap := &herdr.Snapshot{Panes: panes, Agents: []herdr.Agent{
+			{PaneID: "w1:p1", Name: "claude", AgentStatus: "idle"}, c.other,
+		}}
+		orch := d.findOrchestrator(snap, d.buildAgents(snap, time.Now()), time.Now())
+		if orch.PaneID != "w2:p1" || orch.DetectedBy != c.how {
+			t.Errorf("%s should beat the pane's name, got %s via %s", c.how, orch.PaneID, orch.DetectedBy)
+		}
+	}
+}
+
+// A pane named orchestrator with no agent running in it is only a shell.
+func TestOrchestratorPaneNameNeedsAnAgent(t *testing.T) {
+	d := newTestDaemon(t)
+	snap := &herdr.Snapshot{
+		Panes:  []herdr.Pane{{PaneID: "w1:p1", Label: "orchestrator"}, {PaneID: "w2:p1", Label: "api"}},
+		Agents: []herdr.Agent{{PaneID: "w2:p1", Name: "migrations", AgentStatus: "idle"}},
+	}
+	if orch := d.findOrchestrator(snap, d.buildAgents(snap, time.Now()), time.Now()); orch.Found {
+		t.Fatalf("a pane with no agent must not be the orchestrator, got %+v", orch)
+	}
+}
+
 func TestNoOrchestratorIsNotGuessed(t *testing.T) {
 	d := newTestDaemon(t)
 	snap := &herdr.Snapshot{
