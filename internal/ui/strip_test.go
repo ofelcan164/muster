@@ -624,3 +624,54 @@ func TestHoveringTheStripRuleSaysItDrags(t *testing.T) {
 		t.Error("hovering the rule should say it drags")
 	}
 }
+
+// herdr drops a release outside the popup, so a drag let go of out there never
+// sees its button come up. The next motion arrives with no button held, and
+// that ends the drag where it was rather than resizing to follow the pointer.
+func TestDragReleasedOutsideThePopupEnds(t *testing.T) {
+	m := withSnapshot(t, withOrch(), 80)
+	saved := -1
+	m.SetSayRows(0, func(n int) { saved = n })
+
+	g := grip(t, m)
+	m.Update(tea.MouseMsg{X: 5, Y: g.y, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	m.Update(tea.MouseMsg{X: 5, Y: 20, Action: tea.MouseActionMotion, Button: tea.MouseButtonLeft})
+	m.Update(tea.MouseMsg{X: 5, Y: 10, Action: tea.MouseActionMotion, Button: tea.MouseButtonNone})
+
+	if m.resizing || m.sayRows != 17 || saved != 17 {
+		t.Errorf("resizing=%v sayRows=%d saved=%d, want the drag ended at 17",
+			m.resizing, m.sayRows, saved)
+	}
+	// And the pointer hovers again, rather than still being the drag's.
+	m.Update(tea.MouseMsg{X: 5, Y: 0, Action: tea.MouseActionMotion})
+	if m.sayRows != 17 {
+		t.Errorf("motion after the drag resized the strip to %d", m.sayRows)
+	}
+}
+
+// The more link on a docked strip's last row is clickable where it is drawn,
+// and expands rather than jumping.
+func TestDockedMoreLinkExpands(t *testing.T) {
+	s := withOrch()
+	s.Orch.LastSaid = strings.Repeat("api is picking up the schema change. ", 40)
+	m := withSnapshot(t, s, 80)
+	m.SetSayRows(4, nil)
+
+	lines := strings.Split(plain(m.View()), "\n")
+	var link *hitRegion
+	for i := range m.hits {
+		if m.hits[i].target == moreTarget {
+			link = &m.hits[i]
+		}
+	}
+	if link == nil {
+		t.Fatal("the docked more link has no click region")
+	}
+	if got := string([]rune(lines[link.y])[link.x0 : link.x1+1]); got != " e more" {
+		t.Errorf("the region covers %q, want the link's \" e more\"", got)
+	}
+	m.Update(tea.MouseMsg{X: link.x0 + 2, Y: link.y, Action: tea.MouseActionRelease, Button: tea.MouseButtonLeft})
+	if !m.sayMore || m.jump != "" {
+		t.Errorf("clicking the docked more link should expand, not jump (jump=%q)", m.jump)
+	}
+}

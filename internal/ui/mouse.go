@@ -20,15 +20,16 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		// wanders: letting motion hover tiles would light them mid-drag.
 		// Release is taken with any button, because legacy mouse encoding
 		// does not say which one came up.
-		switch msg.Action {
-		case tea.MouseActionMotion:
+		switch {
+		case msg.Action == tea.MouseActionMotion && msg.Button == tea.MouseButtonNone:
+			// Moving with no button held: the release happened outside the
+			// popup, where herdr drops it. The drag ended wherever it last was.
+			m.endDrag()
+		case msg.Action == tea.MouseActionMotion:
 			m.dragTo(msg.Y)
-		case tea.MouseActionRelease:
+		case msg.Action == tea.MouseActionRelease:
 			m.dragTo(msg.Y)
-			m.resizing = false
-			if m.saveSayRows != nil {
-				m.saveSayRows(m.sayRows)
-			}
+			m.endDrag()
 		}
 		return m, nil
 	}
@@ -79,6 +80,14 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	// the mouse slower than the keyboard, which defeats the point of having it.
 	m.cursor = idx
 	return m.activate()
+}
+
+// endDrag stops resizing the strip and keeps the height it was left at.
+func (m *Model) endDrag() {
+	m.resizing = false
+	if m.saveSayRows != nil {
+		m.saveSayRows(m.sayRows)
+	}
 }
 
 // hitRegion is a rectangle of the screen belonging to one target. Cards claim
