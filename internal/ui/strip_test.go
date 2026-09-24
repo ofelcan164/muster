@@ -592,9 +592,9 @@ func TestDraggingTheStripLeavesTheHeader(t *testing.T) {
 	}
 }
 
-// A dragged height docks the strip to the bottom and holds even for a message
-// shorter than it, so the rule does not spring away from the pointer. That is
-// also how a height saved in an earlier session opens.
+// A dragged height holds even for a message shorter than it, so the rule does
+// not spring away from the pointer. That is also how a height saved in an
+// earlier session opens.
 func TestDockedStripHoldsItsHeight(t *testing.T) {
 	m := withSnapshot(t, withOrch(), 80)
 	m.SetSayRows(4, nil)
@@ -603,9 +603,9 @@ func TestDockedStripHoldsItsHeight(t *testing.T) {
 	}
 	lines := strings.Split(plain(m.View()), "\n")
 	if len(lines) != 40 || !strings.Contains(lines[39], "press i") {
-		t.Errorf("a docked strip should end on the last line:\n%s", strings.Join(lines, "\n"))
+		t.Errorf("a resized strip should end on the last line:\n%s", strings.Join(lines, "\n"))
 	}
-	// And a click on it still jumps: the docking moved its regions with it.
+	// And a click on it still jumps: the padding moved its regions with it.
 	m.Update(tea.MouseMsg{X: 5, Y: 34, Action: tea.MouseActionRelease, Button: tea.MouseButtonLeft})
 	if m.jump != "w4:p1" {
 		t.Errorf("clicking the docked strip jumped to %q, want the orchestrator", m.jump)
@@ -673,5 +673,41 @@ func TestDockedMoreLinkExpands(t *testing.T) {
 	m.Update(tea.MouseMsg{X: link.x0 + 2, Y: link.y, Action: tea.MouseActionRelease, Button: tea.MouseButtonLeft})
 	if !m.sayMore || m.jump != "" {
 		t.Errorf("clicking the docked more link should expand, not jump (jump=%q)", m.jump)
+	}
+}
+
+// The strip sits on the bottom edge by default, under a grid too short to push
+// it there, and e grows it up from that edge rather than down off the screen.
+func TestStripSitsOnTheBottomEdge(t *testing.T) {
+	s := withOrch()
+	s.Orch.LastSaid = strings.Repeat("api is picking up the schema change. ", 12)
+	m := withSnapshot(t, s, 80)
+
+	lines := strings.Split(plain(m.View()), "\n")
+	if len(lines) != 40 || !strings.Contains(lines[39], "press i") {
+		t.Fatalf("the strip should end on the last line:\n%s", strings.Join(lines, "\n"))
+	}
+	folded := grip(t, m).y
+	// Clicks land where the strip is drawn, not where it would have hung.
+	m.Update(tea.MouseMsg{X: 5, Y: folded + 1, Action: tea.MouseActionRelease, Button: tea.MouseButtonLeft})
+	if m.jump != "w4:p1" {
+		t.Fatalf("clicking the strip jumped to %q, want the orchestrator", m.jump)
+	}
+
+	m.jump = ""
+	key(m, "e")
+	lines = strings.Split(plain(m.View()), "\n")
+	if len(lines) != 40 || !strings.Contains(lines[39], "press i") {
+		t.Errorf("expanded, the strip should still end on the last line:\n%s", strings.Join(lines, "\n"))
+	}
+	if got := grip(t, m).y; got >= folded {
+		t.Errorf("e left the rule on line %d, want it above %d", got, folded)
+	}
+
+	// With nobody marked it is the same strip, on the same edge.
+	m = withSnapshot(t, testSnapshot(), 80)
+	lines = strings.Split(plain(m.View()), "\n")
+	if len(lines) != 40 || !strings.Contains(lines[39], "none marked") {
+		t.Errorf("the unmarked strip should end on the last line:\n%s", strings.Join(lines, "\n"))
 	}
 }

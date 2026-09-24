@@ -100,8 +100,8 @@ installs the skill while its banner shows, `q`/`ctrl+c` closes, `M` jumps to
 the orchestrator.
 Mouse: click a tile jumps or focuses its workspace, click banner installs
 skill, click `e more`/`e less` expands or folds the message, drag the orchestrator
-strip's rule to resize it (taller than one line docks it to the bottom edge;
-dragged back down to one line it undocks), wheel moves, hover highlights.
+strip's rule to resize it, wheel moves, hover highlights. The strip sits on the
+bottom edge however short the grid is, and `e` or a drag grows it up from there.
 
 ## Gotchas
 

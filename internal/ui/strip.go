@@ -169,15 +169,6 @@ type stripGrip struct {
 // still leaves the grid its header and one line under it.
 func (g stripGrip) most(height int) int { return max(1, height-g.fixed-2) }
 
-// stripDocked reports whether the strip sits on the bottom edge of the screen
-// even when the grid is too short to push it there. It does once it has been
-// dragged taller than its one line of message, the way a resized pane keeps
-// the edge it was split from. Left hanging under a short grid, its rule could
-// not follow the pointer up: nothing above it would give way.
-func (m *Model) stripDocked() bool {
-	return m.sayRows > 1 && m.snap.Orch.Found && m.filter == ""
-}
-
 // stripRule heads the strip, lit while the pointer is on it or dragging it so
 // it reads as something that moves.
 func (m *Model) stripRule() string {
@@ -190,12 +181,12 @@ func (m *Model) stripRule() string {
 }
 
 // dragTo puts the strip's rule on screen line y by resizing the message under
-// it. A docked strip ends on the last line, so the height follows from y alone
+// it. The strip ends on the last line, so the height follows from y alone
 // rather than from the previous motion, and motions that arrive between two
 // renders land where the pointer is instead of adding up.
 //
 // Dragging sets the height the message rests at, so an expanded message folds
-// into whatever the drag makes room for. Down to one line undocks it again.
+// into whatever the drag makes room for.
 func (m *Model) dragTo(y int) {
 	m.sayMore = false
 	m.sayRows = max(1, min(m.height-m.grip.fixed-y+1, m.grip.most(m.height)))
