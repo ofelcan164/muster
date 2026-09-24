@@ -34,7 +34,7 @@ glance which ones matter right now. Muster answers that:
 herdr plugin install ofelcan164/muster
 ```
 
-That's all. Muster starts itself and adds its keybindings the next time herdr
+Muster starts itself and adds its keybindings the next time herdr
 starts. If you installed it in a running herdr session, open **Open Muster**
 from herdr's action menu once to get the same setup.
 
@@ -44,10 +44,10 @@ Codex or OpenCode.
 
 ## Getting started
 
-1. **Open Muster** with `prefix+m` (`prefix` is your herdr prefix key). There
-   is one tile per agent, plus a dim tile for each workspace with no agent.
+1. **Open Muster** with `prefix+m`. There is one tile per agent, plus a dim
+   tile for each workspace with no agent.
 2. **Move** with the arrow keys or `hjkl`, then **jump** to an agent with
-   `enter`. Press `q` or `esc` to close.
+   `enter`.
 3. **If you use an orchestrator**, select its tile and press `o`. From then on
    `prefix+shift+m` jumps to it, and its last message shows along the bottom of
    Muster.
@@ -89,7 +89,7 @@ Inside Muster:
 | `esc`            | Leave search, clear the filter, collapse the message, or close |
 | `q` / `ctrl+c`   | Close                                                     |
 
-The mouse works too: click a tile to jump to it, scroll to move.
+Clicking a tile jumps to it.
 
 ## Working with an orchestrator
 
@@ -166,9 +166,8 @@ herdr plugin action invoke muster.uninstall   # removes the keybindings and skil
 herdr plugin uninstall muster
 ```
 
-Muster's saved state (sort order, colours) stays in
-`~/.local/state/herdr/plugins/muster`. Delete that folder too if you want it
-gone.
+This leaves Muster's saved state (sort order, colours) in
+`~/.local/state/herdr/plugins/muster`.
 
 ## Contributing
 
