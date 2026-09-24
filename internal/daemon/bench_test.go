@@ -13,9 +13,9 @@ import (
 )
 
 // BenchmarkReadSnapshot measures the whole of what the overlay does at open
-// time, so the README's timing claims can be re-run rather than believed. The
-// two sizes are the ones it quotes: a session like the one it was written on,
-// and a synthetic 25 repos with 100 agents.
+// time, so CONTRIBUTING.md's timing claims can be re-run rather than believed.
+// The two sizes are a session like the one it was written on, and a synthetic
+// 25 repos with 100 agents.
 func BenchmarkReadSnapshot(b *testing.B) {
 	for _, size := range []struct{ repos, agents int }{{5, 8}, {25, 100}} {
 		b.Run(fmt.Sprintf("%drepos_%dagents", size.repos, size.agents), func(b *testing.B) {
