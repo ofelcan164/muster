@@ -14,8 +14,8 @@ sidebar](docs/overlay.png)
 
 ## Why use it
 
-herdr's sidebar works well for one workspace with one agent. It gets harder
-once you have many agents across many repos:
+herdr's sidebar lists your workspaces and agents, but it can't tell you at a
+glance which ones matter right now. Muster answers that:
 
 - **You lose track of who needs you.** Muster's top ribbon lists the agents
   waiting on you, blocked ones with the question they're asking.
