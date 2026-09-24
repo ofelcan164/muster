@@ -14,8 +14,8 @@ sidebar](docs/overlay.png)
 
 ## Why use it
 
-herdr's sidebar lists your workspaces and agents, but it can't tell you at a
-glance which ones matter right now. Muster answers that:
+herdr's sidebar can't tell you at a glance which agents matter right now.
+Muster can:
 
 - **You lose track of who needs you.** Muster's top ribbon lists the agents
   waiting on you, blocked ones with the question they're asking.
@@ -34,13 +34,11 @@ glance which ones matter right now. Muster answers that:
 herdr plugin install ofelcan164/muster
 ```
 
-Muster starts itself and adds its keybindings the next time herdr
-starts. If you installed it in a running herdr session, open **Open Muster**
-from herdr's action menu once to get the same setup.
+Muster sets itself up and binds its keys the next time herdr starts. If you
+installed it mid-session, run the **Open Muster** action once instead.
 
-**Requirements:** herdr 0.8.2 or newer, Go 1.21+ on your `PATH` (herdr builds
-plugins from source), Linux or macOS. The reporting skill needs Claude Code,
-Codex or OpenCode.
+**Requirements:** herdr 0.8.2 or newer, Go 1.21+ on your `PATH`, Linux or
+macOS. The reporting skill needs Claude Code, Codex or OpenCode.
 
 ## Getting started
 
@@ -119,19 +117,14 @@ reminder.
 
 ## Actions
 
-Everything Muster does is also available from herdr's action menu:
-
 - **Open Muster**, **Jump to orchestrator**, **Back to previous agent**
-- **Mark this agent as the orchestrator** (from that agent's pane)
+- **Mark this agent as the orchestrator**
 - **Update Muster**: installs the newest release
 - **Check Muster's health**: run this if Muster looks wrong (see below)
 - **Install Muster's keybindings** / **Remove Muster's keybindings, keep the
   overlay**
 - **Install the reporting skill for the orchestrator**
 - **Uninstall Muster's keybindings and skill**
-
-From a shell: `herdr plugin action invoke muster.<id>`, for example
-`muster.open` or `muster.doctor`.
 
 There is nothing to configure.
 
@@ -161,12 +154,10 @@ background process, and tells you if the keybindings or skill are missing.
 
 ## Uninstall
 
-```sh
-herdr plugin action invoke muster.uninstall   # removes the keybindings and skill
-herdr plugin uninstall muster
-```
-
-This leaves Muster's saved state (sort order, colours) in
+Run **Uninstall Muster's keybindings and skill** before
+`herdr plugin uninstall muster`: removing the plugin alone leaves Muster's
+keybindings in your herdr config and the skill in your agent tools. Muster's
+saved state (sort order, colours) stays in
 `~/.local/state/herdr/plugins/muster`.
 
 ## Contributing
