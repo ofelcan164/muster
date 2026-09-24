@@ -41,6 +41,16 @@ func (m *Model) View() string {
 		lines, strip = append(lines, strip...), nil
 	}
 	pinned := append(strip, bar...)
+	if gap := m.height - len(lines) - len(pinned); gap > 0 && len(strip) > 0 && m.stripDocked() {
+		// Blank lines push a docked strip down to the bottom edge, and its
+		// regions down with it.
+		for i := range m.hits {
+			if m.hits[i].y >= len(lines) {
+				m.hits[i].y += gap
+			}
+		}
+		lines = append(lines, make([]string, gap)...)
+	}
 	return strings.Join(append(m.window(lines, m.height-len(pinned)), pinned...), "\n")
 }
 

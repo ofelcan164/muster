@@ -38,7 +38,7 @@ internal/ui           overlay
 State dir files, one set per herdr session (the default session uses the base
 dir, a named one `sessions/<HERDR_SESSION>/` inside it): `snapshot.json`,
 `state.json` (grid slots, learned state), `ui.json` (sort, dismissed,
-colours picked with `c`) and `ui.json.lock` (serialises two overlays saving
+colours picked with `c`, the orchestrator strip's dragged height) and `ui.json.lock` (serialises two overlays saving
 it), `chain.json`,
 `musterd.log`, `musterd.lock`, `musterd.spawn.lock` (serialises concurrent
 `--ensure`). In the base dir only: `keys.optout`, `skill.optout`.
@@ -99,7 +99,9 @@ orchestrator, `i` messages it, `t` tells it about a landed row, `e` expands or f
 installs the skill while its banner shows, `q`/`ctrl+c` closes, `M` jumps to
 the orchestrator.
 Mouse: click a tile jumps or focuses its workspace, click banner installs
-skill, click `e more`/`e less` expands or folds the message, wheel moves, hover highlights.
+skill, click `e more`/`e less` expands or folds the message, drag the orchestrator
+strip's rule to resize it (taller than one line docks it to the bottom edge;
+dragged back down to one line it undocks), wheel moves, hover highlights.
 
 ## Gotchas
 

@@ -294,6 +294,10 @@ type UIState struct {
 	// the hashed colour, which two repos can share.
 	Colors map[string]int `json:"colors,omitempty"`
 
+	// SayRows is how many lines the orchestrator strip gives its message at
+	// rest, set by dragging the strip's rule. Zero is the default single line.
+	SayRows int `json:"say_rows,omitempty"`
+
 	lastWritten []byte
 }
 
@@ -340,6 +344,9 @@ func (u *UIState) Save() error {
 	}
 	if !maps.Equal(u.Colors, loaded.Colors) {
 		fresh.Colors = u.Colors
+	}
+	if u.SayRows != loaded.SayRows {
+		fresh.SayRows = u.SayRows
 	}
 	b, err := json.Marshal(fresh)
 	if err != nil {

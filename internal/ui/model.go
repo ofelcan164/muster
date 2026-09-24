@@ -78,6 +78,18 @@ type Model struct {
 	// sayMore expands the strip's said line to the whole message, wrapped.
 	sayMore bool
 
+	// sayRows is how many lines the message gets at rest, set by dragging the
+	// strip's rule; below 1 means the default single line. saveSayRows
+	// persists it once a drag ends.
+	sayRows     int
+	saveSayRows func(int)
+
+	// resizing is a drag of the strip's rule in progress, and grip is where
+	// the last render put that rule and how tall the message was under it,
+	// which is what a drag measures the pointer against.
+	resizing bool
+	grip     stripGrip
+
 	// notice is what just happened, shown on the strip. A full-screen overlay
 	// has nowhere else to report that a send worked or failed.
 	notice string
@@ -243,6 +255,12 @@ func (m *Model) SetDismissedSaver(f func(map[string]string)) { m.saveDismissed =
 func (m *Model) SetColors(c map[string]int, save func(map[string]int)) {
 	m.colors, m.saveColors = c, save
 	m.applyColors()
+}
+
+// SetSayRows restores the strip's message height from an earlier session, and
+// supplies the function that persists a new one.
+func (m *Model) SetSayRows(n int, save func(int)) {
+	m.sayRows, m.saveSayRows = n, save
 }
 
 // applyColors lays the picked colours over the snapshot's hashed ones. Every

@@ -507,3 +507,120 @@ func TestSaidExpandsToTheWholeMessage(t *testing.T) {
 		t.Errorf("clicking more should expand, not jump (jump=%q)", m.jump)
 	}
 }
+
+// grip is where the strip's rule was drawn, the handle a drag resizes it by.
+func grip(t *testing.T, m *Model) hitRegion {
+	t.Helper()
+	m.View()
+	for _, h := range m.hits {
+		if h.target == gripTarget {
+			return h
+		}
+	}
+	t.Fatal("the strip's rule has no drag region")
+	return hitRegion{}
+}
+
+// Dragging the strip's rule up gives the message more lines, the rule lands on
+// the pointer, and the height is saved once the button comes up. A drag never
+// jumps or moves the selection.
+func TestDraggingTheStripRuleResizesIt(t *testing.T) {
+	s := withOrch()
+	s.Orch.LastSaid = strings.Repeat("api is picking up the schema change. ", 40)
+	m := withSnapshot(t, s, 80)
+	saved := -1
+	m.SetSayRows(0, func(n int) { saved = n })
+	cursor := m.cursor
+
+	g := grip(t, m)
+	m.Update(tea.MouseMsg{X: 5, Y: g.y, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	m.Update(tea.MouseMsg{X: 5, Y: 25, Action: tea.MouseActionMotion, Button: tea.MouseButtonLeft})
+	m.Update(tea.MouseMsg{X: 5, Y: 20, Action: tea.MouseActionMotion, Button: tea.MouseButtonLeft})
+	if got := grip(t, m).y; got != 20 {
+		t.Errorf("mid-drag the rule is on line %d, want the pointer's 20", got)
+	}
+	if saved != -1 {
+		t.Error("the height was saved before the drag ended")
+	}
+	m.Update(tea.MouseMsg{X: 5, Y: 20, Action: tea.MouseActionRelease, Button: tea.MouseButtonLeft})
+
+	// 40 lines, less the blank line, rule, head and footer, less the 20 above
+	// the rule.
+	if m.sayRows != 17 || saved != 17 {
+		t.Errorf("sayRows = %d, saved %d, want 17", m.sayRows, saved)
+	}
+	if m.jump != "" || m.cursor != cursor {
+		t.Errorf("a drag jumped or moved the selection (jump=%q)", m.jump)
+	}
+	lines := strings.Split(plain(m.View()), "\n")
+	if len(lines) != 40 || !strings.Contains(lines[len(lines)-1], "press i") {
+		t.Errorf("the strip should end on the last line:\n%s", strings.Join(lines, "\n"))
+	}
+	if !strings.Contains(lines[len(lines)-2], "e more") {
+		t.Errorf("a message longer than the rows should keep its more link:\n%s", strings.Join(lines, "\n"))
+	}
+
+	// Down past the bottom folds it back to one line, never less.
+	g = grip(t, m)
+	m.Update(tea.MouseMsg{X: 5, Y: g.y, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	m.Update(tea.MouseMsg{X: 5, Y: 60, Action: tea.MouseActionRelease})
+	if m.sayRows != 1 || saved != 1 {
+		t.Errorf("sayRows = %d, saved %d, want 1", m.sayRows, saved)
+	}
+}
+
+// However far up the rule is dragged, the header and a line of the grid stay
+// on screen above it.
+func TestDraggingTheStripLeavesTheHeader(t *testing.T) {
+	s := withOrch()
+	s.Orch.LastSaid = strings.Repeat("a long reply. ", 400)
+	m := withSnapshot(t, s, 80)
+
+	g := grip(t, m)
+	m.Update(tea.MouseMsg{X: 5, Y: g.y, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	m.Update(tea.MouseMsg{X: 5, Y: 0, Action: tea.MouseActionRelease, Button: tea.MouseButtonLeft})
+
+	lines := strings.Split(plain(m.View()), "\n")
+	if len(lines) != 40 {
+		t.Fatalf("the view is %d lines, want the terminal's 40", len(lines))
+	}
+	if !strings.HasPrefix(lines[0], "MUSTER") {
+		t.Errorf("the header was pushed off the top: %q", lines[0])
+	}
+	if got := grip(t, m).y; got != 3 {
+		t.Errorf("the rule stopped on line %d, want 3", got)
+	}
+}
+
+// A dragged height docks the strip to the bottom and holds even for a message
+// shorter than it, so the rule does not spring away from the pointer. That is
+// also how a height saved in an earlier session opens.
+func TestDockedStripHoldsItsHeight(t *testing.T) {
+	m := withSnapshot(t, withOrch(), 80)
+	m.SetSayRows(4, nil)
+	if got := grip(t, m).y; got != 33 {
+		t.Errorf("rule on line %d, want 33", got)
+	}
+	lines := strings.Split(plain(m.View()), "\n")
+	if len(lines) != 40 || !strings.Contains(lines[39], "press i") {
+		t.Errorf("a docked strip should end on the last line:\n%s", strings.Join(lines, "\n"))
+	}
+	// And a click on it still jumps: the docking moved its regions with it.
+	m.Update(tea.MouseMsg{X: 5, Y: 34, Action: tea.MouseActionRelease, Button: tea.MouseButtonLeft})
+	if m.jump != "w4:p1" {
+		t.Errorf("clicking the docked strip jumped to %q, want the orchestrator", m.jump)
+	}
+}
+
+// Hovering the rule lights it and says it drags.
+func TestHoveringTheStripRuleSaysItDrags(t *testing.T) {
+	m := withSnapshot(t, withOrch(), 80)
+	if strings.Contains(plain(m.View()), "drag") {
+		t.Fatal("the drag hint shows without the pointer on the rule")
+	}
+	g := grip(t, m)
+	m.Update(tea.MouseMsg{X: 5, Y: g.y, Action: tea.MouseActionMotion})
+	if !strings.Contains(plain(m.View()), "↕ drag") {
+		t.Error("hovering the rule should say it drags")
+	}
+}
