@@ -38,7 +38,7 @@ internal/ui           overlay
 State dir files, one set per herdr session (the default session uses the base
 dir, a named one `sessions/<HERDR_SESSION>/` inside it): `snapshot.json`,
 `state.json` (grid slots, learned state), `ui.json` (sort, dismissed,
-colours picked with `c`) and `ui.json.lock` (serialises two overlays saving
+colours picked with `c`, the orchestrator strip's dragged height) and `ui.json.lock` (serialises two overlays saving
 it), `chain.json`,
 `musterd.log`, `musterd.lock`, `musterd.spawn.lock` (serialises concurrent
 `--ensure`). In the base dir only: `keys.optout`, `skill.optout`.
@@ -83,6 +83,10 @@ fires once the orchestrator ends a turn after that while a dependent agent has
 not moved. One vocabulary throughout: an agent depends on a repo, the repo is
 needed by it, the work landed. `blocked` means waiting on you, never this.
 
+The orchestrator is whichever agent carries the `role=orchestrator` token (what
+`o` and `mark-orchestrator` write), else one named orchestrator, else one running
+in a pane named orchestrator, all case-insensitive. Nothing else is guessed.
+
 Global keys, once installed (`prefix` is the reader's herdr prefix key):
 `prefix+m` overlay, `prefix+shift+m` orchestrator, `prefix+ctrl+m` back. The
 letter falls back through `m g u y` when the user already bound one, and
@@ -99,7 +103,9 @@ orchestrator, `i` messages it, `t` tells it about a landed row, `e` expands or f
 installs the skill while its banner shows, `q`/`ctrl+c` closes, `M` jumps to
 the orchestrator.
 Mouse: click a tile jumps or focuses its workspace, click banner installs
-skill, click `e more`/`e less` expands or folds the message, wheel moves, hover highlights.
+skill, click `e more`/`e less` expands or folds the message, drag the orchestrator
+strip's rule to resize it, wheel moves, hover highlights. The strip sits on the
+bottom edge however short the grid is, and `e` or a drag grows it up from there.
 
 ## Gotchas
 

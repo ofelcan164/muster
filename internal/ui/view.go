@@ -28,6 +28,12 @@ func (m *Model) View() string {
 	// The strip and the query line are pinned to the bottom, and everything
 	// above them scrolls. The strip is how you reach the orchestrator, and the
 	// query line is what you are typing: scrolling either away leaves you blind.
+	//
+	// Pinned means the bottom edge, even under a grid too short to push it
+	// there, and e or a drag of its rule grows it up from that edge. Left
+	// hanging under a short grid, the strip moved every time the grid changed
+	// height, and its rule could not follow a drag up: nothing above it would
+	// give way.
 	var strip, bar []string
 	if s := m.stripLines(len(lines) + 1); len(s) > 0 {
 		strip = append([]string{""}, s...)
@@ -41,6 +47,16 @@ func (m *Model) View() string {
 		lines, strip = append(lines, strip...), nil
 	}
 	pinned := append(strip, bar...)
+	if gap := m.height - len(lines) - len(pinned); gap > 0 && len(strip) > 0 {
+		// Blank lines push the strip down to the bottom edge, and its regions
+		// down with it.
+		for i := range m.hits {
+			if m.hits[i].y >= len(lines) {
+				m.hits[i].y += gap
+			}
+		}
+		lines = append(lines, make([]string, gap)...)
+	}
 	return strings.Join(append(m.window(lines, m.height-len(pinned)), pinned...), "\n")
 }
 

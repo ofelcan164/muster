@@ -219,8 +219,10 @@ type Orchestrator struct {
 	// The read fires as soon as the status settles, so the two are a second or
 	// so apart, and a message with no age on it cannot be told from a stale one.
 	SaidAt time.Time `json:"said_at,omitempty"`
-	// DetectedBy is "token" or "name"; the token wins because it survives a
-	// rename and can carry more than a string later.
+	// DetectedBy is "token", "name" or "pane", in that order of precedence:
+	// the role token, the agent's name, or the name of the pane it runs in.
+	// The token wins because it survives a rename and can carry more than a
+	// string later.
 	DetectedBy  string    `json:"detected_by,omitempty"`
 	StatusSince time.Time `json:"status_since,omitempty"`
 }

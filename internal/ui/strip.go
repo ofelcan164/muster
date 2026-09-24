@@ -29,7 +29,7 @@ func (m *Model) stripLines(startY int) []string {
 		out := []string{
 			m.sectionRule("orchestrator"),
 			styFaint.Render(fitLine(
-				"  none marked · press o on the agent in charge", m.width)),
+				"  none marked · press o on the agent in charge, or name its pane orchestrator", m.width)),
 		}
 		if offer, ok := m.skillOffer(startY + len(out)); ok {
 			out = append(out, offer)
@@ -44,7 +44,11 @@ func (m *Model) stripLines(startY int) []string {
 	}
 
 	ti := m.stripTargetIndex()
-	out := []string{m.sectionRule("orchestrator")}
+	// The rule is the strip's grip: drag it up for more of the message, down
+	// for less. It belongs to no target, so a click on it neither jumps nor
+	// moves the selection.
+	out := []string{m.stripRule()}
+	m.noteRegion(startY, 0, m.width-1, gripTarget)
 
 	st := statusStyle(o.Status, m.frame)
 	head := fmt.Sprintf(" %s %s %s %s",
@@ -62,9 +66,20 @@ func (m *Model) stripLines(startY int) []string {
 	}
 	out = append(out, fitLine(head, m.width))
 
+	// Every line pinned under the grid but the message's own: the blank line
+	// above the strip, its rule, head and footer, the offer, the search bar.
+	fixed := 4
+	if m.showBanner() {
+		fixed++
+	}
+	if m.filtering {
+		fixed += 2
+	}
+	m.grip = stripGrip{fixed: fixed}
+
 	// Before the region loop below, so a click on the more link finds the
 	// link's region first and toggles rather than jumps.
-	out = append(out, m.saidLines(o, startY+len(out))...)
+	out = append(out, m.saidLines(o, startY+len(out), min(max(1, m.sayRows), m.grip.most(m.height)))...)
 
 	// The offer is its own click target, so it is drawn after the lines that
 	// belong to the orchestrator and skipped by the region loop below. A click
@@ -143,19 +158,62 @@ func (m *Model) orchWho(o model.Orchestrator) string {
 	return styFG.Bold(true).Render(strings.ToUpper(name))
 }
 
+// stripGrip is what the last render recorded about the strip for a drag of its
+// rule to measure against: how many lines it pins to the bottom of the screen
+// besides the message's own.
+type stripGrip struct {
+	fixed int
+}
+
+// most is the most lines the message can take on a screen height tall, which
+// still leaves the grid its header and one line under it.
+func (g stripGrip) most(height int) int { return max(1, height-g.fixed-2) }
+
+// stripRule heads the strip, lit while the pointer is on it or dragging it so
+// it reads as something that moves.
+func (m *Model) stripRule() string {
+	if !m.resizing && m.hover != gripTarget {
+		return m.sectionRule("orchestrator")
+	}
+	text, hint := " ORCHESTRATOR ", " ↕ drag "
+	rule := max(0, m.width-lipgloss.Width(text)-lipgloss.Width(hint)-1)
+	return styFG.Render(text) + styMeta.Render(strings.Repeat("━", rule)) + styMeta.Render(hint)
+}
+
+// dragTo puts the strip's rule on screen line y by resizing the message under
+// it. The strip ends on the last line, so the height follows from y alone
+// rather than from the previous motion, and motions that arrive between two
+// renders land where the pointer is instead of adding up.
+//
+// Dragging sets the height the message rests at, so an expanded message folds
+// into whatever the drag makes room for.
+func (m *Model) dragTo(y int) {
+	m.sayMore = false
+	m.sayRows = max(1, min(m.height-m.grip.fixed-y+1, m.grip.most(m.height)))
+}
+
 // saidLines is the strip's message: what the orchestrator last said, and how
-// long ago that was. One line cut to the width, with a more link when that cut
-// anything, or the whole message wrapped while e has it expanded. y is the
-// screen line the first of them lands on.
+// long ago that was. rows lines of it, one unless the strip's rule has been
+// dragged up, with a more link when that cut anything, or the whole message
+// wrapped while e has it expanded. y is the screen line the first of them
+// lands on.
 //
 // Only the reply. What it was told is the half you already know, because you
 // are the one who typed it, and it is still on the orchestrator's own card and
 // in musterd dump for the times you want it. The age is the point of the line
 // as much as the text is: a sentence with no clock on it cannot be told from
 // one that has been sitting there since this morning.
-func (m *Model) saidLines(o model.Orchestrator, y int) []string {
+func (m *Model) saidLines(o model.Orchestrator, y, rows int) []string {
+	// Blank lines hold a dragged height when the message is shorter, so the
+	// rule stays where it was put rather than jumping back under the pointer.
+	fill := func(out []string, n int) []string {
+		for len(out) < n {
+			out = append(out, fitLine("", m.width))
+		}
+		return out
+	}
 	if o.LastSaid == "" {
-		return []string{styFaint.Render(fitLine("   ↓ nothing said yet", m.width))}
+		return fill([]string{styFaint.Render(fitLine("   ↓ nothing said yet", m.width))}, rows)
 	}
 
 	age := ""
@@ -174,29 +232,51 @@ func (m *Model) saidLines(o model.Orchestrator, y int) []string {
 	}
 
 	text := strings.TrimSpace(o.LastSaid)
+	indent := strings.Repeat(" ", lipgloss.Width(head))
+	const more = " e more"
+	if !m.sayMore && rows > 1 {
+		// Dragged taller: as much of the message as the rows hold, paragraphs
+		// kept, with the more link on the last row when that is not all of it.
+		wrapped := strings.Split(ansi.Wrap(text, room, ""), "\n")
+		cut := len(wrapped) > rows
+		if cut {
+			wrapped = wrapped[:rows]
+		}
+		out := []string{withAge(head + styFG.Render(wrapped[0]))}
+		for _, w := range wrapped[1:] {
+			out = append(out, fitLine(indent+styFG.Render(w), m.width))
+		}
+		if cut {
+			last := indent + styFG.Render(ansi.Truncate(strings.TrimSpace(wrapped[rows-1]), room-len(more)-1, "")+"…")
+			m.noteRegion(y+rows-1, lipgloss.Width(last), lipgloss.Width(last)+len(more)-1, moreTarget)
+			out[rows-1] = fitLine(last+styHint.Render(more), m.width)
+		}
+		return fill(out, rows)
+	}
 	if !m.sayMore {
 		// Paragraph breaks are for the expanded view; one line has no room.
 		text := strings.ReplaceAll(text, "\n", " ")
 		if lipgloss.Width(text) <= room {
 			return []string{withAge(head + styFG.Render(text))}
 		}
-		const more = " e more"
 		line := head + styFG.Render(truncate(text, room-len(more)))
 		m.noteRegion(y, lipgloss.Width(line), lipgloss.Width(line)+len(more)-1, moreTarget)
 		return []string{withAge(line + styHint.Render(more))}
 	}
 
-	// Half the screen at most, so the grid above keeps somewhere to be.
+	// Half the screen at most, so the grid above keeps somewhere to be, unless
+	// the strip was dragged taller than that. Never shorter than it rests at:
+	// expanding should not shrink the strip.
 	wrapped := strings.Split(ansi.Wrap(text, room, ""), "\n")
-	if limit := max(3, m.height/2); len(wrapped) > limit {
+	if limit := max(3, m.height/2, rows); len(wrapped) > limit {
 		wrapped = wrapped[:limit]
 		wrapped[limit-1] = truncate(wrapped[limit-1], room-1) + "…"
 	}
 	out := []string{withAge(head + styFG.Render(wrapped[0]))}
-	indent := strings.Repeat(" ", lipgloss.Width(head))
 	for _, w := range wrapped[1:] {
 		out = append(out, fitLine(indent+styFG.Render(w), m.width))
 	}
+	out = fill(out, rows-1)
 	const less = "e less"
 	m.noteRegion(y+len(out), len(indent), len(indent)+len(less)-1, moreTarget)
 	return append(out, fitLine(indent+styHint.Render(less), m.width))

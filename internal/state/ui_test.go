@@ -14,6 +14,7 @@ func TestUISaveKeepsWhatAnotherOverlaySaved(t *testing.T) {
 	}
 	b.Dismissed = map[string]string{"p1": "done"}
 	b.Colors = map[string]int{"acme/api": 7}
+	b.SayRows = 5
 	if err := b.Save(); err != nil {
 		t.Fatal(err)
 	}
@@ -32,5 +33,8 @@ func TestUISaveKeepsWhatAnotherOverlaySaved(t *testing.T) {
 	}
 	if got.Colors["acme/api"] != 7 {
 		t.Errorf("colors = %v, want b's acme/api", got.Colors)
+	}
+	if got.SayRows != 5 {
+		t.Errorf("say rows = %d, want b's 5", got.SayRows)
 	}
 }

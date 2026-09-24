@@ -124,7 +124,7 @@ func Dump(w io.Writer, s *model.Snapshot, now time.Time) {
 
 	fmt.Fprintln(w, "ORCHESTRATOR")
 	if !s.Orch.Found {
-		fmt.Fprintln(w, "  none marked · run the mark-orchestrator action on its pane")
+		fmt.Fprintln(w, "  none marked · run the mark-orchestrator action on its pane, or name the pane orchestrator")
 	} else {
 		fmt.Fprintf(w, "  ⌂ %s · %s %s · via %s · %s\n",
 			s.Orch.Name, s.Orch.Status, CompactDur(now.Sub(s.Orch.StatusSince)),

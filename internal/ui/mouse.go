@@ -12,9 +12,27 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// handleMouse makes the overlay clickable. One click jumps, and the wheel moves
-// through the list.
+// handleMouse makes the overlay clickable. One click jumps, the wheel moves
+// through the list, and dragging the orchestrator strip's rule resizes it.
 func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	if m.resizing {
+		// The drag owns the pointer until the button comes up, wherever it
+		// wanders: letting motion hover tiles would light them mid-drag.
+		// Release is taken with any button, because legacy mouse encoding
+		// does not say which one came up.
+		switch {
+		case msg.Action == tea.MouseActionMotion && msg.Button == tea.MouseButtonNone:
+			// Moving with no button held: the release happened outside the
+			// popup, where herdr drops it. The drag ended wherever it last was.
+			m.endDrag()
+		case msg.Action == tea.MouseActionMotion:
+			m.dragTo(msg.Y)
+		case msg.Action == tea.MouseActionRelease:
+			m.dragTo(msg.Y)
+			m.endDrag()
+		}
+		return m, nil
+	}
 	switch msg.Button {
 	case tea.MouseButtonWheelUp:
 		m.move(-1)
@@ -35,11 +53,18 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft {
+		// Clicks act on release, but a drag has to start on the press.
+		if idx, ok := m.targetAt(msg.X, msg.Y); ok && idx == gripTarget {
+			m.resizing = true
+		}
+		return m, nil
+	}
 	if msg.Action != tea.MouseActionRelease || msg.Button != tea.MouseButtonLeft {
 		return m, nil
 	}
 	idx, ok := m.targetAt(msg.X, msg.Y)
-	if !ok {
+	if !ok || idx == gripTarget {
 		return m, nil
 	}
 	if idx == moreTarget {
@@ -57,6 +82,14 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	return m.activate()
 }
 
+// endDrag stops resizing the strip and keeps the height it was left at.
+func (m *Model) endDrag() {
+	m.resizing = false
+	if m.saveSayRows != nil {
+		m.saveSayRows(m.sayRows)
+	}
+}
+
 // hitRegion is a rectangle of the screen belonging to one target. Cards claim
 // their whole area rather than a single line, so clicking anywhere on a card
 // selects it, including its task line and its footer.
@@ -69,6 +102,10 @@ type hitRegion struct {
 // moreTarget is the region of the strip's more/less link. It is no target: the
 // cursor never lands on it, and isActive ignores it like any negative index.
 const moreTarget = -2
+
+// gripTarget is the region of the strip's rule, which a drag resizes the strip
+// by. No target either, for the same reasons.
+const gripTarget = -3
 
 // noteRegion records that a target occupies part of a screen line.
 func (m *Model) noteRegion(y, x0, x1, targetIndex int) {

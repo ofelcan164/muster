@@ -50,9 +50,9 @@ macOS. The reporting skill needs Claude Code, Codex or OpenCode.
    tile for each workspace with no agent.
 2. **Move** with the arrow keys or `hjkl`, then **jump** to an agent with
    `enter`.
-3. **If you use an orchestrator**, select its tile and press `o`. From then on
-   `prefix+shift+m` jumps to it, and its last message shows along the bottom of
-   Muster.
+3. **If you use an orchestrator**, select its tile and press `o`, or name its
+   pane `orchestrator` in herdr. From then on `prefix+shift+m` jumps to it, and
+   its last message shows along the bottom of Muster.
 
 Muster also puts a small status line in herdr's tab bar, for example
 `◆ 3 need you · prefix+m`.
