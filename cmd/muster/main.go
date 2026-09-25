@@ -161,11 +161,20 @@ func main() {
 	case "badge":
 		// The tab_bar_right command install writes. herdr runs it through sh on
 		// the server with none of the plugin env, hence the --state-dir in front.
-		letter := install.DefaultLetter
-		if len(args) > 1 {
-			letter = args[1]
+		// --json is the same count for a desktop bar such as Omarchy's.
+		letter, asJSON := install.DefaultLetter, false
+		for _, a := range args[1:] {
+			if a == "--json" || a == "-json" {
+				asJSON = true
+			} else {
+				letter = a
+			}
 		}
-		fmt.Println(ui.Badge(letter))
+		if asJSON {
+			fmt.Println(ui.BadgeJSON())
+		} else {
+			fmt.Println(ui.Badge(letter))
+		}
 
 	case "":
 		// No arguments means the [[panes]] entrypoint: this process is the
@@ -205,6 +214,7 @@ usage:
   muster update                    install the newest release, if it is newer
   muster discover                  make sure the daemon is up, for the event hooks
   muster badge [letter]            the tab bar line install writes: what needs you, and the key
+  muster badge --json              the same for a desktop bar: {"text","tooltip","class"}
 
 any command may be preceded by --state-dir <dir>, which is what herdr supplies
 through HERDR_PLUGIN_STATE_DIR. --no-keys installs without touching your herdr
