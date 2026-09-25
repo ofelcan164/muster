@@ -2,6 +2,7 @@ package ui
 
 import (
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/ofelcan164/muster/internal/identity"
 	"github.com/ofelcan164/muster/internal/model"
 	"github.com/ofelcan164/muster/internal/state"
+	"github.com/ofelcan164/muster/internal/triage"
 )
 
 var escapes = regexp.MustCompile(`\x1b\[[0-9;]*m`)
@@ -824,6 +826,44 @@ func TestTilesZoneEachFieldToItsRow(t *testing.T) {
 	}
 	if strings.Contains(says, "[p1]") || strings.Contains(says, "contracts") {
 		t.Errorf("workspace fields leaked onto the question row: %q", says)
+	}
+}
+
+// The header counted the ribbon's rows, which stop at four, so with six rows
+// needing you it said "4 need you" directly above "NEEDS YOU 6". It counts
+// what the rule and the tab bar badge count: every row you have not dismissed.
+func TestHeaderCountsEveryRowThatNeedsYou(t *testing.T) {
+	snap := testSnapshot()
+	api := &snap.Repos[1]
+	for _, p := range []string{"w2:p3", "w2:p4", "w2:p5", "w2:p6"} {
+		api.Agents = append(api.Agents, model.Agent{
+			PaneID: p, WorkspaceID: "w2", Name: p, Status: model.StatusDone,
+			StatusSince: time.Now().Add(-time.Minute), AgeKnown: true,
+		})
+	}
+	snap.Attention = triage.Rank(triage.Input{Now: time.Now(), Repos: snap.Repos})
+	n := len(snap.Attention)
+	if n <= triage.RibbonMax {
+		t.Fatalf("the snapshot needs more rows than the ribbon holds, has %d", n)
+	}
+
+	m := New(snap, "")
+	m.Update(tea.WindowSizeMsg{Width: 143, Height: 40})
+	out := plain(m.View())
+	for _, want := range []string{fmt.Sprintf("%d need you", n), fmt.Sprintf("NEEDS YOU %d", n)} {
+		if !strings.Contains(out, want) {
+			t.Errorf("want %q on screen:\n%s", want, out)
+		}
+	}
+
+	first := snap.Attention[0]
+	m.dismissed = map[string]string{first.PaneID: string(first.Status)}
+	m.rebuild()
+	out = plain(m.View())
+	for _, want := range []string{fmt.Sprintf("%d need you", n-1), fmt.Sprintf("NEEDS YOU %d", n-1)} {
+		if !strings.Contains(out, want) {
+			t.Errorf("after a dismissal, want %q on screen:\n%s", want, out)
+		}
 	}
 }
 
