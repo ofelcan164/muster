@@ -1,6 +1,6 @@
 id = "muster"
 name = "Muster"
-version = "0.3.0"
+version = "0.3.1"
 # The floor Muster is tested against, not the lowest version that works: 0.8.0
 # and 0.8.1 were never tried. See docs/herdr-api-notes.md.
 min_herdr_version = "0.8.2"
