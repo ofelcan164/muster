@@ -80,15 +80,21 @@ func (m *Model) report() (tea.Model, tea.Cmd) {
 		m.notice = "no orchestrator marked, so there is nobody to tell"
 		return m, nil
 	}
-	// The row lands on a dependent agent, which is what knows the dependency.
-	_, dep, _ := m.agentByPane(a.PaneID)
-	up := m.repoByKey(dep.DependsOnRepo)
+	text, up := landedReport(m.snap, *a, time.Now())
+	return m, m.send(m.snap.Orch.PaneID, text,
+		fmt.Sprintf("told the orchestrator %s landed", shortRepo(up)))
+}
+
+// landedReport is what t sends for a landed row, and the repo that landed.
+// The row lands on a dependent agent, which is what knows the dependency.
+func landedReport(snap *model.Snapshot, a model.Attention, now time.Time) (string, model.Repo) {
+	_, dep, _ := agentInSnap(snap, a.PaneID)
+	up := repoInSnap(snap, dep.DependsOnRepo)
 	var landed time.Duration
 	if !dep.LandedAt.IsZero() {
-		landed = time.Since(dep.LandedAt)
+		landed = now.Sub(dep.LandedAt)
 	}
-	return m, m.send(m.snap.Orch.PaneID, reportMessage(*a, up, landed),
-		fmt.Sprintf("told the orchestrator %s landed", shortRepo(up)))
+	return reportMessage(a, up, landed), up
 }
 
 // noticeMsg is what a socket call running off the Update goroutine reports

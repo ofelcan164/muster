@@ -176,20 +176,11 @@ func Run() (string, error) {
 		}
 		return res.Path, nil
 	})
-	// How i and t reach the orchestrator. agent.prompt is the same call the
-	// orchestrator's own tooling uses, so a message from Muster is not a
-	// special case at the other end.
+	// How o, i and t reach herdr.
 	m.SetMarker(func(paneID string) error {
 		return markOrchestratorPane(paneID, markedOrchestratorPane())
 	})
-	m.SetPrompter(func(paneID, text string) error {
-		if err := herdr.NewClient("").Call("agent.prompt",
-			map[string]any{"target": paneID, "text": text}, nil); err != nil {
-			return err
-		}
-		recordTold(paneID, text)
-		return nil
-	})
+	m.SetPrompter(promptAgent)
 	// J and K in herdr sort. The local reorder happens synchronously in the
 	// model; this is only the socket call that makes it stick.
 	m.SetWorkspaceMover(func(workspaceID string, insertIndex int) error {

@@ -10,11 +10,15 @@ import (
 	"github.com/ofelcan164/muster/internal/herdr"
 )
 
-// MarkOrchestrator names the pane an action was invoked on as the orchestrator.
-func MarkOrchestrator() error {
-	pane := contextPaneID()
+// MarkOrchestrator names pane as the orchestrator, or with no pane the one the
+// action was invoked on. A caller outside herdr has no pane of its own, so it
+// names one.
+func MarkOrchestrator(pane string) error {
 	if pane == "" {
-		return errors.New("no pane to mark: run this action on the orchestrator's pane")
+		pane = contextPaneID()
+	}
+	if pane == "" {
+		return errors.New("no pane to mark: run this action on the orchestrator's pane, or name one")
 	}
 	if err := markOrchestratorPane(pane, markedOrchestratorPane()); err != nil {
 		return err
