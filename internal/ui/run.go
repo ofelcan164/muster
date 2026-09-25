@@ -1,9 +1,11 @@
 package ui
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 	"github.com/ofelcan164/muster/internal/install"
 	"github.com/ofelcan164/muster/internal/model"
 	"github.com/ofelcan164/muster/internal/state"
+	"github.com/ofelcan164/muster/internal/triage"
 )
 
 // Badge is the line herdr's tab bar shows: how many rows need you, else how
@@ -24,19 +27,112 @@ import (
 // count nobody is keeping current is worse than no count.
 func Badge(letter string) string {
 	key := "prefix+" + letter
-	snap, err := daemon.ReadSnapshot()
-	if err != nil || time.Since(snap.GeneratedAt) >= model.StaleAfter {
-		return "◆ " + key
-	}
-	switch n := len(undismissed(snap.Attention, state.LoadUI().Dismissed)); {
-	case n == 1:
-		return "◆ 1 needs you · " + key
-	case n > 1:
-		return fmt.Sprintf("◆ %d need you · %s", n, key)
-	case snap.Counts.Working > 0:
-		return fmt.Sprintf("◆ %d working · %s", snap.Counts.Working, key)
+	if count := readBadge().count(); count != "" {
+		return "◆ " + count + " · " + key
 	}
 	return "◆ " + key
+}
+
+// BadgeOutput is the badge for a status bar outside herdr, in the
+// {text, tooltip, class} shape Waybar and Omarchy's command modules read.
+type BadgeOutput struct {
+	Text string `json:"text"`
+	// Tooltip is one line per ribbon row the overlay would draw.
+	Tooltip string `json:"tooltip"`
+	// Class is stale, landed, needs-you, working or idle: the first that
+	// applies, so a bar can colour by it.
+	Class string `json:"class"`
+}
+
+// BadgeJSON is Badge for a bar outside herdr. It carries no key hint, because
+// herdr's prefix does nothing from the desktop.
+func BadgeJSON() string {
+	b := readBadge()
+	out := BadgeOutput{Text: "◆", Class: b.class()}
+	if count := b.count(); count != "" {
+		out.Text = "◆ " + count
+	}
+	if b.stale {
+		out.Tooltip = "Muster is not running: no current snapshot"
+	} else {
+		out.Tooltip = b.tooltip()
+	}
+	var buf strings.Builder
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(out)
+	return strings.TrimSuffix(buf.String(), "\n")
+}
+
+// badgeView is what both badges read: the snapshot and the rows still needing
+// you, or stale when there is no current snapshot.
+type badgeView struct {
+	snap  *model.Snapshot
+	rows  []model.Attention
+	stale bool
+}
+
+func readBadge() badgeView {
+	snap, err := daemon.ReadSnapshot()
+	if err != nil || time.Since(snap.GeneratedAt) >= model.StaleAfter {
+		return badgeView{stale: true}
+	}
+	return badgeView{snap: snap, rows: undismissed(snap.Attention, state.LoadUI().Dismissed)}
+}
+
+func (b badgeView) count() string {
+	switch n := len(b.rows); {
+	case b.stale:
+		return ""
+	case n == 1:
+		return "1 needs you"
+	case n > 1:
+		return fmt.Sprintf("%d need you", n)
+	case b.snap.Counts.Working > 0:
+		return fmt.Sprintf("%d working", b.snap.Counts.Working)
+	}
+	return ""
+}
+
+func (b badgeView) class() string {
+	switch {
+	case b.stale:
+		return "stale"
+	case slices.ContainsFunc(b.rows, func(a model.Attention) bool { return a.Reason == model.ReasonLanded }):
+		return "landed"
+	case len(b.rows) > 0:
+		return "needs-you"
+	case b.snap.Counts.Working > 0:
+		return "working"
+	}
+	return "idle"
+}
+
+// tooltip is the ribbon as text, capped where the overlay caps it, each row
+// labelled the way the overlay labels it.
+func (b badgeView) tooltip() string {
+	display := map[string]string{}
+	for _, r := range b.snap.Repos {
+		display[r.Key] = r.Display
+	}
+	var lines []string
+	for _, a := range b.rows[:min(len(b.rows), triage.RibbonMax)] {
+		repo := display[a.RepoKey]
+		if repo == "" {
+			repo = a.RepoKey
+		}
+		line := reasonLabel(a.Reason, a.Status) + " " + repo + "/" + a.Agent
+		// A blocked agent's question can run over several lines, and a tooltip
+		// row has to stay one.
+		if detail := strings.Join(strings.Fields(a.Detail), " "); detail != "" {
+			line += " · " + detail
+		}
+		lines = append(lines, line)
+	}
+	if more := len(b.rows) - triage.RibbonMax; more > 0 {
+		lines = append(lines, fmt.Sprintf("and %d more", more))
+	}
+	return strings.Join(lines, "\n")
 }
 
 // Run opens the overlay and returns the pane to jump to, or "".

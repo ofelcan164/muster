@@ -65,6 +65,7 @@ muster show [target]                                the orchestrator's query: us
 muster chain get [--json] | set <spec> [--by NAME] | clear
 muster discover                                     make sure the daemon is up; the event hooks call it
 muster badge [letter]                               the tab_bar_right line install writes
+muster badge --json                                 the same for a desktop bar: {text, tooltip, class}
 muster doctor [--yes]                               health check; the action passes --yes
 muster update                                       newest release tag over a GitHub install, then install --auto
 
