@@ -202,6 +202,7 @@ func (m *Model) ribbonLines(startY int) []string {
 		who := wsTag + repoStyle(repo).Bold(true).Render(repo.Sigil+" "+repo.Display) +
 			styFaint.Render("/") + styFG.Bold(true).Render(a.Agent)
 		age := styMeta.Render(ageText(a.Age, a.AgeKnown))
+		detail := oneLine(a.Detail)
 
 		var rowLines []string
 		if m.width < twoColumnMin {
@@ -209,16 +210,16 @@ func (m *Model) ribbonLines(startY int) []string {
 			// first casualty of fixed columns, so it gets its own line.
 			head := fmt.Sprintf("%s %s %s %s", bar, idx, label, truncate(who, m.width-24))
 			rowLines = append(rowLines, fitLine(head, m.width))
-			if a.Detail != "" {
+			if detail != "" {
 				rowLines = append(rowLines, fitLine(
-					bar+"     "+styFG.Render(truncate(a.Detail, m.width-7)), m.width))
+					bar+"     "+styFG.Render(truncate(detail, m.width-7)), m.width))
 			}
 		} else {
 			head := fmt.Sprintf("%s %s %s %s %s  ",
 				bar, idx, pad(label, 11), pad(who, 42), pad(age, 4))
 			// The detail is the sentence you actually read, so it gets the
 			// bright foreground rather than the dim one the grid uses.
-			head += styFG.Render(truncate(a.Detail, max(10, m.width-lipgloss.Width(head)-1)))
+			head += styFG.Render(truncate(detail, max(10, m.width-lipgloss.Width(head)-1)))
 			rowLines = append(rowLines, fitLine(head, m.width))
 		}
 
@@ -449,7 +450,7 @@ func kindChip(kind string) string {
 // or marked when it came from a lower rung of the fallback ladder. Showing
 // doubt beats showing false confidence.
 func (m *Model) tileTaskLine(a model.Agent, width int) (string, bool) {
-	task := taskText(a)
+	task := oneLine(taskText(a))
 	if task == "" {
 		return "", false
 	}
@@ -703,6 +704,13 @@ func plural(n int, noun string) string {
 		return fmt.Sprintf("%d %s", n, noun)
 	}
 	return fmt.Sprintf("%d %ss", n, noun)
+}
+
+// oneLine folds text read off a pane, which can carry the terminal's line
+// breaks, onto the one line a row or tile draws it on. Left in, the text after
+// a break started a line of its own at the left edge, outside the row.
+func oneLine(s string) string {
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // truncate cuts to a display width, counting cells rather than bytes so sigils

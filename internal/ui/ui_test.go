@@ -87,6 +87,32 @@ func render(t *testing.T, width int) string {
 	return out.View()
 }
 
+// A detail or task with a line break in it broke the one line it is drawn on:
+// the text after the break started a line of its own at the left edge, outside
+// the row's bar and background. Both are folded onto one line, as the badge's
+// tooltip already folds a detail.
+func TestALineBreakStaysOnItsRowsLine(t *testing.T) {
+	for _, width := range []int{60, 143} {
+		snap := testSnapshot()
+		snap.Attention[0].Detail = "npm run dev\nexited"
+		snap.Repos[2].Agents[0].Task = "waiting until\napi lands"
+		m := New(snap, "")
+		m.Update(tea.WindowSizeMsg{Width: width, Height: 40})
+		out := plain(m.View())
+
+		for _, want := range []string{"npm run dev exited", "waiting until api lands"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("width %d: want %q on one line:\n%s", width, want, out)
+			}
+		}
+		for _, line := range strings.Split(out, "\n") {
+			if strings.HasPrefix(line, "exited") || strings.HasPrefix(line, "api lands") {
+				t.Errorf("width %d: the text after a break started its own line: %q", width, line)
+			}
+		}
+	}
+}
+
 // The popup is a fixed size. A line that runs past it wraps and destroys the
 // layout, so nothing may ever exceed the width.
 func TestNoLineExceedsTheWidth(t *testing.T) {

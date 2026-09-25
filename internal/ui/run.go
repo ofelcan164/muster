@@ -124,7 +124,7 @@ func (b badgeView) tooltip() string {
 		line := reasonLabel(a.Reason, a.Status) + " " + repo + "/" + a.Agent
 		// A blocked agent's question can run over several lines, and a tooltip
 		// row has to stay one.
-		if detail := strings.Join(strings.Fields(a.Detail), " "); detail != "" {
+		if detail := oneLine(a.Detail); detail != "" {
 			line += " · " + detail
 		}
 		lines = append(lines, line)
