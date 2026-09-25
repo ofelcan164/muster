@@ -132,21 +132,6 @@ reminder.
 
 There is nothing to configure.
 
-## Omarchy bar
-
-On Omarchy, Muster can show what needs you in the desktop bar too. Take the
-`muster badge` command from the tab bar entry Muster added to your herdr
-config, add `--json`, and use it as an inline bar module:
-
-```json
-{ "id": "muster", "type": "command",
-  "exec": "'<muster>' --state-dir '<state dir>' badge --json",
-  "interval": 5, "onClick": "omarchy-launch-terminal-herdr" }
-```
-
-The tooltip lists the agents waiting on you, and the module's class (`needs-you`,
-`landed`, `working`, `idle` or `stale`) is there to colour it by.
-
 ## When something looks wrong
 
 Run **Check Muster's health**. It finds and restarts a stuck or outdated
