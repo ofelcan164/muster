@@ -147,9 +147,11 @@ func (m *Model) header() string {
 	c := m.snap.Counts
 	left := styTitle.Render("MUSTER") + "  " +
 		styMeta.Render(fmt.Sprintf("%s · %s", plural(c.Workspaces, "workspace"), plural(c.Agents, "agent")))
-	// The ribbon rather than the daemon's count, which does not know what you
-	// have dismissed. They are the same number until you dismiss something.
-	if n := len(m.ribbonRows()); n > 0 {
+	// Every row you have not dismissed, as the ribbon's rule and the tab bar
+	// badge count them, rather than the daemon's count, which does not know
+	// what you have dismissed. Not the ribbon's rows either: those stop at
+	// four, and the header said 4 above a rule saying 6.
+	if n := len(undismissed(m.snap.Attention, m.dismissed)); n > 0 {
 		left += "  " + lipgloss.NewStyle().Foreground(colRed).Render(
 			fmt.Sprintf("%d need you", n))
 	}
