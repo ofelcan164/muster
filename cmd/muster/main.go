@@ -2,8 +2,9 @@
 //
 //	muster                     open the overlay: the [[panes]] command
 //	muster open                ask herdr to open that pane, for a keybinding
-//	muster jump <target>       the orchestrator, or the previous agent
-//	muster mark-orchestrator   mark the pane this runs in
+//	muster jump <target>       the orchestrator, the previous agent, or a pane
+//	muster mark-orchestrator   mark the pane this runs in, or the one named
+//	muster tell | report | dismiss  the overlay's i, t and x from outside it
 //	muster discover            make sure the daemon is up after a workspace appears
 //	muster install | uninstall | install-skill | uninstall-skill | uninstall-keys | doctor
 //	muster update              install the newest release over this one
@@ -120,8 +121,48 @@ func main() {
 		}
 
 	case "mark-orchestrator":
-		if err := ui.MarkOrchestrator(); err != nil {
+		pane := ""
+		if len(args) > 1 {
+			pane = args[1]
+		}
+		if err := ui.MarkOrchestrator(pane); err != nil {
 			fmt.Fprintf(os.Stderr, "muster: %v\n", err)
+			os.Exit(1)
+		}
+
+	// tell, report and dismiss are the overlay's i, t and x for a caller
+	// outside it, such as a desktop bar's panel.
+	case "tell":
+		text := strings.TrimSpace(strings.Join(args[1:], " "))
+		if text == "" {
+			fmt.Fprintln(os.Stderr, "muster tell: needs a message")
+			os.Exit(2)
+		}
+		if err := ui.Tell(text); err != nil {
+			fmt.Fprintf(os.Stderr, "muster tell: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("sent to the orchestrator")
+
+	case "report":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "muster report: needs the pane of a landed row")
+			os.Exit(2)
+		}
+		told, err := ui.Report(args[1])
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "muster report: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println(told)
+
+	case "dismiss":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "muster dismiss: needs the pane of a ribbon row")
+			os.Exit(2)
+		}
+		if err := ui.Dismiss(args[1]); err != nil {
+			fmt.Fprintf(os.Stderr, "muster dismiss: %v\n", err)
 			os.Exit(1)
 		}
 
@@ -197,8 +238,11 @@ func usage(w io.Writer) {
 usage:
   muster                           open the overlay (herdr's [[panes]] command)
   muster open                      ask herdr to open the overlay, for a keybinding
-  muster jump orchestrator|previous  focus one of them
-  muster mark-orchestrator         mark the pane this runs in as the orchestrator
+  muster jump orchestrator|previous|<pane>  focus one of them, or a pane
+  muster mark-orchestrator [pane]  mark a pane as the orchestrator, by default the one this runs in
+  muster tell <text>               send the orchestrator a message, the overlay's i
+  muster report <pane>             tell the orchestrator about that pane's landed row, the overlay's t
+  muster dismiss <pane>            take that pane's row off the ribbon, the overlay's x
   muster show [target]             the usual order, and where dependent work stands;
                                    target is a pane id, repo/agent or repo
   muster chain get [--json]        print the usual order between repos

@@ -251,6 +251,7 @@ func (d *Daemon) reconcile(ctx context.Context) bool {
 	d.trackFocus(snap.FocusedPaneID, agents)
 
 	out := model.Snapshot{
+		Version:          model.SnapshotVersion,
 		GeneratedAt:      now,
 		DaemonPID:        os.Getpid(),
 		HerdrVersion:     snap.Version,

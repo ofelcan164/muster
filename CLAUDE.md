@@ -33,7 +33,14 @@ internal/ui           overlay
 
 `internal/ui` splits by concern: `model` (lifecycle and dispatch), `targets`
 (what the selection can land on), `keys`, `mouse`, `filter`, `order`, `strip`
-(the orchestrator strip), `talk` (the `i` and `t` keys), `view`, `theme`.
+(the orchestrator strip), `talk` (the `i` and `t` keys), `cli` (the same
+actions for a caller outside the overlay, through the same code), `view`,
+`theme`.
+
+`docs/snapshot.md` is the contract for readers outside this repo (the Omarchy
+widget): the snapshot and `ui.json` fields they rely on, and the commands they
+act through. Raise `model.SnapshotVersion` when one of those fields changes
+meaning or goes away.
 
 State dir files, one set per herdr session (the default session uses the base
 dir, a named one `sessions/<HERDR_SESSION>/` inside it): `snapshot.json`,
@@ -60,7 +67,8 @@ muster open | jump orchestrator | jump previous     what the keybindings invoke
 muster install [--key <letter>] [--no-keys] [--auto]        keybindings
 muster uninstall-keys | uninstall [--purge]         undoing them
 muster install-skill | uninstall-skill              the orchestrator reporting skill
-muster mark-orchestrator                            run on the orchestrator's pane
+muster mark-orchestrator [pane]                     run on the orchestrator's pane, or name it
+muster tell <text> | report <pane> | dismiss <pane> the overlay's i, t, x for a caller outside it
 muster show [target]                                the orchestrator's query: usual order, dependent work
 muster chain get [--json] | set <spec> [--by NAME] | clear
 muster discover                                     make sure the daemon is up; the event hooks call it

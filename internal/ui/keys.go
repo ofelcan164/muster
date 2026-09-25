@@ -280,21 +280,12 @@ func (m *Model) dismissSelected() (tea.Model, tea.Cmd) {
 		m.notice = "x dismisses a row that needs you: select one first"
 		return m, nil
 	}
-	pane := m.targets[m.cursor].paneID
-	for _, a := range m.ribbonRows() {
-		if a.PaneID != pane {
-			continue
-		}
-		if m.dismissed == nil {
-			m.dismissed = map[string]string{}
-		}
-		m.dismissed[pane] = string(a.Status)
-		m.pruneDismissed()
+	if d, ok := dismissRow(m.snap, m.dismissed, m.targets[m.cursor].paneID); ok {
+		m.dismissed = d
 		m.rebuild()
 		if m.saveDismissed != nil {
 			m.saveDismissed(m.dismissed)
 		}
-		break
 	}
 	return m, nil
 }

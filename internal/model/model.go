@@ -231,8 +231,14 @@ type Orchestrator struct {
 // every five seconds, so anything this old means it is not running.
 const StaleAfter = 30 * time.Second
 
+// SnapshotVersion is the shape of the snapshot, for readers outside this repo
+// (docs/snapshot.md). Raise it when a field they rely on changes meaning or
+// goes away. Adding a field does not need a raise.
+const SnapshotVersion = 1
+
 // Snapshot is the file at $HERDR_PLUGIN_STATE_DIR/snapshot.json.
 type Snapshot struct {
+	Version      int       `json:"snapshot_version"`
 	GeneratedAt  time.Time `json:"generated_at"`
 	DaemonPID    int       `json:"daemon_pid"`
 	HerdrVersion string    `json:"herdr_version,omitempty"`

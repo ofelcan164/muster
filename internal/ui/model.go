@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"maps"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -319,18 +320,42 @@ func undismissed(rows []model.Attention, dismissed map[string]string) []model.At
 // state that made it news is gone, so if it comes back it is news again, and
 // nothing else would ever clear an entry out of the file.
 func (m *Model) pruneDismissed() {
-	if len(m.dismissed) == 0 {
+	dropGone(m.dismissed, m.snap.Attention)
+}
+
+func dropGone(dismissed map[string]string, attention []model.Attention) {
+	if len(dismissed) == 0 {
 		return
 	}
-	shown := make(map[string]bool, len(m.snap.Attention))
-	for _, a := range m.snap.Attention {
+	shown := make(map[string]bool, len(attention))
+	for _, a := range attention {
 		shown[a.PaneID] = true
 	}
-	for pane := range m.dismissed {
+	for pane := range dismissed {
 		if !shown[pane] {
-			delete(m.dismissed, pane)
+			delete(dismissed, pane)
 		}
 	}
+}
+
+// dismissRow is x: it records pane's ribbon row as dismissed at the status it
+// has now, and reports whether the ribbon had a row for pane at all. The map
+// it returns is a copy, pruned of rows that have left the ribbon.
+func dismissRow(snap *model.Snapshot, dismissed map[string]string, pane string) (map[string]string, bool) {
+	rows := undismissed(snap.Attention, dismissed)
+	for _, a := range rows[:min(len(rows), triage.RibbonMax)] {
+		if a.PaneID != pane {
+			continue
+		}
+		out := maps.Clone(dismissed)
+		if out == nil {
+			out = map[string]string{}
+		}
+		out[pane] = string(a.Status)
+		dropGone(out, snap.Attention)
+		return out, true
+	}
+	return dismissed, false
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -371,7 +396,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // agentByPane finds an agent and its repo, for rendering the selected row.
 func (m *Model) agentByPane(paneID string) (model.Repo, model.Agent, bool) {
-	for _, r := range m.snap.Repos {
+	return agentInSnap(m.snap, paneID)
+}
+
+func agentInSnap(snap *model.Snapshot, paneID string) (model.Repo, model.Agent, bool) {
+	for _, r := range snap.Repos {
 		for _, a := range r.Agents {
 			if a.PaneID == paneID {
 				return r, a, true
@@ -412,7 +441,11 @@ func (m *Model) workspaceByID(id string) model.Workspace {
 // a stopped-process row points at a non-agent pane and so has no agent to look
 // up. That left those rows with a blank sigil.
 func (m *Model) repoByKey(key string) model.Repo {
-	for _, r := range m.snap.Repos {
+	return repoInSnap(m.snap, key)
+}
+
+func repoInSnap(snap *model.Snapshot, key string) model.Repo {
+	for _, r := range snap.Repos {
 		if r.Key == key {
 			return r
 		}
