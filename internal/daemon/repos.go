@@ -82,7 +82,7 @@ func (d *Daemon) buildRepos(snap *herdr.Snapshot, agents map[string]model.Agent,
 		repoForPane[p.PaneID] = r
 	}
 
-	procs := d.foregroundProcesses(snap, agents)
+	procs, fresh := d.foregroundProcesses(snap, agents)
 
 	// The panes a stop can be recorded against: live, and not running an agent.
 	// An agent starting in a pane drops it out of this set, which is what clears
@@ -94,7 +94,11 @@ func (d *Daemon) buildRepos(snap *herdr.Snapshot, agents map[string]model.Agent,
 		}
 		tracked[p.PaneID] = true
 	}
-	d.detectStoppedProcesses(procs, tracked, time.Now())
+	// Only a fresh reading is a poll. A reused one handed in twice was one
+	// sighting counted as two, which let a prompt flash pass for a process.
+	if fresh {
+		d.detectStoppedProcesses(procs, tracked, time.Now())
+	}
 
 	for _, p := range snap.Panes {
 		r := repoForPane[p.PaneID]
@@ -304,14 +308,14 @@ func withinPath(cwd, root string) bool {
 // and so scales with the session, which is why the reading is reused for
 // procInterval rather than taken fresh on every reconcile. Agent panes are
 // skipped because their foreground process is always the agent binary, which
-// the model already knows.
-func (d *Daemon) foregroundProcesses(snap *herdr.Snapshot, agents map[string]model.Agent) map[string]string {
+// the model already knows. fresh says whether this call polled or reused.
+func (d *Daemon) foregroundProcesses(snap *herdr.Snapshot, agents map[string]model.Agent) (map[string]string, bool) {
 	out := make(map[string]string, len(snap.Panes))
 	if d.client == nil {
-		return out
+		return out, true
 	}
 	if d.procs != nil && time.Since(d.procsAt) < procInterval {
-		return d.procs
+		return d.procs, false
 	}
 	for _, p := range snap.Panes {
 		if _, isAgent := agents[p.PaneID]; isAgent {
@@ -327,5 +331,5 @@ func (d *Daemon) foregroundProcesses(snap *herdr.Snapshot, agents map[string]mod
 		out[p.PaneID] = name
 	}
 	d.procs, d.procsAt = out, time.Now()
-	return out
+	return out, true
 }
