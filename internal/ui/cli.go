@@ -63,6 +63,20 @@ func Report(pane string) (string, error) {
 	return fmt.Sprintf("told the orchestrator %s landed", shortRepo(up)), nil
 }
 
+// Sort is s: it moves the grid on to the next sort and returns that sort's
+// name. A saved value that means nothing any more starts the cycle over, as
+// it does when the overlay opens.
+func Sort() (string, error) {
+	ui := state.LoadUI()
+	s := SortMode(ui.Sort)
+	if s < 0 || s >= sortModeCount {
+		s = SortFirstSeen
+	}
+	s = s.Next()
+	ui.Sort = int(s)
+	return s.String(), ui.Save()
+}
+
 // Dismiss is x: it takes pane's row off the ribbon until its status changes.
 func Dismiss(pane string) error {
 	snap, err := daemon.ReadSnapshot()
