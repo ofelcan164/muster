@@ -63,6 +63,8 @@ On [Omarchy](https://omarchy.org)? Get
 [Muster for herdr](https://github.com/ofelcan164/muster-omarchy) and the whole
 overlay is one click away in your bar, even when herdr isn't.
 
+<img src="https://raw.githubusercontent.com/ofelcan164/muster-omarchy/main/docs/screenshots/panel.png" alt="Muster's overlay open under a red diamond in the Omarchy bar" width="360">
+
 ## Keys
 
 Anywhere in herdr:
