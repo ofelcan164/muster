@@ -166,6 +166,14 @@ func main() {
 			os.Exit(1)
 		}
 
+	case "sort":
+		name, err := ui.Sort()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "muster sort: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("sorted by %s\n", name)
+
 	case "chain":
 		os.Exit(cmdChain(args[1:]))
 
@@ -243,6 +251,7 @@ usage:
   muster tell <text>               send the orchestrator a message, the overlay's i
   muster report <pane>             tell the orchestrator about that pane's landed row, the overlay's t
   muster dismiss <pane>            take that pane's row off the ribbon, the overlay's x
+  muster sort                      move the grid on to the next sort, the overlay's s
   muster show [target]             the usual order, and where dependent work stands;
                                    target is a pane id, repo/agent or repo
   muster chain get [--json]        print the usual order between repos

@@ -175,6 +175,32 @@ func TestDismissWritesWhatXWrites(t *testing.T) {
 	}
 }
 
+// sort cycles the way s does, from what ui.json holds, and keeps the rest of
+// the file.
+func TestSortCyclesWhatSCycles(t *testing.T) {
+	cliSnapshot(t)
+	ui := state.LoadUI()
+	ui.Sort, ui.Dismissed = int(SortAttention), map[string]string{"w2:p1": "blocked"}
+	if err := ui.Save(); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"herdr", "first seen", "a-z"} {
+		got, err := Sort()
+		if err != nil || got != want {
+			t.Fatalf("Sort() = %q, %v; want %q", got, err, want)
+		}
+	}
+	if got := state.LoadUI(); got.Sort != int(SortAlphabetical) || got.Dismissed["w2:p1"] != "blocked" {
+		t.Errorf("ui.json after sort: %+v", got)
+	}
+	ui = state.LoadUI()
+	ui.Sort = 99
+	_ = ui.Save()
+	if got, _ := Sort(); got != "a-z" {
+		t.Errorf("sort from an out-of-range value: %q, want the cycle restarted", got)
+	}
+}
+
 // Dismissing from outside must not wipe what an open overlay saved: ui.json
 // is merged under its lock, not overwritten.
 func TestDismissKeepsTheOverlaysOtherSettings(t *testing.T) {

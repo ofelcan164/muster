@@ -38,12 +38,13 @@ The overlay draws at most four ribbon rows, after leaving out dismissed ones.
 
 ## ui.json
 
-Written by the overlay and by `muster dismiss`, under `ui.json.lock`. Read it;
+Written by the overlay, `muster dismiss` and `muster sort`, under `ui.json.lock`. Read it;
 don't write it.
 
 | Field | Meaning |
 |---|---|
 | `dismissed` | Pane id to the status its row was dismissed at. A row is hidden while its `status` still equals that value |
+| `sort` | The grid's order: 0 first seen, 1 a-z, 2 attention, 3 herdr. Anything else reads as 0 |
 | `colors` | Repo key to a palette index picked with `c`. It overrides the snapshot's `color_index` |
 
 The palette is `identity.Palette` in `internal/identity/identity.go`.
@@ -62,6 +63,7 @@ session's herdr socket, `~/.config/herdr/herdr.sock`, unless
 | `muster report <pane>` | Tell the orchestrator about that pane's `landed` row | `t` |
 | `muster dismiss <pane>` | Hide that pane's ribbon row until its status changes | `x` |
 | `muster mark-orchestrator <pane>` | Make that pane's agent the orchestrator | `o` |
+| `muster sort` | Move the grid on to the next sort, and print its name | `s` |
 | `muster badge --json` | `{text, tooltip, class}` for a status bar | |
 
 Each exits 0 when it worked. A failure prints the reason on stderr and exits

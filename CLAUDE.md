@@ -69,6 +69,7 @@ muster uninstall-keys | uninstall [--purge]         undoing them
 muster install-skill | uninstall-skill              the orchestrator reporting skill
 muster mark-orchestrator [pane]                     run on the orchestrator's pane, or name it
 muster tell <text> | report <pane> | dismiss <pane> the overlay's i, t, x for a caller outside it
+muster sort                                         the overlay's s, likewise
 muster show [target]                                the orchestrator's query: usual order, dependent work
 muster chain get [--json] | set <spec> [--by NAME] | clear
 muster discover                                     make sure the daemon is up; the event hooks call it
