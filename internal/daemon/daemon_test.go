@@ -528,6 +528,7 @@ func TestStopClearsWhenAnAgentTakesThePaneOver(t *testing.T) {
 	// A dev server in a plain pane, then back at a prompt: a stop.
 	tracked := map[string]bool{"w1:p1": true}
 	d.detectStoppedProcesses(map[string]string{"w1:p1": "vite"}, tracked, time.Now())
+	d.detectStoppedProcesses(map[string]string{"w1:p1": "vite"}, tracked, time.Now())
 	d.detectStoppedProcesses(map[string]string{"w1:p1": "bash"}, tracked, time.Now())
 	if len(d.persist.Stopped) != 1 {
 		t.Fatalf("expected a recorded stop, got %v", d.persist.Stopped)

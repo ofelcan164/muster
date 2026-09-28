@@ -59,8 +59,11 @@ type Daemon struct {
 
 	// procs is the last foreground-process reading, kept so reconciles arriving
 	// faster than procInterval reuse it instead of re-polling every pane.
-	procs   map[string]string
-	procsAt time.Time
+	procs map[string]string
+	// procSeen is the non-shell process each pane showed at the last poll, so
+	// a process counts as running only once two polls in a row agree.
+	procSeen map[string]string
+	procsAt  time.Time
 
 	// mu guards state shared with the question fetcher goroutine. asked is the
 	// state_change_seq each blocked pane was last claimed for reading at.
@@ -94,6 +97,7 @@ func New(client *herdr.Client, logger *log.Logger) *Daemon {
 		log:       logger,
 		questions: map[string]string{},
 		asked:     map[string]uint64{},
+		procSeen:  map[string]string{},
 		rescan:    make(chan struct{}, 1),
 	}
 }
