@@ -57,6 +57,12 @@ macOS. The reporting skill needs Claude Code, Codex or OpenCode.
 Muster also puts a small status line in herdr's tab bar, for example
 `◆ 3 need you · prefix+m`.
 
+## Muster in your Omarchy bar
+
+On [Omarchy](https://omarchy.org)? Get
+[Muster for herdr](https://github.com/ofelcan164/muster-omarchy) and the whole
+overlay is one click away in your bar, even when herdr isn't.
+
 ## Keys
 
 Anywhere in herdr:
