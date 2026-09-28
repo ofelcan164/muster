@@ -16,6 +16,8 @@ func TestDetectsAProcessStopping(t *testing.T) {
 	d := newTestDaemon(t)
 	live := map[string]bool{"w1:p1": true}
 
+	// Two polls: one sighting could be anything passing through.
+	d.detectStoppedProcesses(map[string]string{"w1:p1": "vite"}, live, now)
 	d.detectStoppedProcesses(map[string]string{"w1:p1": "vite"}, live, now)
 	if len(d.persist.Stopped) != 0 {
 		t.Fatal("a running process is not a stop")
@@ -32,10 +34,32 @@ func TestDetectsAProcessStopping(t *testing.T) {
 		t.Error("stop should persist while the pane sits idle")
 	}
 
-	// Started again. Resolved.
+	// Started again. Resolved, once it has stayed up.
+	d.detectStoppedProcesses(map[string]string{"w1:p1": "vite"}, live, now)
 	d.detectStoppedProcesses(map[string]string{"w1:p1": "vite"}, live, now)
 	if _, still := d.persist.Stopped["w1:p1"]; still {
 		t.Error("restarting the process should clear the stop")
+	}
+}
+
+// A prompt renderer is caught by the poll now and then, for one poll. It is
+// not a process that ran and stopped, and it is not a restart of the one that
+// did.
+func TestAPromptFlashIsNotAProcess(t *testing.T) {
+	d := newTestDaemon(t)
+	live := map[string]bool{"w1:p1": true}
+	for _, p := range []string{"bash", "starship", "bash", "git", "bash"} {
+		d.detectStoppedProcesses(map[string]string{"w1:p1": p}, live, now)
+	}
+	if len(d.persist.Stopped) != 0 {
+		t.Fatalf("a prompt flash reported a stop: %v", d.persist.Stopped)
+	}
+
+	for _, p := range []string{"vite", "vite", "bash", "starship", "bash"} {
+		d.detectStoppedProcesses(map[string]string{"w1:p1": p}, live, now)
+	}
+	if got := d.persist.Stopped["w1:p1"].Process; got != "vite" {
+		t.Fatalf("a prompt flash cleared vite's stop, got %q", got)
 	}
 }
 
@@ -84,6 +108,7 @@ func TestStoppedProcessesAgeOut(t *testing.T) {
 	live := map[string]bool{"w1:p1": true}
 	t0 := time.Now()
 
+	d.detectStoppedProcesses(map[string]string{"w1:p1": "sleep"}, live, t0)
 	d.detectStoppedProcesses(map[string]string{"w1:p1": "sleep"}, live, t0)
 	d.detectStoppedProcesses(map[string]string{"w1:p1": "bash"}, live, t0)
 	if len(d.persist.Stopped) != 1 {

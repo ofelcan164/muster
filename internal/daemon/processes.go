@@ -34,14 +34,25 @@ func isShell(name string) bool { return name == "" || shells[strings.ToLower(nam
 // It cannot tell a crash from a deliberate Ctrl-C. It reports that the thing
 // stopped, which is the part you cannot currently see without opening the
 // workspace.
+//
+// A process counts as running only once two polls in a row find it. The poll
+// catches a prompt renderer (starship, oh-my-posh) or the git status it runs
+// now and then, gone by the next poll. Counted, that flash reported a stop
+// that never happened, and cleared a real one.
 func (d *Daemon) detectStoppedProcesses(procs map[string]string, tracked map[string]bool, now time.Time) {
 	for paneID, current := range procs {
-		previous := d.persist.LastProcess[paneID]
-		switch {
-		case !isShell(current):
+		if !isShell(current) {
+			if d.procSeen[paneID] != current {
+				d.procSeen[paneID] = current
+				continue
+			}
 			// Something is running. Any earlier stop is resolved.
 			delete(d.persist.Stopped, paneID)
-		case !isShell(previous):
+			d.persist.LastProcess[paneID] = current
+			continue
+		}
+		delete(d.procSeen, paneID)
+		if previous := d.persist.LastProcess[paneID]; !isShell(previous) {
 			// It was running and now it is not.
 			d.persist.Stopped[paneID] = state.StoppedStamp{Process: previous, At: now}
 		}
@@ -63,6 +74,11 @@ func (d *Daemon) detectStoppedProcesses(procs map[string]string, tracked map[str
 	// recorded before it started has to go. Only non-agent panes are read for a
 	// foreground process, so nothing above can clear that entry: the row sat for
 	// the full TTL, outranking the real state of the agent working underneath.
+	for paneID := range d.procSeen {
+		if !tracked[paneID] {
+			delete(d.procSeen, paneID)
+		}
+	}
 	for paneID := range d.persist.LastProcess {
 		if !tracked[paneID] {
 			delete(d.persist.LastProcess, paneID)
